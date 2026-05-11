@@ -1,5 +1,6 @@
 package com.github.itskenny0.r1ha
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
@@ -13,6 +14,8 @@ import androidx.navigation.compose.rememberNavController
 import com.github.itskenny0.r1ha.core.input.WheelEvent
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
 import com.github.itskenny0.r1ha.core.theme.R1ThemeHost
+import com.github.itskenny0.r1ha.core.util.R1Log
+import com.github.itskenny0.r1ha.core.util.Toaster
 import com.github.itskenny0.r1ha.nav.AppNavGraph
 import com.github.itskenny0.r1ha.nav.Routes
 
@@ -23,6 +26,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        R1Log.i("MainActivity.onCreate", "data=${intent?.data}")
 
         graph = (application as App).graph
 
@@ -31,12 +35,15 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
 
+        handleOAuthCallback(intent)
+
         setContent {
             val settings by graph.settings.settings
                 .collectAsStateWithLifecycle(initialValue = AppSettings())
 
             val startDestination = if (settings.server != null) Routes.CARD_STACK else Routes.ONBOARDING
             val navController = rememberNavController()
+            R1Log.d("MainActivity.setContent", "startDestination=$startDestination server=${settings.server?.url ?: "null"}")
 
             R1ThemeHost(themeId = settings.theme) {
                 AppNavGraph(
@@ -48,6 +55,31 @@ class MainActivity : ComponentActivity() {
                     wheelInput = graph.wheelInput,
                 )
             }
+        }
+    }
+
+    /**
+     * If Android delivers the OAuth redirect to us as a deep-link intent (instead of being
+     * intercepted by the WebView's `shouldOverrideUrlLoading`), surface it visibly so we can
+     * debug. The WebView's interception is the primary path; this is a safety net.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        R1Log.i("MainActivity.onNewIntent", "data=${intent.data}")
+        handleOAuthCallback(intent)
+    }
+
+    private fun handleOAuthCallback(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme != "r1ha" || data.host != "auth-callback") return
+        val code = data.getQueryParameter("code")
+        val error = data.getQueryParameter("error")
+        if (!code.isNullOrBlank()) {
+            R1Log.i("MainActivity.handleOAuth", "deep-link delivered code (len=${code.length})")
+            Toaster.show("Deep-link delivered OAuth code (WebView should have caught this)", long = true)
+        } else {
+            R1Log.w("MainActivity.handleOAuth", "deep-link with no code; error=$error")
+            Toaster.show("Deep-link with no code: error=$error", long = true)
         }
     }
 

@@ -7,6 +7,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.github.itskenny0.r1ha.core.ha.EntityState
 import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
+import com.github.itskenny0.r1ha.core.util.R1Log
+import com.github.itskenny0.r1ha.core.util.Toaster
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,17 +31,25 @@ class FavoritesPickerViewModel(
     fun refresh() {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(loading = true, error = null)
+            val snapshot = settings.settings.first()
+            R1Log.i("FavoritesPicker.refresh", "server=${snapshot.server?.url ?: "null"} favoritesSoFar=${snapshot.favorites.size}")
             val all = repo.listAllEntities()
-            val favs = settings.settings.first().favorites
+            val favs = snapshot.favorites
             all.fold(
                 onSuccess = { list ->
                     val favOrder = favs.withIndex().associate { (idx, id) -> id to idx }
                     val rows = list.sortedBy { it.friendlyName.lowercase() }.map {
                         Row(it, isFavorite = it.id.value in favOrder, orderIndex = favOrder[it.id.value])
                     }
+                    R1Log.i("FavoritesPicker.refresh", "fetched ${rows.size} entities")
+                    Toaster.show("Loaded ${rows.size} entities")
                     _ui.value = UiState(loading = false, rows = rows)
                 },
-                onFailure = { _ui.value = UiState(loading = false, error = it.message) },
+                onFailure = {
+                    R1Log.e("FavoritesPicker.refresh", "fetch failed", it)
+                    Toaster.show("Fetch failed: ${it.message}", long = true)
+                    _ui.value = UiState(loading = false, error = it.message)
+                },
             )
         }
     }

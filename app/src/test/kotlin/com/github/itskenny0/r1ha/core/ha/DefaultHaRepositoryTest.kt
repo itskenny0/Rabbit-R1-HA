@@ -42,7 +42,7 @@ class DefaultHaRepositoryTest {
         server.start()
 
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val prefs = SettingsRepository(ctx, datastoreName = "t_${System.nanoTime()}")
+        val prefs = SettingsRepository.forTesting(ctx, datastoreName = "t_${System.nanoTime()}")
         val tokens = TokenStore(
             ctx,
             datastoreName = "tk_${System.nanoTime()}",

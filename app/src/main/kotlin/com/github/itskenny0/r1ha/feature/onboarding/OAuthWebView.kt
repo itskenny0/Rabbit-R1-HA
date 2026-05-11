@@ -4,10 +4,14 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.github.itskenny0.r1ha.core.util.R1Log
+import com.github.itskenny0.r1ha.core.util.Toaster
 
 /**
  * Renders [authorizeUrl] in an embedded [WebView] and intercepts the
@@ -18,11 +22,15 @@ import androidx.compose.ui.viewinterop.AndroidView
 fun OAuthWebView(
     authorizeUrl: String,
     onCodeCaptured: (code: String) -> Unit,
+    onMissingCode: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
 
-    // Keep the WebView stable across recompositions so we don't reload the page.
+    // Keep the latest callbacks visible to the long-lived WebViewClient closure.
+    val currentOnCode = rememberUpdatedState(onCodeCaptured)
+    val currentOnMissing = rememberUpdatedState(onMissingCode)
+
     val webView = remember(context) {
         WebView(context).apply {
             settings.javaScriptEnabled = true
@@ -33,10 +41,19 @@ fun OAuthWebView(
                     request: WebResourceRequest,
                 ): Boolean {
                     val uri = request.url
+                    R1Log.d("OAuthWebView", "shouldOverride scheme=${uri.scheme} host=${uri.host}")
                     if (uri.scheme == "r1ha" && uri.host == "auth-callback") {
                         val code = uri.getQueryParameter("code")
+                        val error = uri.getQueryParameter("error")
+                        R1Log.i("OAuthWebView", "redirect captured code?=${!code.isNullOrBlank()} error=$error")
                         if (!code.isNullOrBlank()) {
-                            onCodeCaptured(code)
+                            Toaster.show("Captured auth code")
+                            currentOnCode.value.invoke(code)
+                        } else {
+                            val msg = error?.let { "Redirect had error=$it" } ?: "Redirect had no code"
+                            R1Log.w("OAuthWebView", msg)
+                            Toaster.show(msg, long = true)
+                            currentOnMissing.value.invoke()
                         }
                         return true
                     }
@@ -44,6 +61,14 @@ fun OAuthWebView(
                 }
             }
             loadUrl(authorizeUrl)
+        }
+    }
+
+    // If the screen leaves composition, drop the WebView so it doesn't leak.
+    DisposableEffect(webView) {
+        onDispose {
+            webView.stopLoading()
+            webView.destroy()
         }
     }
 

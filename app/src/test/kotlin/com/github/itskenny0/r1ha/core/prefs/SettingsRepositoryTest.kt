@@ -14,7 +14,7 @@ import org.robolectric.annotation.Config
 class SettingsRepositoryTest {
 
     private fun newRepo(): SettingsRepository =
-        SettingsRepository(ApplicationProvider.getApplicationContext(), datastoreName = "test_settings_${System.nanoTime()}")
+        SettingsRepository.forTesting(ApplicationProvider.getApplicationContext(), datastoreName = "test_settings_${System.nanoTime()}")
 
     @Test fun defaults() = runTest {
         val repo = newRepo()
