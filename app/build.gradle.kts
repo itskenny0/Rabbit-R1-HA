@@ -32,7 +32,12 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            // Android Studio default debug keystore — auto-generated, not committed
+            // Stable debug keystore committed at repo root so every CI release
+            // signs with the same SHA-1 and `adb install -r` works for updates.
+            storeFile = rootProject.file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
         }
         // Release config is read from local.properties / gradle.properties if present.
         // If not present, release builds will fail explicitly rather than ship unsigned.

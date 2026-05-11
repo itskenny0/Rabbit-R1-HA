@@ -12,6 +12,7 @@ captures/
 *.aar
 *.keystore
 *.jks
+!debug.keystore
 
 # Kotlin
 .kotlin/
