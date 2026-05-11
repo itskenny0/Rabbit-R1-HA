@@ -11,7 +11,7 @@ data class BackoffPolicy(
     val rng: Random = Random.Default,
 ) {
     fun delayForAttempt(attempt: Int): Long {
-        val raw = baseMillis shl attempt.coerceAtMost(20)
+        val raw = baseMillis shl attempt.coerceIn(0, 20)
         val capped = min(raw, capMillis)
         if (jitter == 0.0) return capped
         val window = (capped * jitter).toLong()

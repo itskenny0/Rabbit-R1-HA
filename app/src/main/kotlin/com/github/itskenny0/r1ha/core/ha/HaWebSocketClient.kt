@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +13,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -38,14 +38,17 @@ class HaWebSocketClient internal constructor(
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
-    private val _inbound = MutableSharedFlow<HaInbound>(extraBufferCapacity = 64)
+    private val _inbound = MutableSharedFlow<HaInbound>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
     val inbound: SharedFlow<HaInbound> = _inbound.asSharedFlow()
 
     private val nextId = AtomicInteger(1)
     fun nextRequestId(): Int = nextId.getAndIncrement()
 
-    private var webSocket: WebSocket? = null
-    private var receiverJob: Job? = null
+    @Volatile private var webSocket: WebSocket? = null
+    @Volatile private var receiverJob: Job? = null
     private val outgoing = Channel<HaOutbound>(capacity = Channel.UNLIMITED)
 
     fun connect(url: String, accessToken: String) {
@@ -72,7 +75,7 @@ class HaWebSocketClient internal constructor(
                     }
                     else -> Unit
                 }
-                runBlocking { _inbound.emit(msg) }
+                _inbound.tryEmit(msg)
             }
             override fun onMessage(ws: WebSocket, bytes: ByteString) { /* HA only sends text */ }
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
