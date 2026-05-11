@@ -37,32 +37,15 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Decode keystore
-        run: |
-          if [ -z "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
-            echo "ERROR: RELEASE_KEYSTORE_BASE64 secret is not set. Add the signing secrets before pushing a release tag."
-            exit 1
-          fi
-          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
-
-      - name: Write signing properties
-        run: |
-          cat >> local.properties <<EOF
-          RELEASE_STORE_FILE=${GITHUB_WORKSPACE}/release.keystore
-          RELEASE_STORE_PASSWORD=${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS=${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD }}
-          EOF
-
-      - name: Build release APK
+      - name: Build APK
         env:
           APP_VERSION_CODE: ${{ steps.version.outputs.version_code }}
           APP_VERSION_NAME: ${{ steps.version.outputs.version_name }}
-        run: ./gradlew assembleRelease
+        run: ./gradlew :app:assembleDebug
 
       - name: Rename APK
         run: |
-          mv app/build/outputs/apk/release/app-release.apk \
+          mv app/build/outputs/apk/debug/app-debug.apk \
              "r1ha-${{ steps.version.outputs.version_name }}.apk"
 
       - name: Generate release notes
