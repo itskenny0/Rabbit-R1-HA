@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -29,7 +30,11 @@ fun AboutScreen(
 ) {
     val context = LocalContext.current
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .systemBarsPadding(),
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -119,7 +124,6 @@ fun AboutScreen(
             item { InfoRow(label = "Manufacturer", value = Build.MANUFACTURER) }
             item { InfoRow(label = "Model", value = Build.MODEL) }
             item { InfoRow(label = "Android", value = "API ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})") }
-            item { InfoRow(label = "Build fingerprint", value = Build.FINGERPRINT.take(48)) }
 
             item { Spacer(Modifier.height(32.dp)) }
         }
@@ -153,22 +157,24 @@ private fun LinkRow(
     url: String,
     onOpen: () -> Unit,
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onOpen)
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
         )
         Text(
             text = url,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary,
+            softWrap = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp),
         )
     }
 }
