@@ -1,16 +1,47 @@
 package com.github.itskenny0.r1ha.feature.cardstack
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
+import com.github.itskenny0.r1ha.ui.components.EntityCard
 
-/** Placeholder — replaced in M12. */
 @Composable
 fun CardStackScreen(
     haRepository: HaRepository,
@@ -19,7 +50,196 @@ fun CardStackScreen(
     onOpenFavoritesPicker: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        Text("CardStack — coming soon", modifier = Modifier.wrapContentSize())
+    val vm: CardStackViewModel = viewModel(
+        factory = CardStackViewModel.factory(
+            haRepository = haRepository,
+            settings = settings,
+            wheelInput = wheelInput,
+        )
+    )
+    val state by vm.state.collectAsStateWithLifecycle()
+
+    val haptic = LocalHapticFeedback.current
+
+    // Haptic feedback on percent change
+    LaunchedEffect(state.activeState?.percent) {
+        if (state.activeState != null) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .cardStackGestures(
+                onTap = { vm.tapToggle() },
+                onSwipeUp = { vm.next() },
+                onSwipeDown = { vm.previous() },
+                onSwipeLeft = { onOpenSettings() },
+                onSwipeRight = { onOpenFavoritesPicker() },
+            )
+    ) {
+        // Card content
+        val activeState = state.activeState
+        if (activeState != null) {
+            EntityCard(
+                state = activeState,
+                onTapToggle = { vm.tapToggle() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "No favourites — swipe right to add",
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    modifier = Modifier.wrapContentSize(),
+                )
+            }
+        }
+
+        // Top chrome
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Top-left: favourites hamburger
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .clickable { onOpenFavoritesPicker() }
+                    .padding(10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Favourites",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            // Position dots (centre)
+            if (state.cards.size > 1) {
+                PositionDots(
+                    count = state.cards.size,
+                    current = state.currentIndex,
+                )
+            } else {
+                Spacer(Modifier.size(44.dp))
+            }
+
+            // Top-right: settings gear
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .clickable { onOpenSettings() }
+                    .padding(10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
     }
 }
+
+@Composable
+private fun PositionDots(count: Int, current: Int) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(count) { index ->
+            val isActive = index == current
+            Box(
+                modifier = Modifier
+                    .size(if (isActive) 7.dp else 5.dp)
+                    .clip(CircleShape)
+                    .dotBackground(if (isActive) Color.White else Color.White.copy(alpha = 0.35f))
+            )
+        }
+    }
+}
+
+/**
+ * Gesture modifier that disambiguates vertical swipe, horizontal swipe, and tap in a single
+ * pointer input block. Uses awaitEachGesture + manual axis tracking to correctly handle
+ * all three gestures without one blocking the others.
+ *
+ * Mental trace:
+ *  - swipe up → classified='v', dy negative, dy > threshold → onSwipeUp() called once then exits
+ *  - swipe right → classified='h', dx positive, dx > threshold → onSwipeRight() called once
+ *  - tap → no slop exceeded at pointer-up → onTap() called
+ */
+private fun Modifier.cardStackGestures(
+    onTap: () -> Unit,
+    onSwipeUp: () -> Unit,
+    onSwipeDown: () -> Unit,
+    onSwipeLeft: () -> Unit,
+    onSwipeRight: () -> Unit,
+): Modifier = pointerInput(Unit) {
+    val slopPx = 24.dp.toPx()
+    val thresholdPx = 64.dp.toPx()
+
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        var dx = 0f
+        var dy = 0f
+        var classified: Char? = null  // 'v' = vertical, 'h' = horizontal, null = undecided
+
+        while (true) {
+            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+
+            if (change.changedToUp()) {
+                // Pointer lifted — decide action
+                if (classified == null) {
+                    // No slop exceeded: treat as tap
+                    if (kotlin.math.abs(dx) < slopPx && kotlin.math.abs(dy) < slopPx) {
+                        onTap()
+                    }
+                } else {
+                    when (classified) {
+                        'v' -> if (kotlin.math.abs(dy) > thresholdPx) {
+                            if (dy < 0) onSwipeUp() else onSwipeDown()
+                        }
+                        'h' -> if (kotlin.math.abs(dx) > thresholdPx) {
+                            if (dx < 0) onSwipeLeft() else onSwipeRight()
+                        }
+                    }
+                }
+                break
+            }
+
+            val dragAmount = change.positionChange()
+            dx += dragAmount.x
+            dy += dragAmount.y
+
+            if (classified == null) {
+                if (kotlin.math.abs(dx) > slopPx || kotlin.math.abs(dy) > slopPx) {
+                    classified =
+                        if (kotlin.math.abs(dx) > kotlin.math.abs(dy)) 'h' else 'v'
+                }
+            }
+
+            change.consume()
+        }
+    }
+}
+
+/** Disambiguated background helper to avoid import clash with foundation.background. */
+private fun Modifier.dotBackground(color: Color): Modifier =
+    this.background(color = color, shape = CircleShape)
