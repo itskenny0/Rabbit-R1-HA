@@ -2,6 +2,7 @@ package com.github.itskenny0.r1ha.core.ha
 
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.prefs.TokenStore
+import com.github.itskenny0.r1ha.core.util.R1Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -91,7 +93,27 @@ class DefaultHaRepository(
                 }
             }.launchIn(this)
 
-            connectFromSettings()
+            // Observe the server URL; connect when it appears and disconnect when it goes
+            // away. We deliberately do NOT force-reconnect on URL changes while a connection
+            // is in flight, because the only legal way to change URLs in this app is via the
+            // sign-out flow (which sets URL to null first, triggering the disconnect branch).
+            // That also lets tests that pre-wire a WS connection coexist with start() without
+            // having their connection torn down.
+            settings.settings
+                .map { it.server?.url }
+                .distinctUntilChanged()
+                .onEach { url ->
+                    R1Log.i("HaRepo.serverChange", "server URL now $url; ws.state=${ws.state.value::class.simpleName}")
+                    if (url == null) {
+                        ws.disconnect()
+                        return@onEach
+                    }
+                    val st = ws.state.value
+                    if (st is ConnectionState.Idle || st is ConnectionState.Disconnected) {
+                        connectFromSettings()
+                    }
+                }
+                .launchIn(this)
         }
     }
 
