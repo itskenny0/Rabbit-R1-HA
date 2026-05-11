@@ -12,11 +12,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import com.github.itskenny0.r1ha.core.input.WheelEvent
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
-import com.github.itskenny0.r1ha.core.prefs.TokenStore
 import com.github.itskenny0.r1ha.core.theme.R1ThemeHost
 import com.github.itskenny0.r1ha.nav.AppNavGraph
 import com.github.itskenny0.r1ha.nav.Routes
-import kotlinx.coroutines.flow.map
 
 class MainActivity : ComponentActivity() {
 
