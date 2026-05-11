@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- HA house body in HA blue -->
+    <path android:fillColor="#41BDF5" android:pathData="M54,36 L23,54 Q20,55.8 20,59 L20,87 Q20,92 25,92 L83,92 Q88,92 88,87 L88,59 Q88,55.8 85,54 L54,36 Z"/>
+    <!-- Left ear in R1 orange -->
+    <path android:fillColor="#F36F21" android:pathData="M42,38 Q38,38 37.2,34 L35,17.5 Q34.8,13 38,11 Q42,9 45,12 Q47,14 47.2,17.5 L48,35 Q47.8,38 44,38.2 Z"/>
+    <!-- Right ear in R1 orange -->
+    <path android:fillColor="#F36F21" android:pathData="M66,38 Q62,38 61.8,35 L62.6,17.5 Q62.8,14 64.8,12 Q67.8,9 71.8,11 Q75,13 74.8,17.5 L72.6,34 Q71.8,38 67.8,38 Z"/>
+</vector>
