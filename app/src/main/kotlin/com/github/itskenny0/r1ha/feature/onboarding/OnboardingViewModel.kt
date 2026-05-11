@@ -67,12 +67,12 @@ class OnboardingViewModel(
             try {
                 val authorizeUrl = withContext(Dispatchers.IO) {
                     val req = Request.Builder()
-                        .url("$baseUrl/auth/authorize?response_type=code&client_id=r1ha&redirect_uri=r1ha://auth-callback")
+                        .url("$baseUrl/auth/authorize?response_type=code&client_id=https%3A%2F%2Fitskenny0.github.io%2FRabbit-R1-HA%2F&redirect_uri=r1ha://auth-callback")
                         .head()
                         .build()
                     // Simply confirm the server is reachable; construct the authorize URL directly.
                     http.newCall(req).execute().use { /* consume */ }
-                    "$baseUrl/auth/authorize?response_type=code&client_id=r1ha&redirect_uri=r1ha%3A%2F%2Fauth-callback"
+                    "$baseUrl/auth/authorize?response_type=code&client_id=https%3A%2F%2Fitskenny0.github.io%2FRabbit-R1-HA%2F&redirect_uri=r1ha%3A%2F%2Fauth-callback"
                 }
                 // Persist the URL so the rest of the app can use it.
                 settings.update { it.copy(server = ServerConfig(url = baseUrl)) }
@@ -92,7 +92,7 @@ class OnboardingViewModel(
                     val body = FormBody.Builder()
                         .add("grant_type", "authorization_code")
                         .add("code", code)
-                        .add("client_id", "r1ha")
+                        .add("client_id", "https://itskenny0.github.io/Rabbit-R1-HA/")
                         .add("redirect_uri", "r1ha://auth-callback")
                         .build()
                     val req = Request.Builder()
