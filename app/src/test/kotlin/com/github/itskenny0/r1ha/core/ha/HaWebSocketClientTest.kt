@@ -98,4 +98,30 @@ class HaWebSocketClientTest {
         }
         client.scope.cancel()
     }
+
+    @Test fun `after auth_ok client drains queued sends`() = runTest {
+        server.enqueue(MockResponse().withWebSocketUpgrade(recorder))
+        server.start()
+        val url = server.url("/api/websocket").toString().replace("http", "ws")
+        val client = HaWebSocketClient(http = http(), scope = TestScope(StandardTestDispatcher(testScheduler)))
+
+        client.connect(url, accessToken = "TOK")
+        val opened = recorder.awaitOpen()
+        opened.send("""{"type":"auth_required"}""")
+        recorder.awaitTextMessage()                              // auth frame
+        opened.send("""{"type":"auth_ok","ha_version":"x"}""")
+
+        // Now queue subscribe + call_service and verify they hit the wire
+        val subId = client.nextRequestId()
+        client.send(HaOutbound.SubscribeStateTrigger(id = subId, entityIds = listOf("light.kitchen")))
+        val callId = client.nextRequestId()
+        client.send(HaOutbound.CallService(callId, "light", "turn_on", "light.kitchen", null))
+
+        advanceUntilIdle()
+        val frame1 = recorder.awaitTextMessage()
+        val frame2 = recorder.awaitTextMessage()
+        assertThat(frame1).contains("\"type\":\"subscribe_trigger\"")
+        assertThat(frame2).contains("\"type\":\"call_service\"")
+        client.disconnect(); client.scope.cancel()
+    }
 }
