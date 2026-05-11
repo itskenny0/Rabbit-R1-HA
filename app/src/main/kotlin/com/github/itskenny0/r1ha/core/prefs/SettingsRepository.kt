@@ -14,11 +14,13 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.preferencesDataStoreFile
 import com.github.itskenny0.r1ha.core.util.R1Log
 import com.github.itskenny0.r1ha.core.util.Toaster
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.withContext
 
 /**
  * Datastore-singleton property delegate. Using the `preferencesDataStore` delegate (instead of
@@ -142,8 +144,9 @@ class SettingsRepository private constructor(
         R1Log.i("SettingsRepo.update", "current.server=${current.server?.url ?: "null"} -> next.server=${next.server?.url ?: "null"}")
 
         // Write shadow synchronously FIRST so a SharedPreferences commit lands even if the
-        // DataStore edit below fails for any reason.
-        writeShadow(next.server)
+        // DataStore edit below fails for any reason. The synchronous commit() can block on
+        // disk I/O so we move it off whatever dispatcher the caller is on.
+        withContext(Dispatchers.IO) { writeShadow(next.server) }
 
         try {
             store.edit { p ->
