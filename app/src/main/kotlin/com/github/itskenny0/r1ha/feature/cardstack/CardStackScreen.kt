@@ -162,8 +162,8 @@ fun CardStackScreen(
                 )
             }
 
-            // Position dots (centre)
-            if (state.cards.size > 1) {
+            // Position dots (centre) — honour the user's showPositionDots toggle
+            if (state.cards.size > 1 && appSettings.ui.showPositionDots) {
                 PositionDots(
                     count = state.cards.size,
                     current = state.currentIndex,
