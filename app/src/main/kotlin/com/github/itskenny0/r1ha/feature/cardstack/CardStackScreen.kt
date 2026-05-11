@@ -84,30 +84,30 @@ fun CardStackScreen(
         onDispose { view.keepScreenOn = false }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .cardStackGestures(
-                onTap = { if (appSettings.behavior.tapToToggle) vm.tapToggle() },
-                onSwipeUp = { vm.next() },
-                onSwipeDown = { vm.previous() },
-                onSwipeLeft = { onOpenSettings() },
-                onSwipeRight = { onOpenFavoritesPicker() },
-            )
-    ) {
-        // Card content
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Card content. Gestures are applied ONLY when there is an active card; the
+        // empty state is a plain Composable so its Button receives taps without our
+        // gesture handler in the middle.
         val activeState = state.activeState
         if (activeState != null) {
-            EntityCard(
-                state = activeState,
-                onTapToggle = { vm.tapToggle() },
-                modifier = Modifier.fillMaxSize(),
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .cardStackGestures(
+                        onTap = { if (appSettings.behavior.tapToToggle) vm.tapToggle() },
+                        onSwipeUp = { vm.next() },
+                        onSwipeDown = { vm.previous() },
+                        onSwipeLeft = { onOpenSettings() },
+                        onSwipeRight = { onOpenFavoritesPicker() },
+                    )
+            ) {
+                EntityCard(
+                    state = activeState,
+                    onTapToggle = { vm.tapToggle() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         } else {
-            // Empty state: keep the active gesture region (parent Box already
-            // handles swipe-right), but also surface a clearly tappable button
-            // so users who can't discover the swipe-right gesture still have a
-            // way out. Sits below the status bar so the top chrome stays clear.
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -123,7 +123,7 @@ fun CardStackScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Swipe right or tap below to add some.",
+                    text = "Tap below to add some.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
@@ -232,7 +232,11 @@ private fun Modifier.cardStackGestures(
     val thresholdPx = 64.dp.toPx()
 
     awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
+        // Receive the down event in the Initial pass so child clickables can't pre-empt
+        // us. requireUnconsumed = false because some children (Button, IconButton) consume
+        // the down in their own handlers; we still want the event so we can disambiguate
+        // tap-vs-drag.
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         var dx = 0f
         var dy = 0f
         var classified: Char? = null  // 'v' = vertical, 'h' = horizontal, null = undecided

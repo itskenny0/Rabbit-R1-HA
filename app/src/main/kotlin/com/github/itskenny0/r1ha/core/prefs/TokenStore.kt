@@ -1,16 +1,19 @@
 package com.github.itskenny0.r1ha.core.prefs
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
+import com.github.itskenny0.r1ha.core.util.R1Log
+import com.github.itskenny0.r1ha.core.util.Toaster
 import kotlinx.coroutines.flow.first
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -24,6 +27,13 @@ data class Tokens(
     val expiresAtMillis: Long,
 )
 
+/**
+ * Encrypted-at-rest token store. Uses DataStore as the primary persistence layer with an
+ * AndroidKeystore-wrapped AES/GCM key, AND mirrors the resulting ciphertext to a parallel
+ * SharedPreferences "shadow" file. If DataStore writes silently fail to land on a given
+ * device (which has been observed in production on this user's hardware), `load()` falls
+ * back to reading the shadow's ciphertext and decrypting via the same Keystore key.
+ */
 class TokenStore(
     context: Context,
     datastoreName: String = "r1ha_tokens",
@@ -55,6 +65,9 @@ class TokenStore(
         produceFile = { context.preferencesDataStoreFile(datastoreName) },
     )
 
+    private val shadow: SharedPreferences =
+        context.applicationContext.getSharedPreferences("${datastoreName}_shadow", Context.MODE_PRIVATE)
+
     private object K {
         val accessCipher = stringPreferencesKey("access.cipher")
         val accessIv = stringPreferencesKey("access.iv")
@@ -63,33 +76,78 @@ class TokenStore(
         val expiresAt = longPreferencesKey("expires_at")
     }
 
+    private object S {
+        const val accessCipher = "access.cipher"
+        const val accessIv = "access.iv"
+        const val refreshCipher = "refresh.cipher"
+        const val refreshIv = "refresh.iv"
+        const val expiresAt = "expires_at"
+    }
+
     suspend fun save(tokens: Tokens) {
         val key = keystoreProvider.getOrCreateKey(keyAlias)
         val (aCipher, aIv) = encrypt(key, tokens.accessToken)
         val (rCipher, rIv) = encrypt(key, tokens.refreshToken)
-        store.edit { p ->
-            p[K.accessCipher] = aCipher; p[K.accessIv] = aIv
-            p[K.refreshCipher] = rCipher; p[K.refreshIv] = rIv
-            p[K.expiresAt] = tokens.expiresAtMillis
+        R1Log.i("TokenStore.save", "encrypting + persisting (expires=${tokens.expiresAtMillis})")
+
+        // Write the shadow synchronously first so we have at least one durable copy.
+        val shadowOk = shadow.edit()
+            .putString(S.accessCipher, aCipher)
+            .putString(S.accessIv, aIv)
+            .putString(S.refreshCipher, rCipher)
+            .putString(S.refreshIv, rIv)
+            .putLong(S.expiresAt, tokens.expiresAtMillis)
+            .commit()
+        R1Log.i("TokenStore.save", "shadow commit=$shadowOk")
+        if (shadowOk) Toaster.show("Tokens shadow-saved")
+        else Toaster.show("Tokens shadow save FAILED", long = true)
+
+        try {
+            store.edit { p ->
+                p[K.accessCipher] = aCipher; p[K.accessIv] = aIv
+                p[K.refreshCipher] = rCipher; p[K.refreshIv] = rIv
+                p[K.expiresAt] = tokens.expiresAtMillis
+            }
+            R1Log.i("TokenStore.save", "DataStore commit OK")
+            Toaster.show("Tokens DataStore-saved")
+        } catch (t: Throwable) {
+            R1Log.e("TokenStore.save", "DataStore edit threw; shadow has the value", t)
+            Toaster.show("Tokens DataStore FAILED — using shadow", long = true)
         }
     }
 
     suspend fun load(): Tokens? {
         val p = store.data.first()
-        val aCipher = p[K.accessCipher] ?: return null
-        val aIv = p[K.accessIv] ?: return null
-        val rCipher = p[K.refreshCipher] ?: return null
-        val rIv = p[K.refreshIv] ?: return null
-        val expiresAt = p[K.expiresAt] ?: return null
-        val key = keystoreProvider.getOrCreateKey(keyAlias)
-        return Tokens(
-            accessToken = decrypt(key, aCipher, aIv),
-            refreshToken = decrypt(key, rCipher, rIv),
-            expiresAtMillis = expiresAt,
+        // Try DataStore first; if any field is missing, look in the shadow.
+        val aCipher = p[K.accessCipher] ?: shadow.getString(S.accessCipher, null)
+        val aIv = p[K.accessIv] ?: shadow.getString(S.accessIv, null)
+        val rCipher = p[K.refreshCipher] ?: shadow.getString(S.refreshCipher, null)
+        val rIv = p[K.refreshIv] ?: shadow.getString(S.refreshIv, null)
+        val expiresAt = p[K.expiresAt] ?: shadow.getLong(S.expiresAt, -1L).takeIf { it >= 0L }
+        R1Log.i(
+            "TokenStore.load",
+            "from store: accessCipher=${p[K.accessCipher] != null} from shadow fallback used=${p[K.accessCipher] == null && aCipher != null}"
         )
+        if (aCipher == null || aIv == null || rCipher == null || rIv == null || expiresAt == null) {
+            R1Log.w("TokenStore.load", "missing fields: aCipher=${aCipher != null} aIv=${aIv != null} rCipher=${rCipher != null} rIv=${rIv != null} expiresAt=${expiresAt != null}")
+            return null
+        }
+        val key = keystoreProvider.getOrCreateKey(keyAlias)
+        return try {
+            Tokens(
+                accessToken = decrypt(key, aCipher, aIv),
+                refreshToken = decrypt(key, rCipher, rIv),
+                expiresAtMillis = expiresAt,
+            )
+        } catch (t: Throwable) {
+            R1Log.e("TokenStore.load", "decrypt failed; key likely lost. Returning null to force re-auth.", t)
+            Toaster.show("Token decrypt failed — re-authenticate", long = true)
+            null
+        }
     }
 
     suspend fun clear() {
+        shadow.edit().clear().commit()
         store.edit { it.clear() }
     }
 
