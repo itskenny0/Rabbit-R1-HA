@@ -37,11 +37,15 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle as collectStateAsLife
 import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.input.WheelInput
+import com.github.itskenny0.r1ha.core.prefs.AppSettings
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.ui.components.EntityCard
 
@@ -61,21 +65,30 @@ fun CardStackScreen(
         )
     )
     val state by vm.state.collectAsStateWithLifecycle()
+    val appSettings by settings.settings.collectStateAsLife(initialValue = AppSettings())
 
     val haptic = LocalHapticFeedback.current
-
-    // Haptic feedback on percent change
+    // Honour the user's "Haptic feedback" toggle: only fire when enabled.
     LaunchedEffect(state.activeState?.percent) {
-        if (state.activeState != null) {
+        if (state.activeState != null && appSettings.behavior.haptics) {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
+    }
+
+    // Honour the user's "Keep screen on" toggle by toggling the View flag while CardStack
+    // is composed. DisposableEffect ensures we clear the flag when the screen leaves
+    // composition so the system can sleep when the user is elsewhere.
+    val view = LocalView.current
+    DisposableEffect(appSettings.behavior.keepScreenOn) {
+        view.keepScreenOn = appSettings.behavior.keepScreenOn
+        onDispose { view.keepScreenOn = false }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .cardStackGestures(
-                onTap = { vm.tapToggle() },
+                onTap = { if (appSettings.behavior.tapToToggle) vm.tapToggle() },
                 onSwipeUp = { vm.next() },
                 onSwipeDown = { vm.previous() },
                 onSwipeLeft = { onOpenSettings() },
