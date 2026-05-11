@@ -14,7 +14,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
 import com.github.itskenny0.r1ha.core.util.R1Log
 import com.github.itskenny0.r1ha.core.util.Toaster
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -84,7 +86,7 @@ class TokenStore(
         const val expiresAt = "expires_at"
     }
 
-    suspend fun save(tokens: Tokens) {
+    suspend fun save(tokens: Tokens): Unit = withContext(Dispatchers.IO) {
         val key = keystoreProvider.getOrCreateKey(keyAlias)
         val (aCipher, aIv) = encrypt(key, tokens.accessToken)
         val (rCipher, rIv) = encrypt(key, tokens.refreshToken)
