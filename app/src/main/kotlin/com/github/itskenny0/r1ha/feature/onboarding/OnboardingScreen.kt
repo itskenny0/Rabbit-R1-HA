@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -53,6 +55,9 @@ fun OnboardingScreen(
 
     when (val s = state) {
         is OnboardingViewModel.State.ReadyToAuth -> {
+            // Back press inside the OAuth WebView should drop the user back to the URL
+            // entry form instead of exiting the app.
+            BackHandler { vm.resetError() }
             // Extract server base URL from the authorizeUrl for token exchange. We need to
             // guard against Uri.parse() returning null fields (rare but possible for malformed
             // URLs) — string-interpolating null would produce "null://null" which would then
@@ -120,6 +125,7 @@ private fun UrlEntryForm(
         modifier = Modifier
             .fillMaxSize()
             .systemBarsPadding()
+            .imePadding()
             .padding(horizontal = 24.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
