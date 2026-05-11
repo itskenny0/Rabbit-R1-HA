@@ -51,17 +51,6 @@ class TokenStore(
         }
     }
 
-    /** Software-backed key provider for environments where AndroidKeyStore is unavailable (e.g. unit tests). */
-    class SoftwareKeyProvider : KeyProvider {
-        private val keys = mutableMapOf<String, SecretKey>()
-        override fun getOrCreateKey(alias: String): SecretKey =
-            keys.getOrPut(alias) {
-                val kg = KeyGenerator.getInstance("AES")
-                kg.init(256)
-                kg.generateKey()
-            }
-    }
-
     private val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(
         produceFile = { context.preferencesDataStoreFile(datastoreName) },
     )

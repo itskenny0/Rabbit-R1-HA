@@ -12,7 +12,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [33])
 class TokenStoreTest {
     // Each test gets its own shared SoftwareKeyProvider so save/load use the same key instance.
-    private fun newStore(keyProvider: TokenStore.KeyProvider = TokenStore.SoftwareKeyProvider()) =
+    private fun newStore(keyProvider: TokenStore.KeyProvider = SoftwareKeyProvider()) =
         TokenStore(
             context = ApplicationProvider.getApplicationContext(),
             datastoreName = "test_tokens_${System.nanoTime()}",
@@ -21,7 +21,7 @@ class TokenStoreTest {
         )
 
     @Test fun roundtripStoresAndRetrievesTokens() = runTest {
-        val keyProvider = TokenStore.SoftwareKeyProvider()
+        val keyProvider = SoftwareKeyProvider()
         val store = newStore(keyProvider)
         store.save(Tokens(accessToken = "A", refreshToken = "R", expiresAtMillis = 1_700_000_000_000L))
         val read = store.load()
@@ -32,7 +32,7 @@ class TokenStoreTest {
     }
 
     @Test fun clearRemovesTokens() = runTest {
-        val keyProvider = TokenStore.SoftwareKeyProvider()
+        val keyProvider = SoftwareKeyProvider()
         val store = newStore(keyProvider)
         store.save(Tokens("A", "R", 0))
         store.clear()

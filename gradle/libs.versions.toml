@@ -54,8 +54,6 @@ test-truth = { module = "com.google.truth:truth", version.ref = "truth" }
 test-robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 junit-vintage = { module = "org.junit.vintage:junit-vintage-engine", version.ref = "junit-jupiter" }
 androidx-test-core = { module = "androidx.test:core", version = "1.6.1" }
-test-bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version = "1.78.1" }
-
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

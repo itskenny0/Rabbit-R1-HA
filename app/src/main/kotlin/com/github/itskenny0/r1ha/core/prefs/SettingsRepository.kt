@@ -78,7 +78,11 @@ class SettingsRepository(
         val current = currentBlocking()
         val next = transform(current)
         store.edit { p ->
-            next.server?.let { p[K.serverUrl] = it.url; it.haVersion?.let { v -> p[K.haVersion] = v } } ?: run {
+            next.server?.let { server ->
+                p[K.serverUrl] = server.url
+                if (server.haVersion != null) p[K.haVersion] = server.haVersion
+                else p.remove(K.haVersion)
+            } ?: run {
                 p.remove(K.serverUrl); p.remove(K.haVersion)
             }
             p[K.favorites] = next.favorites.joinToString("\n")
