@@ -11,13 +11,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -88,23 +91,43 @@ fun CardStackScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
+            // Empty state: keep the active gesture region (parent Box already
+            // handles swipe-right), but also surface a clearly tappable button
+            // so users who can't discover the swipe-right gesture still have a
+            // way out. Sits below the status bar so the top chrome stays clear.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding()
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
                 Text(
-                    text = "No favourites — swipe right to add",
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    modifier = Modifier.wrapContentSize(),
+                    text = "No favourites yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
                 )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Swipe right or tap below to add some.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                )
+                Spacer(Modifier.height(20.dp))
+                Button(onClick = onOpenFavoritesPicker) {
+                    Text("Add favourites")
+                }
             }
         }
 
-        // Top chrome
+        // Top chrome — sits below the status bar so the tap targets aren't
+        // clipped under transparent system bars.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
+                .statusBarsPadding()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -121,7 +144,7 @@ fun CardStackScreen(
                 Icon(
                     imageVector = Icons.Default.Menu,
                     contentDescription = "Favourites",
-                    tint = Color.White.copy(alpha = 0.7f),
+                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -148,7 +171,7 @@ fun CardStackScreen(
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = "Settings",
-                    tint = Color.White.copy(alpha = 0.7f),
+                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -158,6 +181,7 @@ fun CardStackScreen(
 
 @Composable
 private fun PositionDots(count: Int, current: Int) {
+    val onBg = MaterialTheme.colorScheme.onBackground
     Row(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -168,7 +192,7 @@ private fun PositionDots(count: Int, current: Int) {
                 modifier = Modifier
                     .size(if (isActive) 7.dp else 5.dp)
                     .clip(CircleShape)
-                    .dotBackground(if (isActive) Color.White else Color.White.copy(alpha = 0.35f))
+                    .dotBackground(if (isActive) onBg else onBg.copy(alpha = 0.35f))
             )
         }
     }
