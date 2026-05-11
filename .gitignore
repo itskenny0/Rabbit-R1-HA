@@ -27,3 +27,7 @@ captures/
 Thumbs.db
 *.hprof
 *.orig
+
+# Top-level dotfiles / hidden dirs not explicitly tracked
+.*/
+!.github/
