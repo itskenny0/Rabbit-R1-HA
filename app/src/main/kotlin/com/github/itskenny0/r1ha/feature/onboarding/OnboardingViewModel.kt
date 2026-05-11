@@ -116,6 +116,10 @@ class OnboardingViewModel(
                         expiresAtMillis = expiresAtMillis,
                     )
                 )
+                // Re-persist the server URL alongside the tokens. probe() also writes this,
+                // but doubling up means a successful login always lands a usable server config
+                // even if the probe-time write was lost for any reason.
+                settings.update { it.copy(server = ServerConfig(url = serverUrl)) }
                 _state.value = State.Done
             } catch (e: Exception) {
                 _state.value = State.Error("Token exchange failed: ${e.message}")
