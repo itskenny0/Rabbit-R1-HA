@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -62,12 +63,19 @@ fun OnboardingScreen(
             OAuthWebView(
                 authorizeUrl = s.authorizeUrl,
                 onCodeCaptured = { code -> vm.exchangeCode(code, serverUrl) },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding(),
             )
         }
 
         is OnboardingViewModel.State.Exchanging -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding(),
+                contentAlignment = Alignment.Center,
+            ) {
                 CircularProgressIndicator()
             }
         }
@@ -101,17 +109,20 @@ private fun UrlEntryForm(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .systemBarsPadding()
             .padding(horizontal = 24.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = "Connect to Home Assistant",
             style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             text = "Enter your Home Assistant URL to sign in.",
             style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
         )
         Spacer(Modifier.height(32.dp))
 
