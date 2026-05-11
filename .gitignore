@@ -24,3 +24,5 @@ captures/
 # OS
 .DS_Store
 Thumbs.db
+*.hprof
+*.orig

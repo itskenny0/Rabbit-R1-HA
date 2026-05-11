@@ -2,10 +2,6 @@
 
 A small Android app for the Rabbit R1 (running LineageOS) that turns the scroll wheel into a fluent way to adjust Home Assistant scalar entities — light brightness, fan speed, cover position, media volume — without fighting the WebView slider in the official HA app.
 
-## Status
-
-Pre-release. See the Releases page once the first APK ships.
-
 ## Hardware support
 
 - Rabbit R1 running LineageOS 21 GSI (Android 14) or CipherOS (Android 16).
