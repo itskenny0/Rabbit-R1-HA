@@ -19,10 +19,19 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+
+/** Read a JSON attribute as a plain String, regardless of whether HA encoded it as a JSON string or number. */
+private fun JsonElement?.asString(): String? = (this as? JsonPrimitive)?.content
+/** Read a JSON attribute as Int. Works for both JsonPrimitive(123) and JsonPrimitive("123"). */
+private fun JsonElement?.asInt(): Int? = (this as? JsonPrimitive)?.content?.toIntOrNull()
+/** Read a JSON attribute as Double. Works for both JsonPrimitive(0.42) and JsonPrimitive("0.42"). */
+private fun JsonElement?.asDouble(): Double? = (this as? JsonPrimitive)?.content?.toDoubleOrNull()
 
 class DefaultHaRepository(
     private val ws: HaWebSocketClient,
@@ -39,6 +48,9 @@ class DefaultHaRepository(
     private val pendingCalls = ConcurrentHashMap<Int, CompletableDeferred<Result<Unit>>>()
     private var supervisorJob: Job? = null
     private var subscriptionId: Int? = null
+
+    /** Tracks consecutive reconnect attempts so BackoffPolicy actually backs off. */
+    @Volatile private var reconnectAttempt: Int = 0
 
     private val debouncer = DebouncedCaller<EntityId, ServiceCall>(scope, debounceMillis = 120) { _, call ->
         val id = ws.nextRequestId()
@@ -64,8 +76,17 @@ class DefaultHaRepository(
 
             ws.state.onEach { st ->
                 when (st) {
-                    is ConnectionState.Connected -> resubscribe()
-                    is ConnectionState.Disconnected -> reconnectLater(st.attempt)
+                    is ConnectionState.Connected -> {
+                        reconnectAttempt = 0
+                        resubscribe()
+                    }
+                    is ConnectionState.Disconnected -> {
+                        // The WS client always reports st.attempt=0 (it has no notion of
+                        // consecutive failures); we track the run here.
+                        val attempt = reconnectAttempt
+                        reconnectAttempt = (attempt + 1).coerceAtMost(20)
+                        reconnectLater(attempt)
+                    }
                     else -> Unit
                 }
             }.launchIn(this)
@@ -108,13 +129,13 @@ class DefaultHaRepository(
         val isOn = raw.state.equals("on", ignoreCase = true) ||
             raw.state.equals("playing", ignoreCase = true) ||
             (raw.state.equals("open", ignoreCase = true))
-        val available = !raw.state.equals("unavailable", ignoreCase = true)
+        val available = raw.state != "unavailable" && raw.state != "unknown"
         val pct = computePercent(id.domain, raw.attributes)
         val rawNum = computeRaw(id.domain, raw.attributes)
         val newState = EntityState(
             id = id,
-            friendlyName = (raw.attributes["friendly_name"]?.toString()?.trim('"')) ?: id.objectId,
-            area = raw.attributes["area_id"]?.toString()?.trim('"'),
+            friendlyName = raw.attributes["friendly_name"].asString() ?: id.objectId,
+            area = raw.attributes["area_id"].asString(),
             isOn = isOn,
             percent = if (available) pct else null,
             raw = rawNum,
@@ -124,20 +145,18 @@ class DefaultHaRepository(
         cache.value = cache.value + (id to newState)
     }
 
-    private fun computePercent(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Int? {
-        return when (domain) {
-            Domain.LIGHT -> (attrs["brightness"]?.toString()?.toIntOrNull())?.let(EntityState::normaliseLightBrightness)
-            Domain.FAN -> attrs["percentage"]?.toString()?.toIntOrNull()?.let(EntityState::normaliseFanPercentage)
-            Domain.COVER -> attrs["current_position"]?.toString()?.toIntOrNull()?.let(EntityState::normaliseCoverPosition)
-            Domain.MEDIA_PLAYER -> attrs["volume_level"]?.toString()?.toDoubleOrNull()?.let(EntityState::normaliseMediaVolume)
-        }
+    private fun computePercent(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Int? = when (domain) {
+        Domain.LIGHT -> attrs["brightness"].asInt()?.let(EntityState::normaliseLightBrightness)
+        Domain.FAN -> attrs["percentage"].asInt()?.let(EntityState::normaliseFanPercentage)
+        Domain.COVER -> attrs["current_position"].asInt()?.let(EntityState::normaliseCoverPosition)
+        Domain.MEDIA_PLAYER -> attrs["volume_level"].asDouble()?.let(EntityState::normaliseMediaVolume)
     }
 
     private fun computeRaw(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Number? = when (domain) {
-        Domain.LIGHT -> attrs["brightness"]?.toString()?.toIntOrNull()
-        Domain.FAN -> attrs["percentage"]?.toString()?.toIntOrNull()
-        Domain.COVER -> attrs["current_position"]?.toString()?.toIntOrNull()
-        Domain.MEDIA_PLAYER -> attrs["volume_level"]?.toString()?.toDoubleOrNull()
+        Domain.LIGHT -> attrs["brightness"].asInt()
+        Domain.FAN -> attrs["percentage"].asInt()
+        Domain.COVER -> attrs["current_position"].asInt()
+        Domain.MEDIA_PLAYER -> attrs["volume_level"].asDouble()
     }
 
     override fun observe(entities: Set<EntityId>): Flow<Map<EntityId, EntityState>> =
@@ -151,34 +170,38 @@ class DefaultHaRepository(
 
     override suspend fun listAllEntities(): Result<List<EntityState>> = withContext(Dispatchers.IO) {
         runCatching {
-            val s = settings.settings.first(); val server = s.server ?: error("no server")
-            val t = tokens.load() ?: error("no token")
+            val s = settings.settings.first()
+            val server = s.server ?: error("Server URL not configured — sign out & reconnect from Settings.")
+            val t = tokens.load() ?: error("Authentication tokens missing — sign out & reconnect from Settings.")
             val req = Request.Builder()
                 .url("${server.url.trimEnd('/')}/api/states")
                 .header("Authorization", "Bearer ${t.accessToken}")
                 .build()
             val body = http.newCall(req).execute().use { resp ->
-                require(resp.isSuccessful) { "states: HTTP ${resp.code}" }
+                require(resp.isSuccessful) { "Home Assistant returned HTTP ${resp.code} for /api/states" }
                 resp.body!!.string()
             }
-            val states = Json { ignoreUnknownKeys = true }.decodeFromString<List<RawStateRow>>(body)
+            val states = listStatesJson.decodeFromString<List<RawStateRow>>(body)
             states.mapNotNull { row ->
                 val prefix = row.entity_id.substringBefore('.', missingDelimiterValue = "")
                 if (!Domain.isSupportedPrefix(prefix)) return@mapNotNull null
                 EntityState(
                     id = EntityId(row.entity_id),
-                    friendlyName = row.attributes?.get("friendly_name")?.toString()?.trim('"') ?: row.entity_id.substringAfter('.'),
-                    area = row.attributes?.get("area_id")?.toString()?.trim('"'),
+                    friendlyName = row.attributes?.get("friendly_name").asString() ?: row.entity_id.substringAfter('.'),
+                    area = row.attributes?.get("area_id").asString(),
                     isOn = row.state.equals("on", ignoreCase = true) ||
                         row.state.equals("playing", ignoreCase = true) ||
                         row.state.equals("open", ignoreCase = true),
                     percent = null, raw = null,
                     lastChanged = runCatching { Instant.parse(row.last_changed ?: "") }.getOrDefault(Instant.now()),
-                    isAvailable = !row.state.equals("unavailable", ignoreCase = true),
+                    isAvailable = row.state != "unavailable" && row.state != "unknown",
                 )
             }
         }
     }
+
+    /** Single Json instance for /api/states deserialisation to avoid the per-call allocation lint. */
+    private val listStatesJson = Json { ignoreUnknownKeys = true }
 
     @kotlinx.serialization.Serializable
     private data class RawStateRow(
