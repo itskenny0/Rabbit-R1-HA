@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -29,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
+import com.github.itskenny0.r1ha.core.prefs.TokenStore
 import com.github.itskenny0.r1ha.core.prefs.WheelKeySource
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
 
@@ -36,12 +38,14 @@ import com.github.itskenny0.r1ha.ui.components.ChevronBack
 @Composable
 fun SettingsScreen(
     settings: SettingsRepository,
+    tokens: TokenStore,
     onOpenThemePicker: () -> Unit,
     onOpenAbout: () -> Unit,
+    onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
     val vm: SettingsViewModel = viewModel(
-        factory = SettingsViewModel.factory(settings = settings),
+        factory = SettingsViewModel.factory(settings = settings, tokens = tokens),
     )
     val s by vm.state.collectAsStateWithLifecycle()
 
@@ -76,6 +80,20 @@ fun SettingsScreen(
             }
             item {
                 s.server?.haVersion?.let { InfoRow(label = "HA version", value = it) }
+            }
+            item {
+                // Sign out + reconnect: clears tokens and server URL, then routes back to
+                // onboarding so the user can re-enter their HA URL.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = { vm.signOut(onSignedOut) }) {
+                        Text("Sign out & reconnect")
+                    }
+                }
             }
 
             item { SectionDivider() }

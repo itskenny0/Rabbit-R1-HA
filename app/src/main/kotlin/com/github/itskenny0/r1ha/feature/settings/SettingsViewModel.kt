@@ -5,13 +5,13 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
-import com.github.itskenny0.r1ha.core.prefs.Behavior
 import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.prefs.ThemeId
-import com.github.itskenny0.r1ha.core.prefs.UiOptions
+import com.github.itskenny0.r1ha.core.prefs.TokenStore
 import com.github.itskenny0.r1ha.core.prefs.WheelKeySource
-import com.github.itskenny0.r1ha.core.prefs.WheelSettings
+import com.github.itskenny0.r1ha.core.util.R1Log
+import com.github.itskenny0.r1ha.core.util.Toaster
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val settings: SettingsRepository,
+    private val tokens: TokenStore,
 ) : ViewModel() {
 
     val state: StateFlow<AppSettings> = settings.settings.stateIn(
@@ -51,6 +52,23 @@ class SettingsViewModel(
 
     fun setTheme(themeId: ThemeId) = update { it.copy(theme = themeId) }
 
+    // ── Account ─────────────────────────────────────────────────────────────
+
+    /**
+     * Sign out: clears tokens and the server URL so the next launch routes back to onboarding.
+     * Reports completion via toast so the user knows it landed.
+     */
+    fun signOut(onAfter: () -> Unit) {
+        viewModelScope.launch {
+            R1Log.i("Settings.signOut", "starting")
+            tokens.clear()
+            settings.update { it.copy(server = null) }
+            R1Log.i("Settings.signOut", "done")
+            Toaster.show("Signed out")
+            onAfter()
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private fun update(transform: (AppSettings) -> AppSettings) {
@@ -58,8 +76,8 @@ class SettingsViewModel(
     }
 
     companion object {
-        fun factory(settings: SettingsRepository) = viewModelFactory {
-            initializer { SettingsViewModel(settings = settings) }
+        fun factory(settings: SettingsRepository, tokens: TokenStore) = viewModelFactory {
+            initializer { SettingsViewModel(settings = settings, tokens = tokens) }
         }
     }
 }

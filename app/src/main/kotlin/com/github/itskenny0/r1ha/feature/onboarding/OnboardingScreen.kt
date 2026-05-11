@@ -53,11 +53,21 @@ fun OnboardingScreen(
 
     when (val s = state) {
         is OnboardingViewModel.State.ReadyToAuth -> {
-            // Extract server base URL from the authorizeUrl for token exchange.
+            // Extract server base URL from the authorizeUrl for token exchange. We need to
+            // guard against Uri.parse() returning null fields (rare but possible for malformed
+            // URLs) — string-interpolating null would produce "null://null" which would then
+            // be silently stored as the server URL.
             val serverUrl = remember(s.authorizeUrl) {
                 runCatching {
                     val uri = android.net.Uri.parse(s.authorizeUrl)
-                    "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}"
+                    val scheme = uri.scheme
+                    val host = uri.host
+                    if (scheme.isNullOrBlank() || host.isNullOrBlank()) {
+                        ""
+                    } else {
+                        val portPart = if (uri.port != -1) ":${uri.port}" else ""
+                        "$scheme://$host$portPart"
+                    }
                 }.getOrDefault("")
             }
             OAuthWebView(

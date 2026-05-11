@@ -55,8 +55,16 @@ fun AppNavGraph(
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 settings = settings,
+                tokens = tokens,
                 onOpenThemePicker = { navController.navigate(Routes.THEME_PICKER) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                onSignedOut = {
+                    // Clear the whole back stack so a stale CardStack/Onboarding can't be
+                    // popped back to; then land fresh on Onboarding.
+                    navController.navigate(Routes.ONBOARDING) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
                 onBack = { navController.popBackStack() },
             )
         }

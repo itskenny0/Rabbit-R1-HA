@@ -12,10 +12,12 @@ import com.github.itskenny0.r1ha.core.ha.ServiceCall
 import com.github.itskenny0.r1ha.core.input.WheelEvent
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
+import com.github.itskenny0.r1ha.core.util.R1Log
+import com.github.itskenny0.r1ha.core.util.Toaster
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -25,9 +27,10 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 data class CardStackUiState(
+    /** Ordered by the user's favorites list (NOT by entity_id). */
     val cards: List<EntityState> = emptyList(),
     val currentIndex: Int = 0,
-    /** Optimistic percent overrides per entity, applied while the debounce is pending. */
+    /** Optimistic percent overrides per entity, applied while waiting for HA state_changed. */
     val optimisticPercents: Map<EntityId, Int> = emptyMap(),
 ) {
     val activeState: EntityState?
@@ -46,44 +49,74 @@ class CardStackViewModel(
     private val _state = MutableStateFlow(CardStackUiState())
     val state: StateFlow<CardStackUiState> = _state
 
+    /** Recent wheel-event timestamps; used to compute rate for acceleration. */
+    private val wheelTimestamps = ArrayDeque<Long>()
+    private val rateWindowMillis = 250L
+
     private val debounced = DebouncedCaller<EntityId, Int>(
         scope = viewModelScope,
-        debounceMillis = 400L,
+        debounceMillis = 250L,
     ) { entityId, pct ->
+        R1Log.i("CardStack.debounced", "sending setPercent($entityId, $pct)")
         haRepository.call(ServiceCall.setPercent(entityId, pct))
-        // Clear optimistic override once the call is dispatched
-        _state.value = _state.value.copy(
-            optimisticPercents = _state.value.optimisticPercents - entityId
-        )
+        // NOTE: do NOT clear the optimistic value here. It's cleared automatically when
+        // observe emits an EntityState whose percent matches (see ordering logic below).
     }
 
     init {
         observeFavorites()
         collectWheelEvents()
+        announceServerOnce()
+    }
+
+    /** Show a one-shot toast on first mount so the user can see the resolved server URL. */
+    private fun announceServerOnce() {
+        viewModelScope.launch {
+            val s = settings.settings.first()
+            val url = s.server?.url
+            if (url != null) {
+                Toaster.show("Connected to $url")
+            } else {
+                Toaster.show("No server configured — open Settings", long = true)
+            }
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeFavorites() {
-        settings.settings
-            .map { appSettings ->
-                appSettings.favorites
-                    .filter { id ->
-                        runCatching { EntityId(id) }.isSuccess
-                    }
-                    .map { EntityId(it) }
-                    .toSet()
+        // The favourites list is the source of truth for both membership and order.
+        val favoritesFlow = settings.settings
+            .map { it.favorites }
+            .distinctUntilChanged()
+
+        favoritesFlow
+            .flatMapLatest { favouriteIds ->
+                val ids = favouriteIds.mapNotNull { runCatching { EntityId(it) }.getOrNull() }.toSet()
+                if (ids.isEmpty()) flowOf(Pair(favouriteIds, emptyMap<EntityId, EntityState>()))
+                else haRepository.observe(ids).map { favouriteIds to it }
             }
-            .flatMapLatest { entityIds ->
-                if (entityIds.isEmpty()) flowOf(emptyMap())
-                else haRepository.observe(entityIds)
+            .onEach { (favouriteIds, entityMap) ->
+                // Preserve user-chosen order; drop entries that aren't yet known to HA.
+                val ordered = favouriteIds.mapNotNull { id ->
+                    runCatching { EntityId(id) }.getOrNull()?.let { entityMap[it] }
+                }
+                R1Log.d("CardStack.observe", "favoriteIds=${favouriteIds.size} ordered=${ordered.size}")
+                val cur = _state.value
+                val clampedIndex = if (ordered.isEmpty()) 0
+                    else cur.currentIndex.coerceIn(0, ordered.size - 1)
+                // Drop optimistic entries that the server has caught up on.
+                val staleOptimistic = cur.optimisticPercents.filter { (id, optPct) ->
+                    val cached = entityMap[id]?.percent
+                    cached != null && cached == optPct
+                }.keys
+                val newOptimistic = if (staleOptimistic.isEmpty()) cur.optimisticPercents
+                    else cur.optimisticPercents - staleOptimistic
+                _state.value = cur.copy(
+                    cards = ordered,
+                    currentIndex = clampedIndex,
+                    optimisticPercents = newOptimistic,
+                )
             }
-            .combine(_state) { entityMap, currentState ->
-                // Preserve order from favorites list; fall back to map insertion order
-                val orderedCards = entityMap.values.sortedBy { it.id.value }
-                val clampedIndex = currentState.currentIndex.coerceIn(0, (orderedCards.size - 1).coerceAtLeast(0))
-                currentState.copy(cards = orderedCards, currentIndex = clampedIndex)
-            }
-            .onEach { newState -> _state.value = newState }
             .launchIn(viewModelScope)
     }
 
@@ -98,22 +131,28 @@ class CardStackViewModel(
         val wheel = appSettings.wheel
         val activeState = _state.value.activeState ?: return
 
-        // Measure rate from recent events using the current timestamp
-        val ratePerSec = 0.0 // Simplified — acceleration uses last burst; WheelInput has no rate tracker
+        // Sliding-window rate computation: count events in the last [rateWindowMillis] ms,
+        // multiply by (1000 / window) to scale to events/sec.
+        val now = event.timestampMillis
+        wheelTimestamps.addLast(now)
+        while (wheelTimestamps.isNotEmpty() && now - wheelTimestamps.first() > rateWindowMillis) {
+            wheelTimestamps.removeFirst()
+        }
+        val ratePerSec = wheelTimestamps.size * (1000.0 / rateWindowMillis)
+
         val step = WheelInput.effectiveStep(wheel.stepPercent, ratePerSec, wheel.acceleration)
         val sign = WheelInput.applyDirection(event.direction, wheel.invertDirection)
         val currentPct = _state.value.optimisticPercents[activeState.id] ?: activeState.percent ?: 0
         val newPct = (currentPct + sign * step).coerceIn(0, 100)
+        R1Log.d("CardStack.onWheel", "dir=${event.direction} step=$step (rate=$ratePerSec) -> $currentPct→$newPct")
 
-        // Apply optimistic update
+        // Apply optimistic update synchronously
         _state.value = _state.value.copy(
             optimisticPercents = _state.value.optimisticPercents + (activeState.id to newPct)
         )
 
-        // Submit debounced call
-        viewModelScope.launch {
-            debounced.submit(activeState.id, newPct)
-        }
+        // Submit debounced call (trails by debounceMillis)
+        debounced.submit(activeState.id, newPct)
     }
 
     fun next() {
@@ -135,6 +174,7 @@ class CardStackViewModel(
     fun tapToggle() {
         val activeState = _state.value.activeState ?: return
         viewModelScope.launch {
+            R1Log.i("CardStack.tap", "toggle ${activeState.id} isOn=${activeState.isOn}")
             haRepository.call(ServiceCall.tapAction(activeState.id, activeState.isOn))
         }
     }
