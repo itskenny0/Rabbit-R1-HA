@@ -64,9 +64,13 @@ fun OnboardingScreen(
                 // (e.g. https://example.com/ha) keep their prefix on /auth/token.
                 onCodeCaptured = { code -> vm.exchangeCode(code, s.baseUrl) },
                 // If HA redirects without a `code` query parameter — typically because the
-                // user tapped "Deny" — drop them back to the URL entry form rather than
-                // leaving the WebView pinned on HA's error page with no clear next step.
-                onMissingCode = { vm.resetError() },
+                // user tapped "Deny" — drop them back to the URL entry form with the HA
+                // error surfaced as a visible message rather than leaving the WebView pinned
+                // on HA's error page with no clear next step.
+                onMissingCode = { errorMessage ->
+                    vm.failOnboarding(errorMessage?.let { "Login was cancelled or rejected ($it)" }
+                        ?: "Login didn't complete — please try again.")
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding(),

@@ -23,7 +23,10 @@ import com.github.itskenny0.r1ha.core.util.Toaster
 fun OAuthWebView(
     authorizeUrl: String,
     onCodeCaptured: (code: String) -> Unit,
-    onMissingCode: () -> Unit = {},
+    /** Called when the redirect arrives without a `code` query parameter — passes through
+     *  the `error` param from HA (e.g. "access_denied" when the user tapped Deny) so the
+     *  caller can surface it in the UI instead of just resetting silently. */
+    onMissingCode: (errorMessage: String?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -54,7 +57,7 @@ fun OAuthWebView(
                             val msg = error?.let { "Redirect had error=$it" } ?: "Redirect had no code"
                             R1Log.w("OAuthWebView", msg)
                             Toaster.show(msg, long = true)
-                            currentOnMissing.value.invoke()
+                            currentOnMissing.value.invoke(error)
                         }
                         return true
                     }

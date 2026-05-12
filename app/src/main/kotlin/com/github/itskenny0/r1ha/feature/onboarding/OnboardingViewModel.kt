@@ -163,6 +163,16 @@ class OnboardingViewModel(
         _state.value = State.Idle
     }
 
+    /**
+     * Transition to [State.Error] with [message]. Called when the OAuth WebView reports a
+     * redirect that didn't carry an authorization code (typically the user tapped Deny). The
+     * URL entry form already renders [State.Error] messages, so this gives the user concrete
+     * feedback instead of a silent reset.
+     */
+    fun failOnboarding(message: String) {
+        _state.value = State.Error(message)
+    }
+
     companion object {
         fun factory(http: OkHttpClient, settings: SettingsRepository, tokens: TokenStore) =
             viewModelFactory {
