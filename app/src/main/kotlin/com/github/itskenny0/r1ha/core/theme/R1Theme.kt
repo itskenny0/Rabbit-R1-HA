@@ -65,6 +65,12 @@ data class CardRenderModel(
      */
     val lightAvailableModes: List<com.github.itskenny0.r1ha.core.ha.LightWheelMode> = emptyList(),
     /**
+     * Light-card-only: per-card hidden-button set from the customize dialog. Themes
+     * subtract this from [lightAvailableModes] / the FX button before rendering. Empty
+     * = show every supported button (default).
+     */
+    val lightButtonsHidden: Set<com.github.itskenny0.r1ha.core.prefs.LightCardButton> = emptySet(),
+    /**
      * Tick labels for the vertical tape meter (right side of the card). Top→bottom
      * order, typically five strings. Null falls back to the default `100/75/50/25/0`
      * percent labels. Climate / water_heater cards override this with the actual

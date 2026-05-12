@@ -194,6 +194,28 @@ fun RenameDialog(
                     selected = override.lightColorTempK,
                     onSelect = { override = override.copy(lightColorTempK = it) },
                 )
+                // ── LIGHT BUTTONS — show/hide BRIGHT / WHITE / HUE / FX ─────────────
+                // Lets the user declutter cards they rarely tweak beyond brightness.
+                // Each chip is a toggle; tap to flip visibility. Hiding a button the
+                // bulb doesn't support is harmless — it just stays hidden either way.
+                SectionHeader("LIGHT BUTTONS")
+                Text(
+                    text = "Hide controls you don't use on this card. Hiding a button HA already wouldn't render (e.g. HUE on a tunable-white bulb) is a no-op.",
+                    style = R1.body,
+                    color = R1.InkMuted,
+                )
+                Spacer(Modifier.height(6.dp))
+                LightButtonsRow(
+                    hidden = override.lightButtonsHidden,
+                    onToggle = { button ->
+                        val next = if (button in override.lightButtonsHidden) {
+                            override.lightButtonsHidden - button
+                        } else {
+                            override.lightButtonsHidden + button
+                        }
+                        override = override.copy(lightButtonsHidden = next)
+                    },
+                )
             }
 
             // ── COLOUR ──────────────────────────────────────────────────────────────
@@ -520,6 +542,50 @@ private fun ctApproxColor(kelvin: Int): androidx.compose.ui.graphics.Color = whe
     kelvin <= 4500 -> androidx.compose.ui.graphics.Color(0xFFFFE3B6)
     kelvin <= 5800 -> androidx.compose.ui.graphics.Color(0xFFE8EEF7)
     else -> androidx.compose.ui.graphics.Color(0xFFB6CCF0)
+}
+
+/**
+ * Light-card button visibility toggle row. Each of BRIGHT / WHITE / HUE / FX is a
+ * chip that highlights when the button is currently SHOWN on the card (the natural
+ * mental model — green = visible, grey = hidden — rather than the storage model of
+ * "is this in the hidden set"). Tap to flip.
+ */
+@Composable
+private fun LightButtonsRow(
+    hidden: Set<com.github.itskenny0.r1ha.core.prefs.LightCardButton>,
+    onToggle: (com.github.itskenny0.r1ha.core.prefs.LightCardButton) -> Unit,
+) {
+    val all = com.github.itskenny0.r1ha.core.prefs.LightCardButton.entries
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        all.forEachIndexed { idx, btn ->
+            val visible = btn !in hidden
+            val label = when (btn) {
+                com.github.itskenny0.r1ha.core.prefs.LightCardButton.BRIGHTNESS -> "BRIGHT"
+                com.github.itskenny0.r1ha.core.prefs.LightCardButton.WHITE -> "WHITE"
+                com.github.itskenny0.r1ha.core.prefs.LightCardButton.HUE -> "HUE"
+                com.github.itskenny0.r1ha.core.prefs.LightCardButton.EFFECTS -> "FX"
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(R1.ShapeS)
+                    .background(if (visible) R1.AccentWarm else R1.Bg)
+                    .let { m ->
+                        if (visible) m else m.border(1.dp, R1.Hairline, R1.ShapeS)
+                    }
+                    .r1Pressable({ onToggle(btn) })
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    style = R1.labelMicro,
+                    color = if (visible) R1.Bg else R1.InkSoft,
+                )
+            }
+            if (idx < all.lastIndex) Spacer(Modifier.width(4.dp))
+        }
+    }
 }
 
 @Composable

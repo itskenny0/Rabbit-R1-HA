@@ -52,6 +52,16 @@ data class EntityOverride(
      * 4000 neutral, 5500 cool-white, 6500 daylight.
      */
     val lightColorTempK: Int? = null,
+    /**
+     * Per-card hidden-button set for light cards. Defaults to empty (every supported
+     * button visible). The user can toggle any of BRIGHT / WHITE / HUE / FX off from
+     * the customize dialog — useful when a card only really needs BRIGHTNESS (a
+     * "lamp" they never colour-tweak) and the WHITE/HUE/FX buttons just add noise.
+     * Buttons are only rendered when the bulb actually supports them in HA AND the
+     * button isn't in this hidden set; hiding a button the bulb doesn't support is
+     * a no-op and harmless.
+     */
+    val lightButtonsHidden: Set<LightCardButton> = emptySet(),
 ) {
     companion object {
         /** Curated CT presets surfaced in the customize dialog. */
@@ -96,5 +106,22 @@ data class EntityOverride(
         )
 
         val NONE = EntityOverride()
+    }
+}
+
+/**
+ * Light-card button identity for [EntityOverride.lightButtonsHidden]. Stored by its
+ * single-character [code] in the preferences blob to keep the encoded size small —
+ * EntityOverride already runs close to a screenful of pipe-separated fields and a
+ * Set<Enum> stored as full names would dominate.
+ */
+enum class LightCardButton(val code: Char) {
+    BRIGHTNESS('B'),
+    WHITE('W'),
+    HUE('H'),
+    EFFECTS('F'),
+    ;
+    companion object {
+        fun fromCode(code: Char): LightCardButton? = entries.firstOrNull { it.code == code }
     }
 }

@@ -72,6 +72,31 @@ class EntityOverrideCodecTest {
         assertThat(decoded["light.kitchen"]?.textSizeSp).isNull()
     }
 
+    @Test fun `hidden light buttons round-trip via single-char codes`() {
+        val map = mapOf(
+            "light.kitchen" to EntityOverride(
+                lightButtonsHidden = setOf(LightCardButton.WHITE, LightCardButton.EFFECTS),
+            ),
+        )
+        val encoded = encodeEntityOverrides_visibleForTesting(map)
+        // Codes are stored sorted alphabetically (F before W) so the encoded blob is
+        // stable regardless of Set iteration order.
+        assertThat(encoded).endsWith("|FW")
+        val decoded = decodeEntityOverrides_visibleForTesting(encoded)
+        assertThat(decoded["light.kitchen"]?.lightButtonsHidden)
+            .isEqualTo(setOf(LightCardButton.WHITE, LightCardButton.EFFECTS))
+    }
+
+    @Test fun `decoder ignores unknown light-button codes`() {
+        // Defensive: a future build that ships a new button code (e.g. 'X') should
+        // not crash older builds that decode the saved blob — they just ignore the
+        // code and keep the known ones.
+        val legacy = "light.kitchen=?|?|?||?|?|?|FXW"
+        val decoded = decodeEntityOverrides_visibleForTesting(legacy)
+        assertThat(decoded["light.kitchen"]?.lightButtonsHidden)
+            .isEqualTo(setOf(LightCardButton.EFFECTS, LightCardButton.WHITE))
+    }
+
     @Test fun `longpress with URL-special characters survives encoding`() {
         // Entity IDs are alphanumeric + dot + underscore, but be defensive against future
         // HA additions (slashes, pipes) — the URL-encoding wrapping should handle them.

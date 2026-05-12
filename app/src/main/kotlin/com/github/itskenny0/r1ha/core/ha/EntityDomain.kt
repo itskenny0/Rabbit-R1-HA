@@ -35,6 +35,12 @@ enum class Domain(val prefix: String) {
     SCRIPT("script"),
     BUTTON("button"),
     /**
+     * HA helper buttons — identical service shape to [BUTTON] (`input_button.press`),
+     * fire-and-forget. Common in YAML dashboards as one-tap shortcuts that automations
+     * react to. Rendered as ActionCard.
+     */
+    INPUT_BUTTON("input_button"),
+    /**
      * Read-only sensors — temperature, humidity, power, etc. State is the reading itself,
      * `unit_of_measurement` from attributes is the suffix. No wheel input, no tap action;
      * rendered by SensorCard as a big numeric readout.
@@ -79,7 +85,8 @@ enum class Domain(val prefix: String) {
     ;
 
     /** Action-only domains — UI renders them as fire-and-forget ActionCard tiles. */
-    val isAction: Boolean get() = this == SCENE || this == SCRIPT || this == BUTTON
+    val isAction: Boolean get() =
+        this == SCENE || this == SCRIPT || this == BUTTON || this == INPUT_BUTTON
 
     /** Read-only sensor domains — UI renders them as SensorCard. No wheel, no tap. */
     val isSensor: Boolean get() = this == SENSOR || this == BINARY_SENSOR

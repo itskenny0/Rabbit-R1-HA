@@ -127,6 +127,20 @@ object PragmaticHybridTheme : R1Theme {
                         currentEffect = model.lightEffect,
                         effectList = model.lightEffectList,
                         accent = accent,
+                        hidden = model.lightButtonsHidden,
+                    )
+                }
+                // Media-player controls — play/pause/next/prev + vol- / vol+ buttons.
+                // Surfaced on every media_player card; the volume wheel is still the
+                // primary way to set absolute volume but the explicit buttons match
+                // the user's HA-dashboard mental model and make small adjustments much
+                // faster than wheeling.
+                if (model.domainGlyph == CardRenderModel.Glyph.MEDIA_PLAYER) {
+                    Spacer(Modifier.height(8.dp))
+                    MediaControlsRow(
+                        entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
+                        isPlaying = model.isOn,
+                        accent = accent,
                     )
                 }
                 Spacer(Modifier.weight(1f))
@@ -397,11 +411,25 @@ internal fun LightControlsRow(
     currentEffect: String?,
     effectList: List<String>,
     accent: Color,
+    /** Per-card hidden-button set from [EntityOverride.lightButtonsHidden]. Buttons in
+     *  this set are filtered out before render — used to declutter cards the user
+     *  rarely tweaks beyond brightness. Empty = show everything available. */
+    hidden: Set<com.github.itskenny0.r1ha.core.prefs.LightCardButton> = emptySet(),
 ) {
     val onSetMode = com.github.itskenny0.r1ha.core.theme.LocalOnSetLightWheelMode.current
     val onOpenPicker = com.github.itskenny0.r1ha.core.theme.LocalOnOpenEffectPicker.current
+    // Filter the available modes through the per-card hidden set. The mapping from
+    // LightWheelMode to LightCardButton is one-to-one for BRIGHTNESS/COLOR_TEMP/HUE
+    // (the three wheel modes); FX is handled separately below as a non-mode button.
     val visibleModes = availableModes.ifEmpty {
         listOf(com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS)
+    }.filter { mode ->
+        val asButton = when (mode) {
+            com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS -> com.github.itskenny0.r1ha.core.prefs.LightCardButton.BRIGHTNESS
+            com.github.itskenny0.r1ha.core.ha.LightWheelMode.COLOR_TEMP -> com.github.itskenny0.r1ha.core.prefs.LightCardButton.WHITE
+            com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> com.github.itskenny0.r1ha.core.prefs.LightCardButton.HUE
+        }
+        asButton !in hidden
     }
     // Column rather than Row — the R1 is a portrait device with abundant vertical
     // space but only 240 px wide, so a horizontal row of three mode buttons plus an
@@ -442,7 +470,9 @@ internal fun LightControlsRow(
         // on the dismissed button). Tap opens the screen-level picker via
         // [LocalOnOpenEffectPicker] — the actual sheet lives in CardStackScreen so it
         // can render full-screen above the card chrome.
-        if (effectList.isNotEmpty() && onOpenPicker != null) {
+        if (effectList.isNotEmpty() && onOpenPicker != null &&
+            com.github.itskenny0.r1ha.core.prefs.LightCardButton.EFFECTS !in hidden
+        ) {
             if (visibleModes.size > 1) Spacer(Modifier.height(4.dp))
             val active = !currentEffect.isNullOrBlank()
             Box(
@@ -472,6 +502,126 @@ internal fun LightControlsRow(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Media-player control row — discrete transport / volume buttons under the volume
+ * readout. The user's HA dashboard typically has these as icon buttons on a media-
+ * player card and this app's wheel-only volume control didn't surface them, so
+ * pause/play/skip/back/vol± lived purely in the wheel (volume) or nowhere (the
+ * transport actions). Stacked vertically to match the light-card pattern: the R1 is
+ * 240 px wide and a single row of five glyph buttons feels cramped.
+ *
+ * Transport buttons live on the top row (◀ ⏯ ▶), volume on the bottom row (- +)
+ * plus mute (∅). Three-button rows are still narrow enough at 240 px to read
+ * cleanly while keeping the section short vertically — two rows fit under the
+ * readout without crowding the deck chrome.
+ */
+@Composable
+internal fun MediaControlsRow(
+    entityId: com.github.itskenny0.r1ha.core.ha.EntityId,
+    isPlaying: Boolean,
+    accent: Color,
+) {
+    val onTransport = com.github.itskenny0.r1ha.core.theme.LocalOnMediaTransport.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Transport row — back / play-pause / next. The play-pause glyph swaps based
+        // on the current state (▶ when paused/idle, ⏸ when playing) so the user can
+        // tell at a glance what tapping it will do.
+        Row(modifier = Modifier.fillMaxWidth()) {
+            MediaButton(
+                glyph = "◀",
+                label = "BACK",
+                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PREVIOUS) },
+                accent = accent,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(4.dp))
+            MediaButton(
+                glyph = if (isPlaying) "⏸" else "▶",
+                label = if (isPlaying) "PAUSE" else "PLAY",
+                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PLAY_PAUSE) },
+                accent = accent,
+                emphasis = true,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(4.dp))
+            MediaButton(
+                glyph = "▶",
+                label = "NEXT",
+                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.NEXT) },
+                accent = accent,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        // Volume row — vol- / mute / vol+. Each tap is a discrete step; the wheel
+        // still drives absolute volume_level for fine-grained adjustments.
+        Row(modifier = Modifier.fillMaxWidth()) {
+            MediaButton(
+                glyph = "−",
+                label = "VOL-",
+                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.VOLUME_DOWN) },
+                accent = accent,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(4.dp))
+            MediaButton(
+                glyph = "∅",
+                label = "MUTE",
+                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.MUTE_TOGGLE) },
+                accent = accent,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(4.dp))
+            MediaButton(
+                glyph = "+",
+                label = "VOL+",
+                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.VOLUME_UP) },
+                accent = accent,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/**
+ * Single media-control button — glyph on the left, small uppercase label on the
+ * right. The emphasis flag fills with accent (used on play/pause so it's the
+ * obvious primary action of the row); the others are surface-muted with the accent
+ * glyph as a hint that the button is interactive.
+ */
+@Composable
+private fun MediaButton(
+    glyph: String,
+    label: String,
+    onClick: () -> Unit,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    emphasis: Boolean = false,
+) {
+    Box(
+        modifier = modifier
+            .clip(R1.ShapeS)
+            .background(if (emphasis) accent else R1.SurfaceMuted)
+            .r1Pressable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = glyph,
+                style = R1.numeralM,
+                color = if (emphasis) R1.Bg else accent,
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                style = R1.labelMicro,
+                color = if (emphasis) R1.Bg else R1.InkSoft,
+            )
         }
     }
 }

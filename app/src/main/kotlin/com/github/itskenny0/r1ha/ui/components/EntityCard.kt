@@ -60,7 +60,7 @@ fun EntityCard(
         // mapping never lands on theme.Card. Routed to ActionCard which has its own label
         // ("SCENE"/"SCRIPT"/"BUTTON") via domainLabel above. The Glyph value is unused but
         // has to be exhaustive for the when to compile.
-        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
+        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON, Domain.INPUT_BUTTON,
         Domain.SENSOR, Domain.BINARY_SENSOR -> CardRenderModel.Glyph.SWITCH
     }
     val accentRole = when (state.id.domain) {
@@ -83,7 +83,7 @@ fun EntityCard(
         // identical when the user has a mix.
         Domain.SCENE -> CardRenderModel.AccentRole.GREEN
         Domain.SCRIPT -> CardRenderModel.AccentRole.COOL
-        Domain.BUTTON -> CardRenderModel.AccentRole.WARM
+        Domain.BUTTON, Domain.INPUT_BUTTON -> CardRenderModel.AccentRole.WARM
         Domain.NUMBER, Domain.INPUT_NUMBER -> CardRenderModel.AccentRole.WARM
         Domain.VALVE -> CardRenderModel.AccentRole.COOL
         Domain.VACUUM -> CardRenderModel.AccentRole.GREEN
@@ -224,6 +224,7 @@ fun EntityCard(
                     lightAvailableModes = if (state.id.domain == Domain.LIGHT) {
                         com.github.itskenny0.r1ha.core.ha.LightWheelMode.availableFor(state.supportedColorModes)
                     } else emptyList(),
+                    lightButtonsHidden = perCardOverride.lightButtonsHidden,
                     meterLabels = meterLabels,
                 ),
                 modifier = Modifier
@@ -279,6 +280,7 @@ private fun actionDomainLabel(domain: Domain): String = when (domain) {
     Domain.SCENE -> "SCENE"
     Domain.SCRIPT -> "SCRIPT"
     Domain.BUTTON -> "BUTTON"
+    Domain.INPUT_BUTTON -> "BUTTON"
     // Defensive: action-only path should only ever see action domains.
     else -> domain.prefix.uppercase()
 }

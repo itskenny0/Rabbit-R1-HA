@@ -497,6 +497,23 @@ class CardStackViewModel(
         }
     }
 
+    /**
+     * Fire a media-player transport / volume action — play/pause, next, prev, vol+, vol-,
+     * mute. Surfaced by the media_player card's [MediaControlsRow]. Each tap is a
+     * one-shot service call with no payload; the volume wheel is still the primary way
+     * to set absolute volume, but discrete +/- taps are easier for small adjustments.
+     */
+    fun mediaTransport(entityId: EntityId, action: com.github.itskenny0.r1ha.core.ha.MediaTransport) {
+        val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
+        if (entity.id.domain != Domain.MEDIA_PLAYER) return
+        R1Log.i("CardStack.media", "$entityId $action")
+        viewModelScope.launch {
+            haRepository.call(
+                com.github.itskenny0.r1ha.core.ha.ServiceCall.mediaTransport(entityId, action),
+            )
+        }
+    }
+
     fun cycleLightWheelMode(entityId: EntityId) {
         val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
         if (entity.id.domain != Domain.LIGHT) return

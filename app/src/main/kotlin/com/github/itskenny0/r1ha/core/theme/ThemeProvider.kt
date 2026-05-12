@@ -91,6 +91,14 @@ val LocalOnOpenEffectPicker = staticCompositionLocalOf<
     ((com.github.itskenny0.r1ha.core.ha.EntityId) -> Unit)?
 > { null }
 
+/**
+ * Media-player transport callback — used by the media_player card's control row to
+ * fire play/pause/next/prev/vol+/vol-/mute. Null = previews / non-card contexts.
+ */
+val LocalOnMediaTransport = staticCompositionLocalOf<
+    ((com.github.itskenny0.r1ha.core.ha.EntityId, com.github.itskenny0.r1ha.core.ha.MediaTransport) -> Unit)?
+> { null }
+
 @Composable
 fun R1ThemeHost(themeId: ThemeId, content: @Composable () -> Unit) {
     val theme = when (themeId) {

@@ -28,11 +28,23 @@ enum class PickerFilter(val label: String, val matches: (Domain) -> Boolean) {
     LIGHTS("LIGHTS", { it == Domain.LIGHT }),
     SWITCHES("SWITCHES", { it == Domain.SWITCH || it == Domain.INPUT_BOOLEAN || it == Domain.AUTOMATION }),
     COVERS("COVERS", { it == Domain.COVER }),
+    // Valves get their own chip rather than living under COVERS — HA keeps the two
+    // domains distinct (water valves vs window covers) and grouping them confused
+    // discovery for users who knew they had a `valve.foo` entity but couldn't find it
+    // by searching "valve".
+    VALVES("VALVES", { it == Domain.VALVE }),
     CLIMATE("CLIMATE", { it == Domain.CLIMATE || it == Domain.HUMIDIFIER || it == Domain.FAN || it == Domain.WATER_HEATER }),
     LOCKS("LOCKS", { it == Domain.LOCK }),
     MEDIA("MEDIA", { it == Domain.MEDIA_PLAYER }),
+    // Action-only entities — scene/script/button/input_button. SCENES is the
+    // human-friendly umbrella label even though it also covers scripts/buttons,
+    // because that's the most-searched-for kind in this group.
     SCENES("SCENES", { it.isAction }),
     SENSORS("SENSORS", { it.isSensor }),
+    // Number / input_number — settable scalars common in MQTT integrations (pump
+    // speeds, calibration knobs, manual setpoints). Previously hidden inside ALL
+    // because no chip filtered for them.
+    NUMBERS("NUMBERS", { it == Domain.NUMBER || it == Domain.INPUT_NUMBER }),
     VACUUMS("VACUUMS", { it == Domain.VACUUM }),
 }
 

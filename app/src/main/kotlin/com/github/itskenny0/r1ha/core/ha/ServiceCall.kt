@@ -4,6 +4,14 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
+/**
+ * Discrete media-player transport / volume actions. Used by the media_player card's
+ * control row and dispatched via [ServiceCall.mediaTransport].
+ */
+enum class MediaTransport {
+    PLAY_PAUSE, NEXT, PREVIOUS, VOLUME_UP, VOLUME_DOWN, MUTE_TOGGLE,
+}
+
 /** A concrete HA service call: which `domain.service` + the `service_data` JSON. Target is the entity. */
 data class ServiceCall(
     val target: EntityId,
@@ -76,7 +84,7 @@ data class ServiceCall(
                 // Action-only domains shouldn't reach setPercent — the wheel is ignored on
                 // ActionCards. Defensive fallback: just fire the action.
                 Domain.SCENE, Domain.SCRIPT -> ServiceCall(target, "turn_on", JsonObject(emptyMap()))
-                Domain.BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
+                Domain.BUTTON, Domain.INPUT_BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
                 // Sensors are read-only — the wheel and tap are no-ops at the VM level so
                 // this branch shouldn't fire. Defensive: emit homeassistant.update_entity
                 // which is the closest thing to "do something" without changing state, so
@@ -165,6 +173,39 @@ data class ServiceCall(
                 },
             )
 
+        /**
+         * Discrete media-player transport / volume actions surfaced on the
+         * media_player card's control row. None of them carry a payload — HA's
+         * media_player domain exposes them as zero-arg services.
+         *
+         * volume_up / volume_down are 1 dB-or-so increments depending on the device;
+         * a tap is the right granularity for fine-tuning without bothering with the
+         * wheel. media_play_pause is the universal toggle (HA picks play vs pause
+         * based on the current state).
+         */
+        fun mediaTransport(target: EntityId, action: MediaTransport): ServiceCall =
+            ServiceCall(
+                target,
+                when (action) {
+                    MediaTransport.PLAY_PAUSE -> "media_play_pause"
+                    MediaTransport.NEXT -> "media_next_track"
+                    MediaTransport.PREVIOUS -> "media_previous_track"
+                    MediaTransport.VOLUME_UP -> "volume_up"
+                    MediaTransport.VOLUME_DOWN -> "volume_down"
+                    MediaTransport.MUTE_TOGGLE -> "volume_mute"
+                },
+                if (action == MediaTransport.MUTE_TOGGLE) {
+                    // volume_mute requires `is_volume_muted: true`. We always pass
+                    // `true` — there's no per-call state inversion; the user gets a
+                    // dedicated unmute via the same button if the media_player echoes
+                    // back as muted (HA accepts is_volume_muted=true repeatedly).
+                    // A future enhancement could read the muted attr and invert here.
+                    buildJsonObject { put("is_volume_muted", JsonPrimitive(true)) }
+                } else {
+                    JsonObject(emptyMap())
+                },
+            )
+
         fun setNumberValue(target: EntityId, value: Double): ServiceCall {
             val rounded = (Math.round(value * 100.0) / 100.0)
             return ServiceCall(
@@ -215,7 +256,7 @@ data class ServiceCall(
             // regardless of any (mostly meaningless) isOn state. Buttons use `press`,
             // scenes / scripts use `turn_on` to activate.
             Domain.SCENE, Domain.SCRIPT -> ServiceCall(target, "turn_on", JsonObject(emptyMap()))
-            Domain.BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
+            Domain.BUTTON, Domain.INPUT_BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
             // Sensors are read-only — tapToggle shouldn't reach them (EntityCard skips the
             // tap modifier for sensor domains). Defensive: emit update_entity so any
             // accidental dispatch is at least a no-op refresh.
@@ -280,7 +321,7 @@ data class ServiceCall(
             // a button press or a scene activation. The on-side of setSwitch is the fire
             // service; the off-side is a no-op (we just turn_on again, which is harmless).
             Domain.SCENE, Domain.SCRIPT -> ServiceCall(target, "turn_on", JsonObject(emptyMap()))
-            Domain.BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
+            Domain.BUTTON, Domain.INPUT_BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
             // Sensors are read-only — defensive update_entity no-op.
             Domain.SENSOR, Domain.BINARY_SENSOR -> ServiceCall(
                 target,

@@ -354,7 +354,11 @@ private fun encodeEntityOverrides(map: Map<String, EntityOverride>): String {
         val ctStr = o.lightColorTempK?.toString() ?: "?"
         // Text size: stored as integer sp (e.g. "28"). "?" = inherit theme default.
         val sizeStr = o.textSizeSp?.toString() ?: "?"
-        "$idEnc=$sizeStr|$pillStr|$areaStr|$lpEnc|$decStr|$accStr|$ctStr"
+        // Hidden light buttons — concatenated single-char codes (BWHF) for each
+        // hidden button. Empty = nothing hidden (all supported buttons visible).
+        val btnsStr = if (o.lightButtonsHidden.isEmpty()) ""
+            else o.lightButtonsHidden.map { it.code }.sorted().joinToString("")
+        "$idEnc=$sizeStr|$pillStr|$areaStr|$lpEnc|$decStr|$accStr|$ctStr|$btnsStr"
     }
 }
 
@@ -390,6 +394,12 @@ private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
             val dec = parts.getOrNull(4)?.toIntOrNull()?.coerceIn(0, 6)
             val acc = parts.getOrNull(5)?.toIntOrNull()
             val ct = parts.getOrNull(6)?.toIntOrNull()?.coerceIn(1000, 10000)
+            // Hidden light buttons — each char in the blob is a button code (B/W/H/F).
+            // Unknown chars are silently ignored so future codes don't crash older
+            // builds that ever decode a newer save.
+            val btnsBlob = parts.getOrNull(7).orEmpty()
+            val buttons = if (btnsBlob.isBlank()) emptySet()
+                else btnsBlob.mapNotNull { com.github.itskenny0.r1ha.core.prefs.LightCardButton.fromCode(it) }.toSet()
             id to EntityOverride(
                 textSizeSp = size,
                 showOnOffPill = pill,
@@ -398,6 +408,7 @@ private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
                 maxDecimalPlaces = dec,
                 accentColor = acc,
                 lightColorTempK = ct,
+                lightButtonsHidden = buttons,
             )
         }.getOrNull()
     }.toMap()

@@ -370,7 +370,7 @@ class DefaultHaRepository(
             // Scripts have an "on" state while they're executing. Scene/button never get
             // a meaningful on state — their state attribute is a last-fired timestamp.
             Domain.SCRIPT -> raw.state.equals("on", ignoreCase = true)
-            Domain.SCENE, Domain.BUTTON -> false
+            Domain.SCENE, Domain.BUTTON, Domain.INPUT_BUTTON -> false
             // binary_sensor uses "on"/"off" by HA convention — "on" means the triggered
             // state (door open, motion detected, leak found). Plain sensor entities have
             // numeric/string readings and don't have a meaningful on/off mapping.
@@ -487,7 +487,7 @@ class DefaultHaRepository(
         Domain.NUMBER, Domain.INPUT_NUMBER -> null
         // No scalar — pure on/off / read-only / action.
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
-        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
+        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON, Domain.INPUT_BUTTON,
         Domain.SENSOR, Domain.BINARY_SENSOR -> null
     }
 
@@ -551,7 +551,7 @@ class DefaultHaRepository(
         // mirrors the climate path.
         Domain.CLIMATE, Domain.WATER_HEATER -> climateTargetTemp(attrs)
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
-        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
+        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON, Domain.INPUT_BUTTON,
         Domain.BINARY_SENSOR, Domain.VACUUM -> null
         // For plain sensors the *state* IS the reading — there's no attribute to read from.
         // The SensorCard renders the rawState string directly; we don't try to coerce it
@@ -630,7 +630,7 @@ class DefaultHaRepository(
         // Vacuums map naturally to switch cards (start/return-to-base on tap).
         Domain.VACUUM -> false
         // Action-only domains — no scalar; rendered as ActionCard tiles.
-        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> false
+        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON, Domain.INPUT_BUTTON -> false
         // Sensors are read-only — rendered as SensorCard, no wheel.
         Domain.SENSOR, Domain.BINARY_SENSOR -> false
     }
@@ -717,7 +717,7 @@ class DefaultHaRepository(
                         Domain.CLIMATE, Domain.WATER_HEATER ->
                             !stateStr.equals("off", ignoreCase = true) && available
                         Domain.SCRIPT -> stateStr.equals("on", ignoreCase = true)
-                        Domain.SCENE, Domain.BUTTON -> false
+                        Domain.SCENE, Domain.BUTTON, Domain.INPUT_BUTTON -> false
                         Domain.BINARY_SENSOR -> stateStr.equals("on", ignoreCase = true)
                         Domain.SENSOR -> false
                         Domain.NUMBER, Domain.INPUT_NUMBER -> false
