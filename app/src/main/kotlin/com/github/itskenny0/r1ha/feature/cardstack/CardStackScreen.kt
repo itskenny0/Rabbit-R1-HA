@@ -117,6 +117,10 @@ fun CardStackScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding()
+                    .swipeOnlyGestures(
+                        onSwipeLeft = { onOpenSettings() },
+                        onSwipeRight = { onOpenFavoritesPicker() },
+                    )
                     .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -290,3 +294,41 @@ private fun Modifier.cardStackGestures(
 /** Disambiguated background helper to avoid import clash with foundation.background. */
 private fun Modifier.dotBackground(color: Color): Modifier =
     this.background(color = color, shape = CircleShape)
+
+/**
+ * Gesture handler for the empty CardStack state: only fires on horizontal swipes (so the
+ * Button inside still receives plain taps normally). Vertical swipes are ignored since
+ * there's no card stack to page through.
+ */
+private fun Modifier.swipeOnlyGestures(
+    onSwipeLeft: () -> Unit,
+    onSwipeRight: () -> Unit,
+): Modifier = pointerInput(Unit) {
+    val slopPx = 24.dp.toPx()
+    val thresholdPx = 64.dp.toPx()
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        var dx = 0f
+        var dy = 0f
+        var classifiedHorizontal = false
+        while (true) {
+            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            if (change.changedToUp()) {
+                if (classifiedHorizontal && kotlin.math.abs(dx) > thresholdPx) {
+                    if (dx < 0) onSwipeLeft() else onSwipeRight()
+                }
+                break
+            }
+            val delta = change.positionChange()
+            dx += delta.x
+            dy += delta.y
+            if (!classifiedHorizontal && kotlin.math.abs(dx) > slopPx
+                && kotlin.math.abs(dx) > kotlin.math.abs(dy)
+            ) {
+                classifiedHorizontal = true
+            }
+            if (classifiedHorizontal) change.consume()
+        }
+    }
+}
