@@ -9,6 +9,9 @@ import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.prefs.TokenStore
 import com.github.itskenny0.r1ha.core.prefs.WheelKeySource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -44,7 +47,13 @@ class AppGraph(context: Context) {
     }
 
     val wsClient: HaWebSocketClient by lazy {
-        HaWebSocketClient()
+        // Share the OkHttpClient so the WS connection inherits its 30-second ping interval —
+        // the no-arg HaWebSocketClient constructor builds a fresh client without it, which
+        // left the production WS unable to detect half-open connections after device sleep.
+        HaWebSocketClient(
+            http = okHttp,
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        )
     }
 
     val tokenRefresher: TokenRefresher by lazy {
