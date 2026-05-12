@@ -85,6 +85,25 @@ fun FavoritesPickerScreen(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            ui.rows.isEmpty() -> Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = "No controllable entities",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Spacer(Modifier.padding(top = 8.dp))
+                Text(
+                    text = "Home Assistant returned no lights, fans, covers, or media players.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                )
+            }
             else -> LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
