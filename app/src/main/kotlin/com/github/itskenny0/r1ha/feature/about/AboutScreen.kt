@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,19 +27,24 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.itskenny0.r1ha.BuildConfig
 import com.github.itskenny0.r1ha.core.ha.ConnectionState
 import com.github.itskenny0.r1ha.core.ha.HaRepository
+import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
+import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 
 @Composable
 fun AboutScreen(
     haRepository: HaRepository,
     settings: SettingsRepository,
+    wheelInput: WheelInput,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     val connection by haRepository.connection.collectAsStateWithLifecycle()
     val appSettings by settings.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
+    val listState = rememberLazyListState()
+    WheelScrollFor(wheelInput = wheelInput, listState = listState)
 
     Column(
         modifier = Modifier
@@ -59,7 +65,7 @@ fun AboutScreen(
             )
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
 
             // ── App info ─────────────────────────────────────────────────────
             item {

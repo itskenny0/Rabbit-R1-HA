@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -29,13 +30,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.itskenny0.r1ha.core.ha.HaRepository
+import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
+import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 
 @Composable
 fun FavoritesPickerScreen(
     haRepository: HaRepository,
     settings: SettingsRepository,
+    wheelInput: WheelInput,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -46,6 +50,8 @@ fun FavoritesPickerScreen(
         )
     )
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    WheelScrollFor(wheelInput = wheelInput, listState = listState)
 
     Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
         Row(
@@ -105,6 +111,7 @@ fun FavoritesPickerScreen(
                 )
             }
             else -> LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 8.dp),

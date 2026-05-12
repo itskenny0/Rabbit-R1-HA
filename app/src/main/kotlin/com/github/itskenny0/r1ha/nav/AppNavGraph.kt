@@ -56,6 +56,7 @@ fun AppNavGraph(
             FavoritesPickerScreen(
                 haRepository = haRepository,
                 settings = settings,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }
@@ -63,6 +64,7 @@ fun AppNavGraph(
             SettingsScreen(
                 settings = settings,
                 tokens = tokens,
+                wheelInput = wheelInput,
                 onOpenThemePicker = {
                     navController.navigate(Routes.THEME_PICKER) { launchSingleTop = true }
                 },
@@ -89,6 +91,7 @@ fun AppNavGraph(
             AboutScreen(
                 haRepository = haRepository,
                 settings = settings,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }

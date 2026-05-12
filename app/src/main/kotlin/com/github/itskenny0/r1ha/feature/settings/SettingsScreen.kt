@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,17 +29,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.prefs.TokenStore
 import com.github.itskenny0.r1ha.core.prefs.WheelKeySource
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
+import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     settings: SettingsRepository,
     tokens: TokenStore,
+    wheelInput: WheelInput,
     onOpenThemePicker: () -> Unit,
     onOpenAbout: () -> Unit,
     onSignedOut: () -> Unit,
@@ -48,6 +52,8 @@ fun SettingsScreen(
         factory = SettingsViewModel.factory(settings = settings, tokens = tokens),
     )
     val s by vm.state.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    WheelScrollFor(wheelInput = wheelInput, listState = listState)
 
     Column(
         modifier = Modifier
@@ -68,7 +74,7 @@ fun SettingsScreen(
             )
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
 
             // ── Server ───────────────────────────────────────────────────────
             item { Section("Server") }
