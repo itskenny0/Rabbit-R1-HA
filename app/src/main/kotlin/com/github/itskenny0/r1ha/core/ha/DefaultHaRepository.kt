@@ -123,6 +123,10 @@ class DefaultHaRepository(
                 .distinctUntilChanged()
                 .onEach { url ->
                     R1Log.i("HaRepo.serverChange", "server URL now $url; ws.state=${ws.state.value::class.simpleName}")
+                    // Reset the consecutive-failure counter on any URL transition so a sign-out
+                    // followed by a sign-in starts the backoff schedule fresh instead of
+                    // inheriting accumulated failures from the previous server.
+                    reconnectAttempt = 0
                     if (url == null) {
                         ws.disconnect()
                         return@onEach
