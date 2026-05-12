@@ -34,6 +34,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToInt
 
 /** Read a JSON attribute as a plain String, regardless of whether HA encoded it as a JSON string or number. */
 private fun JsonElement?.asString(): String? = (this as? JsonPrimitive)?.content
@@ -362,8 +363,14 @@ class DefaultHaRepository(
             isAvailable = available,
             supportsScalar = supportsScalar(id.domain, raw.attributes),
             rawState = raw.state,
-            unit = raw.attributes["unit_of_measurement"].asString(),
+            // For climate, HA puts the temperature unit on `temperature_unit` rather than
+            // `unit_of_measurement` (which it doesn't expose at all). Surface it through
+            // the same `unit` field so the card display layer doesn't need to know.
+            unit = raw.attributes["unit_of_measurement"].asString()
+                ?: raw.attributes["temperature_unit"].asString(),
             deviceClass = raw.attributes["device_class"].asString(),
+            minRaw = raw.attributes["min_temp"].asDouble() ?: raw.attributes["min_humidity"].asDouble(),
+            maxRaw = raw.attributes["max_temp"].asDouble() ?: raw.attributes["max_humidity"].asDouble(),
         )
         cache.update { it + (id to newState) }
     }
@@ -374,11 +381,21 @@ class DefaultHaRepository(
         Domain.COVER -> attrs["current_position"].asInt()?.let(EntityState::normaliseCoverPosition)
         Domain.MEDIA_PLAYER -> attrs["volume_level"].asDouble()?.let(EntityState::normaliseMediaVolume)
         Domain.HUMIDIFIER -> attrs["humidity"].asInt()?.coerceIn(0, 100)
-        // No scalar — these domains are pure on/off (climate's target_temperature could be
-        // driven, but mapping it through 0..100 requires min_temp/max_temp range plumbing
-        // that's out of scope for the current release).
+        // Climate: scale target_temperature into 0..100 via min_temp/max_temp so the wheel's
+        // percent abstraction maps naturally to "low end is cold, high end is hot". Falls
+        // back to null (and the card stays on the switch-only path) when the range attrs
+        // are missing on a particular HA install.
+        Domain.CLIMATE -> {
+            val target = attrs["temperature"].asDouble()
+            val min = attrs["min_temp"].asDouble()
+            val max = attrs["max_temp"].asDouble()
+            if (target != null && min != null && max != null && max > min) {
+                (((target - min) / (max - min)) * 100.0).roundToInt().coerceIn(0, 100)
+            } else null
+        }
+        // No scalar — pure on/off / read-only / action.
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
-        Domain.CLIMATE, Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
+        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
         Domain.SENSOR, Domain.BINARY_SENSOR -> null
     }
 
@@ -388,8 +405,11 @@ class DefaultHaRepository(
         Domain.COVER -> attrs["current_position"].asInt()
         Domain.MEDIA_PLAYER -> attrs["volume_level"].asDouble()
         Domain.HUMIDIFIER -> attrs["humidity"].asInt()
+        // Climate's raw is the actual target_temperature for SensorCard-style display
+        // when we know the range — themes show "21 °C" via CardRenderModel.displayValue.
+        Domain.CLIMATE -> attrs["temperature"].asDouble()
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
-        Domain.CLIMATE, Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
+        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
         Domain.BINARY_SENSOR -> null
         // For plain sensors the *state* IS the reading — there's no attribute to read from.
         // The SensorCard renders the rawState string directly; we don't try to coerce it
@@ -440,8 +460,14 @@ class DefaultHaRepository(
         // Treat presence of `humidity` attribute as authoritative — if it's missing
         // (a misbehaving integration) we still want a switch-card representation.
         Domain.HUMIDIFIER -> attrs["humidity"] != null
+        // Climate: scalar when we have a temperature target AND the temperature range
+        // (min/max). Without the range we can't map percent → °C, so the card falls back
+        // to the switch-only path (turn_on / turn_off). ClimateEntityFeature.TARGET_TEMPERATURE
+        // is bit 1 — we trust the supported_features bitmask AND the presence of min_temp.
+        Domain.CLIMATE -> ((attrs["supported_features"].asInt() ?: 0) and 1) != 0 &&
+            attrs["min_temp"] != null && attrs["max_temp"] != null
         // Pure on/off domains — no scalar; rendered as switch cards.
-        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK, Domain.CLIMATE -> false
+        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK -> false
         // Action-only domains — no scalar; rendered as ActionCard tiles.
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> false
         // Sensors are read-only — rendered as SensorCard, no wheel.
@@ -529,8 +555,11 @@ class DefaultHaRepository(
                     isAvailable = available,
                     supportsScalar = supportsScalar(id.domain, attrs),
                     rawState = row.state,
-                    unit = attrs["unit_of_measurement"].asString(),
+                    unit = attrs["unit_of_measurement"].asString()
+                        ?: attrs["temperature_unit"].asString(),
                     deviceClass = attrs["device_class"].asString(),
+                    minRaw = attrs["min_temp"].asDouble() ?: attrs["min_humidity"].asDouble(),
+                    maxRaw = attrs["max_temp"].asDouble() ?: attrs["max_humidity"].asDouble(),
                 )
             }
         }

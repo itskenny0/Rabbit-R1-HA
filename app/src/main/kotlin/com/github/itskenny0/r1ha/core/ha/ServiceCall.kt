@@ -56,8 +56,11 @@ data class ServiceCall(
                     if (clamped == 0) "lock" else "unlock",
                     JsonObject(emptyMap()),
                 )
-                // Climate is rendered as a switch in this release; any wheel input maps to
-                // power on/off until target-temperature scaling lands.
+                // Climate is now rendered as scalar when the entity exposes a
+                // temperature range — but this path is only entered for the fallback
+                // (no range / TARGET_TEMPERATURE not supported), so on/off is correct.
+                // The proper scalar path uses [setTemperature] with the converted Celsius/
+                // Fahrenheit value computed at the VM layer.
                 Domain.CLIMATE -> ServiceCall(
                     target,
                     if (clamped == 0) "turn_off" else "turn_on",
@@ -159,6 +162,23 @@ data class ServiceCall(
                 target,
                 "update_entity",
                 JsonObject(emptyMap()),
+            )
+        }
+
+        /**
+         * Climate target-temperature setter. The VM converts the wheel's 0..100 percent
+         * to a temperature using the entity's [EntityState.minRaw] / [EntityState.maxRaw]
+         * range and calls this helper with the resolved value in the entity's native
+         * temperature unit (°C or °F — HA picks based on the user's HA config, we don't
+         * convert). Rounded to 1 decimal because most thermostats won't accept finer
+         * resolution and 21.3 → 21.27 is just visual noise.
+         */
+        fun setTemperature(target: EntityId, temperature: Double): ServiceCall {
+            val rounded = (Math.round(temperature * 10.0) / 10.0)
+            return ServiceCall(
+                target,
+                "set_temperature",
+                buildJsonObject { put("temperature", JsonPrimitive(rounded)) },
             )
         }
     }

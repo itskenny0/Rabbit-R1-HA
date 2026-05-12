@@ -112,12 +112,25 @@ class CardStackViewModel(
         // wheel-up→ON and wheel-down→OFF intent stays accurate even if HA's state has shifted
         // during the 250 ms debounce.
         val entityState = _state.value.cards.firstOrNull { it.id == entityId }
-        val call = if (entityState?.supportsScalar == false) {
-            R1Log.i("CardStack.debounced", "sending setSwitch($entityId, on=${pct > 0})")
-            ServiceCall.setSwitch(entityId, on = pct > 0)
-        } else {
-            R1Log.i("CardStack.debounced", "sending setPercent($entityId, $pct)")
-            ServiceCall.setPercent(entityId, pct)
+        val call = when {
+            entityState?.supportsScalar == false -> {
+                R1Log.i("CardStack.debounced", "sending setSwitch($entityId, on=${pct > 0})")
+                ServiceCall.setSwitch(entityId, on = pct > 0)
+            }
+            // Climate scalar — convert the wheel's 0..100 into the entity's temperature
+            // range using minRaw/maxRaw. Falls through to setPercent if the range is
+            // missing (which shouldn't happen because supportsScalar=true requires it,
+            // but defensive code in case the cached state is stale).
+            entityState?.id?.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE &&
+                entityState.minRaw != null && entityState.maxRaw != null -> {
+                val temp = entityState.minRaw + (pct / 100.0) * (entityState.maxRaw - entityState.minRaw)
+                R1Log.i("CardStack.debounced", "sending setTemperature($entityId, ${"%.1f".format(temp)})")
+                ServiceCall.setTemperature(entityId, temp)
+            }
+            else -> {
+                R1Log.i("CardStack.debounced", "sending setPercent($entityId, $pct)")
+                ServiceCall.setPercent(entityId, pct)
+            }
         }
         // haRepository.call() returns success immediately (the actual HA round-trip lives
         // inside the repo's own debouncer); failures arrive asynchronously via the

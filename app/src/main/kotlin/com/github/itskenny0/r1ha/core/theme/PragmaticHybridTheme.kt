@@ -90,6 +90,11 @@ object PragmaticHybridTheme : R1Theme {
                     percent = model.percent,
                     showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
                     accent = accent,
+                    // For entities that surface a domain-native value (climate "21 °C"),
+                    // displayValue/displayUnit replace the percent number + "%" suffix.
+                    overrideText = model.displayValue,
+                    overrideUnit = model.displayUnit,
+                    textScale = model.textScale,
                 )
                 Spacer(Modifier.weight(1f))
                 if (ui.showOnOffPill) OnOffPill(isOn = model.isOn, accent = accent)
@@ -150,25 +155,42 @@ internal fun BigReadout(
     percent: Int,
     showPercentSuffix: Boolean,
     accent: Color,
+    overrideText: String? = null,
+    overrideUnit: String? = null,
+    textScale: Float = 1.0f,
 ) {
     // Plain, snappy readout. Jitter and chromatic aberration were obscuring the live value
     // and chewing recomposition budget; the slider, the spring on the slider, and the
     // haptic on each detent already telegraph the wheel motion. We can layer subtler
     // effects back in once the core feel is solid.
+    //
+    // When overrideText is non-null (climate "21" with overrideUnit "°C") it replaces
+    // both the percent number AND the percent suffix — domain-native readings are more
+    // useful than a meaningless 60% on a thermostat.
+    val bodyText = overrideText ?: percent.coerceIn(0, 100).toString()
+    val suffixText = overrideUnit ?: if (showPercentSuffix) "%" else null
+    // Scale numeralXl (and the suffix proportionally) by the per-card text-scale factor.
+    // Bypassing the natural sp scaling so the readout obeys both the user's font size *and*
+    // the per-card override.
+    val numeralStyle = R1.numeralXl.copy(
+        fontSize = R1.numeralXl.fontSize * textScale,
+        lineHeight = R1.numeralXl.lineHeight * textScale,
+    )
+    val suffixStyle = R1.numeralM.copy(fontSize = R1.numeralM.fontSize * textScale)
     Row(
         verticalAlignment = Alignment.Bottom,
         modifier = Modifier.wrapContentSize(),
     ) {
         Text(
-            text = percent.coerceIn(0, 100).toString(),
-            style = R1.numeralXl,
+            text = bodyText,
+            style = numeralStyle,
             color = R1.Ink,
         )
-        if (showPercentSuffix) {
+        if (suffixText != null) {
             Spacer(Modifier.width(6.dp))
             Text(
-                text = "%",
-                style = R1.numeralM,
+                text = suffixText,
+                style = suffixStyle,
                 color = accent,
                 modifier = Modifier.padding(bottom = 14.dp),
             )

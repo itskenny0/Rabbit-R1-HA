@@ -26,6 +26,18 @@ data class CardRenderModel(
     /** Optional per-card override colour from [EntityOverride.accentColor]. Themes
      *  consult this before falling back to their role→colour mapping. */
     val accentOverride: Color? = null,
+    /**
+     * For entities where the percent abstraction would hide the actual interesting
+     * value (climate showing "21 °C" rather than "60 %"), the EntityCard wrapper sets
+     * these. Themes use them in place of the percent + "%" suffix when present.
+     * Null → standard percent display.
+     */
+    val displayValue: String? = null,
+    val displayUnit: String? = null,
+    /** Per-card text scale multiplier from [EntityOverride.textScale]; 1.0 = no scale.
+     *  Themes apply this to their big-readout TextStyle (numeralXl) so the user can shrink
+     *  busy cards or enlarge sparse ones without affecting siblings in the deck. */
+    val textScale: Float = 1.0f,
 ) {
     enum class Glyph {
         LIGHT, FAN, COVER, MEDIA_PLAYER,

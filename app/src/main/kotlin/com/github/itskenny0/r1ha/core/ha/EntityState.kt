@@ -41,6 +41,15 @@ data class EntityState(
      * so the user can tell a power sensor from a temperature sensor at a glance.
      */
     val deviceClass: String? = null,
+    /**
+     * Lower bound of the entity's settable scalar range, in the entity's native units.
+     * Populated for climate (min_temp), humidifier (min_humidity), and any future domain
+     * with a bounded setpoint. The CardStackViewModel uses this with [maxRaw] to map the
+     * wheel's 0..100 percent into the right service-call value (e.g. 21 °C, not 21%).
+     */
+    val minRaw: Double? = null,
+    /** Upper bound of [minRaw]'s range; same semantics. */
+    val maxRaw: Double? = null,
 ) {
     companion object {
         fun normaliseLightBrightness(raw: Int): Int = ((raw.coerceIn(0, 255)) * 100.0 / 255.0).roundToInt()

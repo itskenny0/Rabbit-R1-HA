@@ -148,6 +148,13 @@ fun EntityCard(
                 modifier = Modifier.fillMaxSize().alpha(themeAlpha),
             )
         } else {
+            // Domain-native display value — for climate the percent abstraction is
+            // hidden (read "21 °C" not "60 %"). Anything else falls back to the percent.
+            val (displayValue, displayUnit) = when {
+                state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE && state.raw != null ->
+                    formatSensorValue(state.raw.toString(), maxDecimals = mergedUi.maxDecimalPlaces) to state.unit
+                else -> null to null
+            }
             theme.Card(
                 model = CardRenderModel(
                     entityIdText = state.id.value,
@@ -159,6 +166,9 @@ fun EntityCard(
                     accent = accentRole,
                     isAvailable = state.isAvailable,
                     accentOverride = overrideAccent,
+                    displayValue = displayValue,
+                    displayUnit = displayUnit,
+                    textScale = perCardOverride.textScale,
                 ),
                 modifier = Modifier
                     .fillMaxSize()

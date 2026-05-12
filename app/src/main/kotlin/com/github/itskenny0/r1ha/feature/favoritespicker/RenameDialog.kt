@@ -136,6 +136,19 @@ fun RenameDialog(
                 onChange = { override = override.copy(showAreaLabel = it) },
             )
 
+            // ── TEXT SIZE ──────────────────────────────────────────────────────────
+            SectionHeader("TEXT SIZE")
+            Text(
+                text = "Scale the big readout on this card without affecting siblings.",
+                style = R1.body,
+                color = R1.InkMuted,
+            )
+            Spacer(Modifier.height(6.dp))
+            TextScaleRow(
+                selected = override.textScale,
+                onSelect = { override = override.copy(textScale = it) },
+            )
+
             // ── COLOUR ──────────────────────────────────────────────────────────────
             SectionHeader("COLOUR")
             Text(
@@ -313,6 +326,29 @@ private fun ColourSwatchRow(
             // `label` is unused visually but kept for future "hover label" UX —
             // currently swatch is just colour. Suppress unused with a no-op reference.
             @Suppress("UNUSED_EXPRESSION") label
+        }
+    }
+}
+
+@Composable
+private fun TextScaleRow(
+    selected: Float,
+    onSelect: (Float) -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxWidth().clip(R1.ShapeS).background(R1.SurfaceMuted)) {
+        EntityOverride.TEXT_SCALES.forEachIndexed { idx, scale ->
+            // Label uses the multiplier rounded to nearest 0.05 so users see "0.7x" not
+            // "0.7f"; matches our shorthand for visual scale.
+            val label = when (scale) {
+                1.0f -> "1×"
+                else -> "%.2fx".format(scale)
+            }
+            TristateCell(
+                text = label,
+                selected = kotlin.math.abs(selected - scale) < 0.01f,
+                onClick = { onSelect(scale) },
+            )
+            if (idx < EntityOverride.TEXT_SCALES.lastIndex) CellDivider()
         }
     }
 }
