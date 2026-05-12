@@ -52,7 +52,13 @@ class HaWebSocketClient internal constructor(
     private val outgoing = Channel<HaOutbound>(capacity = Channel.UNLIMITED)
 
     fun connect(url: String, accessToken: String) {
-        if (_state.value !is ConnectionState.Idle && _state.value !is ConnectionState.Disconnected) return
+        // Allow connect from Idle, Disconnected, AND AuthLost: when the repository succeeds at
+        // refreshing the access token after an auth-rejected handshake, it has to be able to
+        // reconnect even though the state is still pinned at AuthLost.
+        val canReconnect = _state.value is ConnectionState.Idle ||
+            _state.value is ConnectionState.Disconnected ||
+            _state.value is ConnectionState.AuthLost
+        if (!canReconnect) return
         _state.value = ConnectionState.Connecting
         val req = Request.Builder().url(url).build()
         val listener = object : WebSocketListener() {
