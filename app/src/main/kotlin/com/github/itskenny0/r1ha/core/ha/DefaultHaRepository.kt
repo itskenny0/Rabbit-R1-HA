@@ -311,9 +311,15 @@ class DefaultHaRepository(
                 onSuccess = { all ->
                     val byId = all.filter { it.id in favIds }.associateBy { it.id }
                     if (byId.isNotEmpty()) {
+                        // Only toast on the FIRST successful seed (i.e. when the cache was
+                        // previously empty). Without this, every reconnect after a network
+                        // blip re-toasts "Loaded N entities", which gets old fast.
+                        val wasEmpty = cache.value.isEmpty()
                         cache.update { it + byId }
                         R1Log.i("HaRepo.seed", "seeded ${byId.size}/${favIds.size} favourites (attempt ${attempt + 1})")
-                        com.github.itskenny0.r1ha.core.util.Toaster.show("Loaded ${byId.size} entities")
+                        if (wasEmpty) {
+                            com.github.itskenny0.r1ha.core.util.Toaster.show("Loaded ${byId.size} entities")
+                        }
                     } else {
                         R1Log.w("HaRepo.seed", "REST returned ${all.size} entities but none matched favourites")
                     }
