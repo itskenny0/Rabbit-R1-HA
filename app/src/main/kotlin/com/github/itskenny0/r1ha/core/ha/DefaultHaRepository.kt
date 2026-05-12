@@ -101,6 +101,15 @@ class DefaultHaRepository(
                         // consecutive failures); we track the run here.
                         val attempt = reconnectAttempt
                         reconnectAttempt = (attempt + 1).coerceAtMost(20)
+                        // Fail any in-flight service-call deferreds whose Result will never
+                        // arrive — without this they leak into pendingCalls until the process
+                        // dies and any awaiter would hang indefinitely.
+                        if (pendingCalls.isNotEmpty()) {
+                            pendingCalls.values.forEach {
+                                it.complete(Result.failure(IllegalStateException("WS disconnected mid-call")))
+                            }
+                            pendingCalls.clear()
+                        }
                         reconnectLater(attempt)
                     }
                     is ConnectionState.AuthLost -> {
