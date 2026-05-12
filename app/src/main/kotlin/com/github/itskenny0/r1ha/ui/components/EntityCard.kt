@@ -35,12 +35,6 @@ fun EntityCard(
      */
     onLongPress: (() -> Unit)? = null,
     /**
-     * For action cards only: 0..1 progress for the overscroll-to-fire gesture. The
-     * card-stack screen owns this state; ActionCard renders it as a thin top bar so the
-     * user sees their wheel-up push accumulating. 0 hides the bar entirely.
-     */
-    actionOverscrollProgress: Float = 0f,
-    /**
      * For light cards: current wheel mode (BRIGHTNESS / COLOR_TEMP / HUE). Null means
      * the parent doesn't surface a wheel mode — falls back to BRIGHTNESS for display.
      */
@@ -156,7 +150,6 @@ fun EntityCard(
                 domainLabel = actionDomainLabel(state.id.domain),
                 showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
                 onFire = onTapToggle,
-                overscrollProgress = actionOverscrollProgress,
                 modifier = Modifier.fillMaxSize().alpha(themeAlpha),
             )
         } else if (!state.supportsScalar) {
@@ -204,6 +197,11 @@ fun EntityCard(
             // light entities anyway). When in CT mode, the readout becomes "3500" + "K";
             // in HUE mode it becomes "240" + "°". BRIGHTNESS keeps the percent.
             val (lightDisplay, lightDisplayUnit) = computeLightDisplay(state, lightWheelMode, state.percent ?: 0, mergedUi)
+            // Tape-meter tick labels — for climate / water_heater convert the native
+            // min..max into the user's display unit so the bar's range matches the
+            // big readout. Number / input_number pass through their native range. Null
+            // → the meter falls back to its default 0..100 labels.
+            val meterLabels = computeMeterLabels(state, mergedUi)
             theme.Card(
                 model = CardRenderModel(
                     entityIdText = state.id.value,
@@ -217,10 +215,15 @@ fun EntityCard(
                     accentOverride = overrideAccent,
                     displayValue = lightDisplay ?: displayValue,
                     displayUnit = lightDisplayUnit ?: displayUnit,
-                    textScale = perCardOverride.textScale,
+                    textSizeSp = perCardOverride.textSizeSp,
                     lightWheelMode = lightWheelMode,
                     lightEffect = state.effect,
                     lightEffectListSize = state.effectList.size,
+                    lightEffectList = state.effectList,
+                    lightAvailableModes = if (state.id.domain == Domain.LIGHT) {
+                        com.github.itskenny0.r1ha.core.ha.LightWheelMode.availableFor(state.supportedColorModes)
+                    } else emptyList(),
+                    meterLabels = meterLabels,
                 ),
                 modifier = Modifier
                     .fillMaxSize()
@@ -304,6 +307,48 @@ private fun computeLightDisplay(
         com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> {
             val hue = pct * 3.6  // 0..360
             "%.0f".format(hue) to "°"
+        }
+    }
+}
+
+/**
+ * Vertical tape-meter tick labels (top→bottom) for the right-side bar on a value card.
+ * Returns null when the default `100/75/50/25/0` percent labels are fine — that's lights,
+ * fans, covers, media, humidifiers (all 0..100 scalars) — and a five-string list when the
+ * card surfaces a domain-native range:
+ *  • CLIMATE / WATER_HEATER → min..max converted to the user's tempUnit (e.g. `30°/24°/19°/14°/9°`)
+ *  • NUMBER / INPUT_NUMBER → min..max in the entity's native unit
+ * Skipped for non-scalar entities (no meter shown there) and for lights in CT/HUE mode
+ * (the meter's `fraction` is still 0..1 and the readout already shows the converted
+ * value — labelling the meter with kelvin/hue would clash with the brightness mode).
+ */
+private fun computeMeterLabels(
+    state: com.github.itskenny0.r1ha.core.ha.EntityState,
+    ui: com.github.itskenny0.r1ha.core.prefs.UiOptions,
+): List<String>? {
+    val isTempDomain = state.id.domain == Domain.CLIMATE || state.id.domain == Domain.WATER_HEATER
+    val isNumberDomain = state.id.domain == Domain.NUMBER || state.id.domain == Domain.INPUT_NUMBER
+    val min = state.minRaw ?: return null
+    val max = state.maxRaw ?: return null
+    if (!isTempDomain && !isNumberDomain) return null
+    if (max <= min) return null
+    // Five evenly-spaced points top→bottom: max, 75%, 50%, 25%, min.
+    val ticks = listOf(1.0, 0.75, 0.5, 0.25, 0.0)
+    return ticks.map { frac ->
+        val nativeValue = min + frac * (max - min)
+        if (isTempDomain) {
+            val (converted, _) = convertTemperature(nativeValue, state.unit, ui.tempUnit)
+            // Round to whole degrees on the meter — labels are small and the precise
+            // decimal lives in the big readout. Drop the trailing zero so "21" reads
+            // better than "21.0".
+            val rounded = kotlin.math.round(converted).toInt()
+            "$rounded°"
+        } else {
+            // Numbers: integer if min/max are integer-shaped, one decimal otherwise.
+            // Avoids "0.0" / "100.0" on power switches while keeping precision when
+            // the entity's range is e.g. 0..1.5.
+            val integer = min == kotlin.math.floor(min) && max == kotlin.math.floor(max)
+            if (integer) nativeValue.toInt().toString() else "%.1f".format(nativeValue)
         }
     }
 }

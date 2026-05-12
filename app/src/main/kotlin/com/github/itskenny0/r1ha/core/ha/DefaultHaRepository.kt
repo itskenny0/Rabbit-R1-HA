@@ -107,12 +107,21 @@ class DefaultHaRepository(
             Result.failure(IllegalStateException("Timed out after ${CALL_TIMEOUT_MS / 1000}s"))
         }
         outcome.onFailure { t ->
-            // R1Log so dev builds get the full picture; a short user-visible toast so they
-            // know their action didn't take. Use objectId (e.g. "kitchen_lamp") not entity_id
-            // (e.g. "light.kitchen_lamp") so the toast is readable on a 240-px display.
+            // R1Log gets the full picture (entity_id + service + message); the toast
+            // is short enough to render legibly on the R1's 240×320 display. HA's
+            // error strings can be paragraph-length ("Failed to call service light/turn_on:
+            // Unable to find referenced entities…") and Android's Toast widget hard-
+            // truncates anything past ~2 short lines, so a multi-line message gets cut
+            // mid-sentence. We trim to the first ~28 chars of the underlying message,
+            // surface only the entity's objectId, and use LENGTH_LONG so the user has
+            // enough time to read it.
             R1Log.w("HaRepo.call", "${call.target.value}/${call.service} failed: ${t.message}")
+            val rawMsg = t.message ?: "unknown error"
+            val firstLine = rawMsg.lineSequence().firstOrNull().orEmpty()
+            val shortMsg = if (firstLine.length > 28) firstLine.take(25) + "…" else firstLine
             com.github.itskenny0.r1ha.core.util.Toaster.show(
-                "Couldn't update ${call.target.objectId}: ${t.message ?: "unknown error"}",
+                "${call.target.objectId}: $shortMsg",
+                long = true,
             )
             // Tell the ViewModel so it can roll back the optimistic override — the slider
             // bounces back to HA's last-known value instead of sitting stuck on the user's

@@ -27,7 +27,7 @@ class EntityOverrideCodecTest {
     @Test fun `fully-customised override round-trips through encoder`() {
         val map = mapOf(
             "light.kitchen" to EntityOverride(
-                textScale = 1.15f,
+                textSizeSp = 28,
                 showOnOffPill = true,
                 showAreaLabel = false,
                 longPressTarget = "scene.movie_night",
@@ -43,13 +43,33 @@ class EntityOverrideCodecTest {
 
     @Test fun `multiple entries round-trip with their own settings`() {
         val map = mapOf(
-            "light.kitchen" to EntityOverride(textScale = 1.3f, accentColor = 0xFFE53935.toInt()),
+            "light.kitchen" to EntityOverride(textSizeSp = 48, accentColor = 0xFFE53935.toInt()),
             "switch.kettle" to EntityOverride(showOnOffPill = false, longPressTarget = "script.boil"),
             "sensor.outdoor_temp" to EntityOverride(maxDecimalPlaces = 0),
         )
         val encoded = encodeEntityOverrides_visibleForTesting(map)
         val decoded = decodeEntityOverrides_visibleForTesting(encoded)
         assertThat(decoded).isEqualTo(map)
+    }
+
+    @Test fun `legacy float-scale value decodes into an absolute sp`() {
+        // Pre-textSizeSp saves stored the size as a 0.1..2.0 multiplier of the 72 sp
+        // default. We migrate on decode rather than rewriting every save on first load —
+        // a save with the new format will replace the row, so legacy values self-heal
+        // through normal use. 0.85 × 72 ≈ 61 sp.
+        val legacy = "light.kitchen=0.85|?|?||?|?|?"
+        val decoded = decodeEntityOverrides_visibleForTesting(legacy)
+        val o = decoded["light.kitchen"]
+        assertThat(o).isNotNull()
+        assertThat(o!!.textSizeSp).isEqualTo(61)
+    }
+
+    @Test fun `null text size encodes as inherit sentinel and round-trips as null`() {
+        val map = mapOf("light.kitchen" to EntityOverride(textSizeSp = null, showOnOffPill = true))
+        val encoded = encodeEntityOverrides_visibleForTesting(map)
+        assertThat(encoded).startsWith("light.kitchen=?|")
+        val decoded = decodeEntityOverrides_visibleForTesting(encoded)
+        assertThat(decoded["light.kitchen"]?.textSizeSp).isNull()
     }
 
     @Test fun `longpress with URL-special characters survives encoding`() {
@@ -82,7 +102,8 @@ class EntityOverrideCodecTest {
     @Test fun `older save with fewer trailing fields still decodes`() {
         // Synthesize what a pre-CT save (before the lightColorTempK field shipped) would
         // have looked like — six pipe-separated parts instead of seven. The decoder
-        // should treat the missing trailing field as inherit/null.
+        // should treat the missing trailing field as inherit/null. The first slot also
+        // uses the legacy float-multiplier format ("1.0"), which migrates to 72 sp.
         val legacy = "light.kitchen=1.0|1|0|scene.foo|2|" + 0xFFF36F21.toInt()
         val decoded = decodeEntityOverrides_visibleForTesting(legacy)
         val o = decoded["light.kitchen"]
@@ -91,5 +112,6 @@ class EntityOverrideCodecTest {
         assertThat(o.accentColor).isEqualTo(0xFFF36F21.toInt())
         assertThat(o.showOnOffPill).isTrue()
         assertThat(o.showAreaLabel).isFalse()
+        assertThat(o.textSizeSp).isEqualTo(EntityOverride.DEFAULT_TEXT_SIZE_SP)
     }
 }

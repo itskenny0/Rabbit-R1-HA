@@ -50,7 +50,6 @@ import com.github.itskenny0.r1ha.ui.components.R1Button
 import com.github.itskenny0.r1ha.ui.components.SettingsCogGlyph
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 
 @Composable
 fun CardStackScreen(
@@ -85,24 +84,40 @@ fun CardStackScreen(
             onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
         )
     }
-    // Pager state hoisted to screen scope so the wheel handler can read currentPage —
-    // needed for the action-card overscroll-to-fire gesture (only triggers at the top
-    // of the deck). VerticalCardPager takes it as a parameter rather than creating
-    // its own.
-    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
-        initialPage = vm.state.value.currentIndex
-            .coerceAtMost((state.displayedCards.size - 1).coerceAtLeast(0))
-            .coerceAtLeast(0),
-        pageCount = { state.displayedCards.size },
-    )
-    // Overscroll-to-fire progress for action cards. Floats 0..1; built up by wheel-up
-    // events while the active card is action AND we're at the top of the deck. Resets
-    // when the active card changes or after a successful fire. Wheel-down reverses it
-    // so the user can cancel mid-build by changing direction.
-    val actionOverscroll = remember { androidx.compose.runtime.mutableStateOf(0f) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    LaunchedEffect(state.activeState?.id) {
-        actionOverscroll.value = 0f
+    // Pager state hoisted to screen scope so the wheel handler can route navigation
+    // requests through pagerNavRequests for read-only / action cards (whose wheel
+    // should move between cards rather than mutate state).
+    //
+    // Infinite-scroll mode: the pager uses a much larger virtual pageCount so swipe
+    // gestures don't hit a hard boundary at either end. Pages are mapped back to the
+    // real card list via `page mod cards.size` everywhere the index is consumed. The
+    // initial page is placed in the middle of the virtual range so there's plenty of
+    // travel in both directions before the user could feasibly hit the edge. When the
+    // user toggles the infinite-scroll setting we wrap the pager state in a key() so
+    // the underlying PagerState is rebuilt with the new pageCount — without this the
+    // existing currentPage would survive into the new mode and behave erratically.
+    val infiniteScroll = appSettings.ui.infiniteScroll
+    val cardCount = state.displayedCards.size
+    val pagerState = androidx.compose.runtime.key(infiniteScroll, cardCount > 0) {
+        androidx.compose.foundation.pager.rememberPagerState(
+            initialPage = if (infiniteScroll && cardCount > 0) {
+                // Anchor the start at a multiple of cardCount so `page mod cardCount`
+                // lines up with the user's currentIndex from the moment the pager
+                // opens. Without the multiple-of-cardCount alignment, the initial card
+                // would be cards[(anchor + currentIndex) mod cardCount] = some random
+                // entity from their favourites list.
+                val anchor = INFINITE_PAGER_VIRTUAL_PAGES / 2
+                val aligned = anchor - (anchor % cardCount)
+                aligned + vm.state.value.currentIndex.coerceAtLeast(0).coerceAtMost(cardCount - 1)
+            } else {
+                vm.state.value.currentIndex
+                    .coerceAtMost((cardCount - 1).coerceAtLeast(0))
+                    .coerceAtLeast(0)
+            },
+            pageCount = {
+                if (infiniteScroll && cardCount > 0) INFINITE_PAGER_VIRTUAL_PAGES else cardCount
+            },
+        )
     }
     LaunchedEffect(Unit) {
         wheelInput.events.collect { event ->
@@ -110,55 +125,14 @@ fun CardStackScreen(
             val dir = event.direction
             when {
                 active == null -> Unit
-                active.id.domain.isSensor -> pagerNavRequests.tryEmit(dir)
-                active.id.domain.isAction -> {
-                    // Action cards: navigate like sensors, EXCEPT wheel-up at the top of
-                    // the deck (currentPage == 0) builds overscroll-progress to fire the
-                    // action. Wheel-down anywhere drains progress first, then navigates.
-                    val atTop = pagerState.currentPage == 0
-                    val UP = com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.UP
-                    when {
-                        dir == UP && atTop -> {
-                            // Each detent adds ~20% so a deliberate ~5-detent push fires.
-                            // Slower than tapping ACTIVATE so accidental wheel-jiggles
-                            // don't fire anything; faster than e.g. 10 detents so it
-                            // doesn't feel laborious.
-                            val next = (actionOverscroll.value + 0.22f).coerceIn(0f, 1f)
-                            actionOverscroll.value = next
-                            if (next >= 0.999f) {
-                                vm.tapToggle()  // fires the scene / script / button.press
-                                // Reset on a short fuse so the user sees the bar at full
-                                // for a moment before it drops, confirming the fire.
-                                scope.launch {
-                                    kotlinx.coroutines.delay(220L)
-                                    actionOverscroll.value = 0f
-                                }
-                            }
-                        }
-                        dir != UP && actionOverscroll.value > 0f -> {
-                            // Wheel-down with built-up progress: drain it first rather
-                            // than immediately navigating. Lets the user cancel a
-                            // half-built fire intent without leaving the card.
-                            actionOverscroll.value = (actionOverscroll.value - 0.22f).coerceIn(0f, 1f)
-                        }
-                        else -> pagerNavRequests.tryEmit(dir)
-                    }
-                }
+                // Sensors and action cards have no scalar to set — wheel just navigates.
+                // (Tap fires action cards; the previous "overscroll up to fire" gesture
+                // was removed because it triggered too easily from incidental wheel
+                // jiggles, and the tap affordance is already the obvious way to fire.)
+                active.id.domain.isSensor || active.id.domain.isAction ->
+                    pagerNavRequests.tryEmit(dir)
                 else -> vm.onWheel(event)
             }
-        }
-    }
-    // Idle decay — if the user pushes the overscroll bar partway then walks away, it
-    // shouldn't sit there forever. Drain back to zero over ~1.5 s of no fresh wheel
-    // events. Keying the LaunchedEffect on the current value gives us a fresh delay
-    // window after every increment.
-    LaunchedEffect(actionOverscroll.value, state.activeState?.id) {
-        if (actionOverscroll.value <= 0f || actionOverscroll.value >= 1f) return@LaunchedEffect
-        kotlinx.coroutines.delay(1_500L)
-        // Linear decay over ~600 ms after the idle window expires.
-        while (actionOverscroll.value > 0f) {
-            kotlinx.coroutines.delay(33L)  // ~30 fps
-            actionOverscroll.value = (actionOverscroll.value - 0.05f).coerceAtLeast(0f)
         }
     }
 
@@ -199,11 +173,22 @@ fun CardStackScreen(
     val customizingId = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<String?>(null)
     }
+    // Hoisted state for the screen-level effect picker overlay. When non-null, an
+    // overlay sheet renders above all card chrome listing the bulb's effects. Lifted
+    // here (rather than inside each card) so the picker can use the full screen rather
+    // than being clipped to the card body — a Nanoleaf can ship 30+ effects and a
+    // card-bound picker would be cramped on the R1's 320 px tall display.
+    val effectPickerFor = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<com.github.itskenny0.r1ha.core.ha.EntityId?>(null)
+    }
     androidx.compose.runtime.CompositionLocalProvider(
         com.github.itskenny0.r1ha.core.theme.LocalHaRepository provides haRepository,
         com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides appSettings.entityOverrides,
         com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightMode provides { id -> vm.cycleLightWheelMode(id) },
+        com.github.itskenny0.r1ha.core.theme.LocalOnSetLightWheelMode provides { id, mode -> vm.setLightWheelMode(id, mode) },
         com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightEffect provides { id -> vm.cycleLightEffect(id) },
+        com.github.itskenny0.r1ha.core.theme.LocalOnSetLightEffect provides { id, effect -> vm.setLightEffect(id, effect) },
+        com.github.itskenny0.r1ha.core.theme.LocalOnOpenEffectPicker provides { id -> effectPickerFor.value = id },
     ) {
     Box(modifier = Modifier.fillMaxSize().background(R1.Bg)) {
         // displayedCards = cards with optimistic overrides applied per entity. Binding the
@@ -218,7 +203,6 @@ fun CardStackScreen(
                 appSettings = appSettings,
                 navRequests = pagerNavRequests,
                 pagerState = pagerState,
-                actionOverscroll = actionOverscroll.value,
                 lightWheelModes = state.lightWheelMode,
             )
         } else {
@@ -277,6 +261,32 @@ fun CardStackScreen(
                 customizingId.value = null
             }
         }
+
+        // ── Effect picker overlay ───────────────────────────────────────────────────
+        // Renders ABOVE the chrome (this Box stack draws bottom-up) so the picker
+        // covers everything, not just the card body. Active entity is looked up in
+        // displayedCards by id — if it's no longer present (e.g. user un-favourited
+        // mid-pick) we close instead of rendering an empty list.
+        val pickerEntityId = effectPickerFor.value
+        if (pickerEntityId != null) {
+            val entity = state.displayedCards.firstOrNull { it.id == pickerEntityId }
+                ?: state.cards.firstOrNull { it.id == pickerEntityId }
+            if (entity != null && entity.effectList.isNotEmpty()) {
+                com.github.itskenny0.r1ha.core.theme.EffectPickerSheet(
+                    entityId = pickerEntityId,
+                    current = entity.effect,
+                    effects = entity.effectList,
+                    accent = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
+                    onPick = { effect ->
+                        vm.setLightEffect(pickerEntityId, effect)
+                        effectPickerFor.value = null
+                    },
+                    onDismiss = { effectPickerFor.value = null },
+                )
+            } else {
+                effectPickerFor.value = null
+            }
+        }
     }
     }
 }
@@ -288,31 +298,39 @@ private fun VerticalCardPager(
     appSettings: AppSettings,
     navRequests: kotlinx.coroutines.flow.SharedFlow<com.github.itskenny0.r1ha.core.input.WheelEvent.Direction>,
     pagerState: androidx.compose.foundation.pager.PagerState,
-    actionOverscroll: Float,
     lightWheelModes: Map<com.github.itskenny0.r1ha.core.ha.EntityId, com.github.itskenny0.r1ha.core.ha.LightWheelMode>,
 ) {
-    LaunchedEffect(pagerState) {
+    // Map a (possibly virtual) pager page to a real card index. In infinite-scroll mode
+    // the pager uses a 200k-page virtual range, so we modulo back into 0..cards.size-1
+    // before indexing the cards list or reporting currentIndex up to the VM.
+    val realIndexOf: (Int) -> Int = { page ->
+        if (cards.isEmpty()) 0
+        else ((page % cards.size) + cards.size) % cards.size
+    }
+    LaunchedEffect(pagerState, cards.size) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
-            .collect { vm.setCurrentIndex(it) }
+            .collect { vm.setCurrentIndex(realIndexOf(it)) }
     }
     // Wheel-as-navigation, fired from CardStackScreen when the active card is read-only.
     // animateScrollToPage so the transition is the same gentle spring the user gets when
-    // swiping the pager by finger — no jarring snap. Honours appSettings.ui.infiniteScroll
-    // for wrap-around: at the last card wheel-down jumps to the first, and vice versa.
+    // swiping the pager by finger — no jarring snap. In infinite-scroll mode we don't
+    // wrap by modulo: we simply animate to currentPage ± 1, which the giant virtual
+    // pageCount makes effectively boundless. (Modulo'ing inside the pager's range would
+    // make the pager skip from page 199_999 back to 0 with a huge animateScroll instead
+    // of a single-page glide.) In finite mode we clamp to [0, lastIndex].
     LaunchedEffect(pagerState, navRequests, appSettings.ui.infiniteScroll) {
         navRequests.collect { dir ->
+            if (cards.isEmpty()) return@collect
             val current = pagerState.currentPage
             val delta = when (dir) {
                 com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.UP -> -1
                 com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.DOWN -> +1
             }
-            val raw = current + delta
-            val target = if (appSettings.ui.infiniteScroll && cards.isNotEmpty()) {
-                // Modular arithmetic — supports the -1 → lastIndex wrap going up.
-                ((raw % cards.size) + cards.size) % cards.size
+            val target = if (appSettings.ui.infiniteScroll) {
+                (current + delta).coerceIn(0, INFINITE_PAGER_VIRTUAL_PAGES - 1)
             } else {
-                raw.coerceIn(0, cards.lastIndex)
+                (current + delta).coerceIn(0, cards.lastIndex)
             }
             if (target != current) pagerState.animateScrollToPage(target)
         }
@@ -350,20 +368,18 @@ private fun VerticalCardPager(
                 // Look up the per-card long-press action so EntityCard only wires the
                 // gesture when there's actually something to fire (otherwise the heavier
                 // r1RowPressable would replace the cheaper r1Pressable for no gain).
-                val longPressTarget = appSettings.entityOverrides[cards[page].id.value]?.longPressTarget
-                // Overscroll-to-fire progress is screen-state; only the ACTIVE card (the
-                // currently-settled page) gets the visible progress bar so users can't
-                // see "another card is building up" while they're looking at a different
-                // one.
-                val pageOverscroll = if (page == pagerState.currentPage) actionOverscroll else 0f
-                val pageLightMode = lightWheelModes[cards[page].id]
+                // Infinite-scroll uses a virtual page index well past cards.size, so we
+                // modulo back into the real card index before any lookup.
+                val cardIdx = realIndexOf(page)
+                val card = cards[cardIdx]
+                val longPressTarget = appSettings.entityOverrides[card.id.value]?.longPressTarget
+                val pageLightMode = lightWheelModes[card.id]
                 EntityCard(
-                    state = cards[page],
+                    state = card,
                     onTapToggle = { vm.tapToggle() },
                     tapToToggleEnabled = appSettings.behavior.tapToToggle,
                     onSetOn = { on -> vm.setSwitchOn(on) },
                     onLongPress = longPressTarget?.let { target -> { vm.fireLongPress(target) } },
-                    actionOverscrollProgress = pageOverscroll,
                     lightWheelMode = pageLightMode,
                     modifier = Modifier
                         .fillMaxSize()
@@ -392,8 +408,13 @@ private fun VerticalCardPager(
         // information at best, visual collision at worst. The down hint stays useful
         // because the bottom of the card is otherwise empty.
         val currentPage = pagerState.currentPage
+        // Chevron hint at the bottom — visible whenever there's a next card to scroll
+        // to. In infinite-scroll mode there's *always* a next card (the deck wraps), so
+        // the hint shows on every page; in finite mode it hides on the last card.
+        val hasNext = if (appSettings.ui.infiniteScroll) cards.size > 1
+            else currentPage < cards.size - 1
         androidx.compose.animation.AnimatedVisibility(
-            visible = currentPage < cards.size - 1,
+            visible = hasNext,
             enter = androidx.compose.animation.fadeIn(),
             exit = androidx.compose.animation.fadeOut(),
             modifier = Modifier
@@ -537,6 +558,13 @@ private fun EmptyState(
 }
 
 private const val STALLED_AFTER_MS = 10_000L
+
+/** Virtual page count used by the pager when infinite-scroll is enabled. Big enough
+ *  that even an entire afternoon of aggressive swiping doesn't run out of pages (200 k
+ *  pages ÷ 1 swipe-per-half-second × 60 s × 60 min = ~28 hours of continuous swiping
+ *  before hitting an end), small enough that the pager's per-page Compose bookkeeping
+ *  stays cheap. Capped well under Int.MAX_VALUE to avoid arithmetic overflow corners. */
+private const val INFINITE_PAGER_VIRTUAL_PAGES = 200_000
 
 /**
  * Top chrome — hamburger left, vertical position pip + counter centre, settings gear right

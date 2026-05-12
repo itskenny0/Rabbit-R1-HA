@@ -169,14 +169,16 @@ fun RenameDialog(
             // ── TEXT SIZE ──────────────────────────────────────────────────────────
             SectionHeader("TEXT SIZE")
             Text(
-                text = "Scale the big readout on this card without affecting siblings.",
+                text = "Absolute size for the big readout on this card. Smaller sizes help " +
+                    "sensors with long text values (RSS headlines, verbose enum states) fit " +
+                    "without truncation.",
                 style = R1.body,
                 color = R1.InkMuted,
             )
             Spacer(Modifier.height(6.dp))
-            TextScaleRow(
-                selected = override.textScale,
-                onSelect = { override = override.copy(textScale = it) },
+            TextSizeRow(
+                selected = override.textSizeSp,
+                onSelect = { override = override.copy(textSizeSp = it) },
             )
 
             // ── COLOUR TEMPERATURE (lights only) ─────────────────────────────────────
@@ -521,38 +523,55 @@ private fun ctApproxColor(kelvin: Int): androidx.compose.ui.graphics.Color = whe
 }
 
 @Composable
-private fun TextScaleRow(
-    selected: Float,
-    onSelect: (Float) -> Unit,
+private fun TextSizeRow(
+    selected: Int?,
+    onSelect: (Int?) -> Unit,
 ) {
-    // Nine chips don't fit across the R1's 240px width as a segmented row, so this is
-    // a horizontal-scroll variant. Each chip is its own clickable card with the scale
-    // label; selected one fills accent. Matches the COLOUR row's swatch styling for
-    // visual consistency across customize sections.
+    // Fifteen sp chips + a DEFAULT chip don't fit across the R1's 240 px width as a
+    // segmented row, so this is a horizontal-scroll variant. Each chip is its own
+    // clickable card with the absolute sp label; the selected chip fills accent.
+    // Matches the COLOUR row's swatch styling for visual consistency.
     val scroll = androidx.compose.foundation.rememberScrollState()
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        EntityOverride.TEXT_SCALES.forEach { scale ->
-            val isSelected = kotlin.math.abs(selected - scale) < 0.005f
-            // Label format: "1×" for 1.0, "0.7×" / "0.1×" otherwise. The × is full-width
-            // U+00D7 — reads better than the lowercase x and matches a multiplier symbol.
-            val label = if (scale == 1.0f) "1×" else "%.2g×".format(scale)
+        // DEFAULT chip — selected when the override is unset (null). Tap re-selects null
+        // to return to the theme default size; visually identical to the sp chips but
+        // labelled "DEFAULT" so the user knows where the "no override" position is.
+        val defaultSelected = selected == null
+        Box(
+            modifier = Modifier
+                .padding(end = 6.dp)
+                .clip(R1.ShapeS)
+                .background(if (defaultSelected) R1.AccentWarm else R1.Bg)
+                .let { m ->
+                    if (defaultSelected) m else m.border(1.dp, R1.Hairline, R1.ShapeS)
+                }
+                .r1Pressable({ onSelect(null) })
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            Text(
+                text = "DEFAULT",
+                style = R1.labelMicro,
+                color = if (defaultSelected) R1.Bg else R1.InkSoft,
+            )
+        }
+        EntityOverride.TEXT_SIZES_SP.forEach { sp ->
+            val isSelected = selected == sp
             Box(
                 modifier = Modifier
                     .padding(end = 6.dp)
                     .clip(R1.ShapeS)
                     .background(if (isSelected) R1.AccentWarm else R1.Bg)
                     .let { m ->
-                        if (isSelected) m
-                        else m.border(1.dp, R1.Hairline, R1.ShapeS)
+                        if (isSelected) m else m.border(1.dp, R1.Hairline, R1.ShapeS)
                     }
-                    .r1Pressable({ onSelect(scale) })
+                    .r1Pressable({ onSelect(sp) })
                     .padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
                 Text(
-                    text = label,
+                    text = "${sp}sp",
                     style = R1.labelMicro,
                     color = if (isSelected) R1.Bg else R1.InkSoft,
                 )

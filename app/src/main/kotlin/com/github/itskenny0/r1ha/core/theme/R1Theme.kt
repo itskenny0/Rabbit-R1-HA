@@ -34,10 +34,11 @@ data class CardRenderModel(
      */
     val displayValue: String? = null,
     val displayUnit: String? = null,
-    /** Per-card text scale multiplier from [EntityOverride.textScale]; 1.0 = no scale.
-     *  Themes apply this to their big-readout TextStyle (numeralXl) so the user can shrink
-     *  busy cards or enlarge sparse ones without affecting siblings in the deck. */
-    val textScale: Float = 1.0f,
+    /** Per-card absolute readout size in sp from [EntityOverride.textSizeSp]. Null
+     *  means use the theme's default size (72 sp for the big numeralXl on the percent
+     *  card). The suffix is scaled proportionally so the unit doesn't dominate the
+     *  reduced numeral. */
+    val textSizeSp: Int? = null,
     /**
      * Light-card-only: which wheel mode is currently active. Null means default
      * (BRIGHTNESS). Themes use this to render the right suffix (% / K / °) and the
@@ -51,6 +52,28 @@ data class CardRenderModel(
      *  decide whether to show the effect chip — single-effect-list lights still get
      *  the chip so the user can toggle the effect on/off. */
     val lightEffectListSize: Int = 0,
+    /** Light-card-only: the full list of available effects from HA's `effect_list`.
+     *  Themes pass this to the effect-picker sheet so the user can tap any effect by
+     *  name rather than cycling. Empty for non-light entities or bulbs without effects. */
+    val lightEffectList: List<String> = emptyList(),
+    /**
+     * Light-card-only: which wheel modes this bulb supports, derived from HA's
+     * `supported_color_modes`. Always at least [LightWheelMode.BRIGHTNESS]. Themes use
+     * this to render the segmented mode picker (BRIGHT / WHITE / COLOUR) — buttons for
+     * unsupported modes are hidden so a tunable-white bulb doesn't show a useless
+     * COLOUR button.
+     */
+    val lightAvailableModes: List<com.github.itskenny0.r1ha.core.ha.LightWheelMode> = emptyList(),
+    /**
+     * Tick labels for the vertical tape meter (right side of the card). Top→bottom
+     * order, typically five strings. Null falls back to the default `100/75/50/25/0`
+     * percent labels. Climate / water_heater cards override this with the actual
+     * temperature range in the user's chosen unit so the meter conveys the real
+     * setpoint range rather than an abstract 0..100. Number / input_number cards
+     * pass their min..max so the user can see what value the bottom of the bar
+     * represents.
+     */
+    val meterLabels: List<String>? = null,
 ) {
     enum class Glyph {
         LIGHT, FAN, COVER, MEDIA_PLAYER,

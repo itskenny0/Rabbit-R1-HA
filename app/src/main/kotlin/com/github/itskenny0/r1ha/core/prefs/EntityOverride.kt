@@ -12,12 +12,13 @@ package com.github.itskenny0.r1ha.core.prefs
  */
 data class EntityOverride(
     /**
-     * Visual size multiplier for the card's big readout (the percent number, the ON/OFF
-     * word, the sensor value). 1.0 = default. Constrained on the way out to a small set
-     * of presets (0.7 / 0.85 / 1.0 / 1.15 / 1.3) — letting the user type an arbitrary
-     * float would defeat the segmented-picker UX and risk weird edge cases.
+     * Absolute text size in sp for the card's big readout (the percent number, the
+     * ON/OFF word, the sensor value). Null = use the theme default (72 sp). The picker
+     * offers a curated list of values from 6 sp (tiny, for long sensor strings like
+     * news headlines) up to 104 sp (huge). Previously stored as a 0.7..1.3 multiplier;
+     * legacy values are still accepted on decode for back-compat.
      */
-    val textScale: Float = 1.0f,
+    val textSizeSp: Int? = null,
     /** Per-card override for [UiOptions.showOnOffPill]; null = inherit global. */
     val showOnOffPill: Boolean? = null,
     /** Per-card override for [UiOptions.showAreaLabel]; null = inherit global. */
@@ -63,13 +64,21 @@ data class EntityOverride(
         )
 
         /**
-         * Allowed text-scale steps. Picker offers a chip per step. Range extends down
-         * to 0.1x to let users tame extreme-length entity names — useful when an MQTT
-         * integration auto-names entities to "Living Room Floor Lamp Bulb Brightness".
-         * The chips below 0.5x get progressively less practical but stay available so
-         * users can still pick them out of a long-tail content edge case.
+         * Default readout size in sp when no override is set. Matches R1.numeralXl —
+         * defined here as a copy so the customize-dialog picker can label the default
+         * chip with the actual sp value rather than the abstract word "default".
          */
-        val TEXT_SCALES = listOf(0.1f, 0.2f, 0.3f, 0.5f, 0.7f, 0.85f, 1.0f, 1.15f, 1.3f)
+        const val DEFAULT_TEXT_SIZE_SP = 72
+
+        /**
+         * Absolute sp values exposed in the customize-dialog text-size picker. Lower
+         * bound goes to 6 sp so users can fit long sensor strings (RSS headlines,
+         * verbose enum states) onto a single card without truncation; upper bound
+         * stays at 104 sp for users who want a giant focal-point readout. The default
+         * (72 sp) is included in the list so the chip-picker has a clear "back to
+         * default" position.
+         */
+        val TEXT_SIZES_SP = listOf(6, 8, 10, 12, 14, 16, 20, 24, 28, 36, 48, 56, 72, 88, 104)
 
         /** Curated palette for the per-card accent picker. Hand-picked to feel cohesive
          *  on the near-black background — no neon, no muddy mid-tones. Names track the

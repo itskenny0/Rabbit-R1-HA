@@ -49,7 +49,6 @@ fun ActionCard(
     domainLabel: String,
     showArea: Boolean,
     onFire: () -> Unit,
-    overscrollProgress: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
     // Local-feedback flash: when the user taps, hold "FIRED" for ~700 ms then return to
@@ -63,18 +62,6 @@ fun ActionCard(
         }
     }
 
-    // Smooth the externally-driven overscroll value so it feels like a build-up rather
-    // than the discrete per-detent jumps the wheel produces. Spring stays under critical
-    // so the bar settles, doesn't bounce around.
-    val animatedOverscroll by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = overscrollProgress.coerceIn(0f, 1f),
-        animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
-        ),
-        label = "action-overscroll",
-    )
-
     val buttonColor by animateColorAsState(
         targetValue = if (fired) accent else accent.copy(alpha = 0.88f),
         label = "action-btn-color",
@@ -86,34 +73,6 @@ fun ActionCard(
             .background(R1.Bg)
             .padding(horizontal = 22.dp, vertical = 18.dp),
     ) {
-        // ── Overscroll bar — fills as the user wheels up at the top of the deck.
-        // Visible only when there's any progress; full-width hairline track + accent fill
-        // that grows from the left. Pairs with a hint label "▲ HOLD WHEEL TO FIRE" so a
-        // first-time user understands the gesture.
-        if (animatedOverscroll > 0.001f) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .background(R1.Hairline),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(animatedOverscroll)
-                        .height(3.dp)
-                        .background(accent),
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = if (animatedOverscroll >= 0.999f) "▲ FIRING" else "▲ KEEP WHEELING UP TO FIRE",
-                style = R1.labelMicro,
-                color = accent.copy(alpha = (0.5f + animatedOverscroll * 0.5f).coerceIn(0f, 1f)),
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-
         // ── Header ─────────────────────────────────────────────────────────────────
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(

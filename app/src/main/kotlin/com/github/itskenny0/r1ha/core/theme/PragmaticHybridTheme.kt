@@ -17,13 +17,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.github.itskenny0.r1ha.core.prefs.DisplayMode
+import com.github.itskenny0.r1ha.core.prefs.EntityOverride
 import com.github.itskenny0.r1ha.core.prefs.ThemeId
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
 
@@ -99,18 +106,25 @@ object PragmaticHybridTheme : R1Theme {
                     // displayValue/displayUnit replace the percent number + "%" suffix.
                     overrideText = model.displayValue,
                     overrideUnit = model.displayUnit,
-                    textScale = model.textScale,
+                    textSizeSp = model.textSizeSp,
                     lightEntityId = if (model.lightWheelMode != null) com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText) else null,
                     lightWheelMode = model.lightWheelMode,
                 )
-                // Light effect chip — only on lights that report a non-empty effect_list.
-                // Tap → cycles through (None → first → … → last → None). Hidden on bulbs
-                // that don't expose effects so it doesn't clutter the card.
-                if (model.lightEffectListSize > 0) {
+                // Light controls — segmented mode buttons (BRIGHT / WHITE / COLOUR) +
+                // an EFFECTS button. The mode buttons surface only the modes the bulb
+                // actually supports; the EFFECTS button is hidden when effect_list is
+                // empty. Tapping a mode button switches the wheel target immediately;
+                // tapping EFFECTS opens the effect picker overlay (rendered at screen
+                // scope from CardStackScreen — see LightControlsRow's implementation).
+                if (model.lightAvailableModes.size > 1 || model.lightEffectListSize > 0) {
                     Spacer(Modifier.height(8.dp))
-                    EffectChip(
+                    LightControlsRow(
                         entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
+                        currentMode = model.lightWheelMode
+                            ?: com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS,
+                        availableModes = model.lightAvailableModes,
                         currentEffect = model.lightEffect,
+                        effectList = model.lightEffectList,
                         accent = accent,
                     )
                 }
@@ -120,7 +134,11 @@ object PragmaticHybridTheme : R1Theme {
 
             // ── Vertical tape meter — inset from the right edge, ~200 dp tall ───────
             Spacer(Modifier.width(20.dp))
-            VerticalTapeMeter(percent = model.percent, accent = accent)
+            VerticalTapeMeter(
+                percent = model.percent,
+                accent = accent,
+                tickLabels = model.meterLabels,
+            )
         }
     }
 }
@@ -175,7 +193,8 @@ internal fun BigReadout(
     accent: Color,
     overrideText: String? = null,
     overrideUnit: String? = null,
-    textScale: Float = 1.0f,
+    /** Absolute readout size in sp; null = use theme default (R1.numeralXl, 72 sp). */
+    textSizeSp: Int? = null,
     lightEntityId: com.github.itskenny0.r1ha.core.ha.EntityId? = null,
     lightWheelMode: com.github.itskenny0.r1ha.core.ha.LightWheelMode? = null,
 ) {
@@ -189,63 +208,41 @@ internal fun BigReadout(
     // useful than a meaningless 60% on a thermostat.
     val bodyText = overrideText ?: percent.coerceIn(0, 100).toString()
     val suffixText = overrideUnit ?: if (showPercentSuffix) "%" else null
-    // Scale numeralXl (and the suffix proportionally) by the per-card text-scale factor.
-    // Bypassing the natural sp scaling so the readout obeys both the user's font size *and*
-    // the per-card override.
-    val numeralStyle = R1.numeralXl.copy(
-        fontSize = R1.numeralXl.fontSize * textScale,
-        lineHeight = R1.numeralXl.lineHeight * textScale,
-    )
-    val suffixStyle = R1.numeralM.copy(fontSize = R1.numeralM.fontSize * textScale)
-    // Wrap the readout in a column so we can stack the optional "MODE: CT" chip below
-    // for light cards. Tap on the readout cycles the wheel mode when one is offered;
-    // non-light cards (or single-mode lights) don't get the gesture.
-    val onCycle = com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightMode.current
-    val cycleClickable: Modifier = if (lightEntityId != null && lightWheelMode != null && onCycle != null) {
-        Modifier.r1Pressable(onClick = { onCycle(lightEntityId) })
-    } else Modifier
-    Column(modifier = Modifier.wrapContentSize()) {
-        Row(
-            verticalAlignment = Alignment.Bottom,
-            modifier = cycleClickable,
-        ) {
+    // Apply the per-card absolute readout size. When textSizeSp is null, fall through to
+    // the theme defaults (numeralXl 72 sp, numeralM 20 sp). When set, scale the suffix
+    // (numeralM) proportionally so the unit doesn't dwarf the number — but floor it at
+    // 8 sp so tiny readouts (6 sp for sensor headlines) don't make the suffix invisible.
+    val defaultBodySp = EntityOverride.DEFAULT_TEXT_SIZE_SP
+    val numeralStyle = if (textSizeSp != null) {
+        R1.numeralXl.copy(
+            fontSize = textSizeSp.sp,
+            lineHeight = (textSizeSp * 1.05f).sp,
+        )
+    } else R1.numeralXl
+    val suffixStyle = if (textSizeSp != null) {
+        val proportionalSuffix = (textSizeSp.toFloat() / defaultBodySp.toFloat() *
+            R1.numeralM.fontSize.value).coerceAtLeast(8f)
+        R1.numeralM.copy(fontSize = proportionalSuffix.sp)
+    } else R1.numeralM
+    // Readout row only. The mode-cycle gesture moved off the readout (it was invisible
+    // to users — see #117) and onto explicit segmented BRIGHT / WHITE / COLOUR buttons
+    // rendered by [LightControlsRow] below the readout. lightEntityId / lightWheelMode
+    // remain as params so themes still receive enough context for future visual hooks
+    // (e.g. accent tint based on which mode is active).
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(
+            text = bodyText,
+            style = numeralStyle,
+            color = R1.Ink,
+        )
+        if (suffixText != null) {
+            Spacer(Modifier.width(6.dp))
             Text(
-                text = bodyText,
-                style = numeralStyle,
-                color = R1.Ink,
+                text = suffixText,
+                style = suffixStyle,
+                color = accent,
+                modifier = Modifier.padding(bottom = 14.dp),
             )
-            if (suffixText != null) {
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = suffixText,
-                    style = suffixStyle,
-                    color = accent,
-                    modifier = Modifier.padding(bottom = 14.dp),
-                )
-            }
-        }
-        // Mode chip — only shown when there's a non-default mode OR a tap-to-cycle is
-        // available. Helps the user discover the cycle gesture (subtle text "TAP TO
-        // CYCLE" hint) and confirms what the wheel will drive.
-        if (lightWheelMode != null && onCycle != null && lightEntityId != null) {
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = when (lightWheelMode) {
-                        com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS -> "BRIGHTNESS"
-                        com.github.itskenny0.r1ha.core.ha.LightWheelMode.COLOR_TEMP -> "COLOUR TEMP"
-                        com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> "HUE"
-                    },
-                    style = R1.labelMicro,
-                    color = accent,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "· TAP READOUT TO CYCLE",
-                    style = R1.labelMicro,
-                    color = R1.InkMuted,
-                )
-            }
         }
     }
 }
@@ -257,20 +254,27 @@ internal fun BigReadout(
  * "jumps" past the target and settles, which reads as mechanical feedback per click.
  */
 @Composable
-internal fun VerticalTapeMeter(percent: Int, accent: Color) {
+internal fun VerticalTapeMeter(
+    percent: Int,
+    accent: Color,
+    /** Top→bottom tick labels. Null = the default 0..100 percent labels. Climate /
+     *  number cards pass their domain-native range so the meter reads in real units. */
+    tickLabels: List<String>? = null,
+) {
     val fraction = rememberSliderFraction(percent).coerceIn(0f, 1f)
+    val labels = tickLabels ?: listOf("100", "75", "50", "25", "0")
     // Tick row labels — at fixed Y positions, monospace tiny text on the inside edge.
     Row(
         modifier = Modifier.fillMaxHeight(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 0/25/50/75/100 labels — vertically distributed alongside the track.
+        // Tick labels — vertically distributed alongside the track. List is top→bottom.
         Column(
             modifier = Modifier.fillMaxHeight(),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.End,
         ) {
-            listOf("100", "75", "50", "25", "0").forEach { tick ->
+            labels.forEach { tick ->
                 Text(text = tick, style = R1.numeralS, color = R1.InkMuted)
             }
         }
@@ -338,35 +342,196 @@ private fun ThumbCapsule(fraction: Float, accent: Color) {
 }
 
 /**
- * Tap-to-cycle chip for light effects. Shows "EFFECT: NAME" when an effect is active,
- * or "EFFECT: NONE — TAP TO CYCLE" when none is set. Tap fires the LocalOnCycleLightEffect
- * callback which the card-stack screen wires to vm.cycleLightEffect. Stays inert when
- * the callback is unavailable (e.g. previews where there's no VM in scope).
+ * Light-card controls — segmented mode buttons (BRIGHT / WHITE / COLOUR) and an
+ * EFFECTS button. Replaces the previous tap-to-cycle gestures, which were invisible to
+ * users (they only manifested as a near-invisible "TAP READOUT TO CYCLE" hint below
+ * the readout). The segmented buttons are unmistakable affordances; tapping any of
+ * them sets the wheel mode directly via [LocalOnSetLightWheelMode]. The EFFECTS button
+ * opens a full-screen picker (see [EffectPickerSheet]) so the user sees every
+ * available effect at once rather than blindly cycling.
+ *
+ * Modes are filtered against [availableModes] so a tunable-white bulb doesn't surface
+ * a COLOUR button it can't honour. The EFFECTS button is hidden entirely when the
+ * bulb's effect_list is empty.
  */
 @Composable
-private fun EffectChip(
+internal fun LightControlsRow(
     entityId: com.github.itskenny0.r1ha.core.ha.EntityId,
+    currentMode: com.github.itskenny0.r1ha.core.ha.LightWheelMode,
+    availableModes: List<com.github.itskenny0.r1ha.core.ha.LightWheelMode>,
     currentEffect: String?,
+    effectList: List<String>,
     accent: Color,
 ) {
-    val onCycle = com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightEffect.current
-    val active = !currentEffect.isNullOrBlank()
-    Box(
-        modifier = Modifier
-            .clip(R1.ShapeS)
-            .background(if (active) accent else R1.SurfaceMuted)
-            .let { m ->
-                if (onCycle != null) m.r1Pressable(onClick = { onCycle(entityId) }) else m
+    val onSetMode = com.github.itskenny0.r1ha.core.theme.LocalOnSetLightWheelMode.current
+    val onOpenPicker = com.github.itskenny0.r1ha.core.theme.LocalOnOpenEffectPicker.current
+    val visibleModes = availableModes.ifEmpty {
+        listOf(com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        // Segmented mode buttons — only render the ones the bulb supports. A single-
+        // mode (brightness-only) bulb gets nothing because there's no choice to make,
+        // matching the original cycle-chip's "size ≤ 1 = no-op" behaviour.
+        if (visibleModes.size > 1) {
+            visibleModes.forEachIndexed { idx, mode ->
+                val active = mode == currentMode
+                val label = when (mode) {
+                    com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS -> "BRIGHT"
+                    com.github.itskenny0.r1ha.core.ha.LightWheelMode.COLOR_TEMP -> "WHITE"
+                    com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> "COLOUR"
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(if (active) accent else R1.SurfaceMuted)
+                        .let { m ->
+                            if (onSetMode != null) m.r1Pressable(onClick = { onSetMode(entityId, mode) }) else m
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = label,
+                        style = R1.labelMicro,
+                        color = if (active) R1.Bg else R1.InkSoft,
+                    )
+                }
+                if (idx < visibleModes.lastIndex) Spacer(Modifier.width(4.dp))
             }
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-    ) {
-        Text(
-            text = if (active) "FX · ${currentEffect!!.uppercase()}" else "FX · NONE",
-            style = R1.labelMicro,
-            color = if (active) R1.Bg else R1.InkSoft,
-        )
+        }
+        // EFFECTS button — surfaces only on bulbs that expose effect_list. Label
+        // includes the active effect name so the user can see what's running without
+        // opening the picker. Tap requests the screen-level overlay via
+        // [LocalOnOpenEffectPicker] — the actual picker sheet lives in CardStackScreen
+        // so it can render full-screen above all card chrome rather than being clipped
+        // to this row's bounds.
+        if (effectList.isNotEmpty() && onOpenPicker != null) {
+            if (visibleModes.size > 1) Spacer(Modifier.width(8.dp))
+            val active = !currentEffect.isNullOrBlank()
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(if (active) accent else R1.SurfaceMuted)
+                    .r1Pressable(onClick = { onOpenPicker(entityId) })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = if (active) "FX · ${currentEffect!!.uppercase()}" else "FX",
+                    style = R1.labelMicro,
+                    color = if (active) R1.Bg else R1.InkSoft,
+                )
+            }
+        }
     }
 }
+
+/**
+ * Fullscreen overlay listing every effect from the bulb's `effect_list`, plus a NONE
+ * entry at the top that clears the effect. The active effect is highlighted in accent.
+ * Tapping any row applies it via [LocalOnSetLightEffect] and dismisses. A CLOSE row at
+ * the bottom and a backdrop-tap also dismiss. Scrolls vertically so bulbs with long
+ * effect lists (Nanoleaf can ship 30+) are usable on the R1's 320 px tall display.
+ */
+@Composable
+internal fun EffectPickerSheet(
+    entityId: com.github.itskenny0.r1ha.core.ha.EntityId,
+    current: String?,
+    effects: List<String>,
+    accent: Color,
+    onPick: (String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // R1 system back dismisses the picker without applying.
+    androidx.activity.compose.BackHandler(onBack = onDismiss)
+    // Backdrop — captures taps outside the list so the user can dismiss by tapping any
+    // empty area. The list itself is full-bleed so there isn't actually much "outside",
+    // but the CLOSE chip at the top right guarantees a discoverable dismiss path.
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(R1.Bg.copy(alpha = 0.96f))
+            .r1Pressable(onClick = onDismiss),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+        ) {
+            // Header row — title + a CLOSE chip on the right.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "EFFECTS",
+                    style = R1.sectionHeader,
+                    color = R1.Ink,
+                )
+                Spacer(Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.SurfaceMuted)
+                        .r1Pressable(onClick = onDismiss)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(text = "CLOSE", style = R1.labelMicro, color = R1.InkSoft)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            // Scrollable list of effects with NONE at the top.
+            val scroll = androidx.compose.foundation.rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .androidxVerticalScroll(scroll),
+            ) {
+                EffectRow(label = "NONE", isActive = current.isNullOrBlank(), accent = accent) {
+                    onPick(null)
+                }
+                effects.forEach { name ->
+                    EffectRow(label = name, isActive = name == current, accent = accent) {
+                        onPick(name)
+                    }
+                }
+                // Bottom padding so the last row isn't flush with the screen edge,
+                // making it harder to scroll past on touch.
+                Spacer(Modifier.height(20.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun EffectRow(label: String, isActive: Boolean, accent: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clip(R1.ShapeS)
+            .background(if (isActive) accent else R1.SurfaceMuted)
+            .r1Pressable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Small radio-style indicator on the left so the active row is identifiable
+            // even at a glance — accent fill on the chip helps but the bullet pins it.
+            Text(
+                text = if (isActive) "●" else "○",
+                style = R1.labelMicro,
+                color = if (isActive) R1.Bg else R1.InkSoft,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = label.uppercase(),
+                style = R1.body,
+                color = if (isActive) R1.Bg else R1.Ink,
+            )
+        }
+    }
+}
+
+/** Alias for `androidx.compose.foundation.verticalScroll` so the picker call site reads
+ *  cleanly. Keeps the import surface small at the top of the file. */
+private fun Modifier.androidxVerticalScroll(
+    state: androidx.compose.foundation.ScrollState,
+): Modifier = this.then(verticalScroll(state))
 
 @Composable
 private fun OnOffPill(isOn: Boolean, accent: Color) {

@@ -433,6 +433,59 @@ class CardStackViewModel(
         }
     }
 
+    /**
+     * Set the wheel mode for a light card to a specific value (no cycling). Used by the
+     * segmented mode buttons on the card so the user can jump directly to BRIGHTNESS /
+     * WHITE / COLOUR rather than having to cycle through other modes to reach the one
+     * they want. Same optimistic-seeding logic as [cycleLightWheelMode] — the wheel
+     * percent gets seeded to whatever the bulb is currently showing in the new mode so
+     * the readout doesn't bounce when the user changes modes.
+     */
+    fun setLightWheelMode(entityId: EntityId, mode: com.github.itskenny0.r1ha.core.ha.LightWheelMode) {
+        val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
+        if (entity.id.domain != Domain.LIGHT) return
+        val available = com.github.itskenny0.r1ha.core.ha.LightWheelMode.availableFor(entity.supportedColorModes)
+        if (mode !in available) return
+        val current = _state.value.lightWheelMode[entityId] ?: com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS
+        if (current == mode) return
+        // Seed the optimistic percent so the wheel starts at the bulb's current value
+        // in the new mode — same shape as cycleLightWheelMode().
+        val seedPercent = when (mode) {
+            com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS -> entity.percent ?: 0
+            com.github.itskenny0.r1ha.core.ha.LightWheelMode.COLOR_TEMP -> {
+                val minK = entity.minColorTempK ?: 2000
+                val maxK = entity.maxColorTempK ?: 6500
+                val k = entity.colorTempK ?: ((minK + maxK) / 2)
+                if (maxK > minK) {
+                    ((k - minK).toDouble() / (maxK - minK) * 100.0).roundToInt().coerceIn(0, 100)
+                } else 50
+            }
+            com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> {
+                val h = entity.hue ?: 0.0
+                (h / 360.0 * 100.0).roundToInt().coerceIn(0, 100)
+            }
+        }
+        _state.value = _state.value.copy(
+            lightWheelMode = _state.value.lightWheelMode + (entityId to mode),
+            optimisticPercents = _state.value.optimisticPercents + (entityId to seedPercent),
+        )
+    }
+
+    /**
+     * Apply a specific effect to a light, picked from its [EntityState.effectList]. Null
+     * clears the effect (HA accepts the literal string "None" for "no effect"). Used
+     * by the effect picker sheet so the user can jump directly to a named effect rather
+     * than tapping through the cycle.
+     */
+    fun setLightEffect(entityId: EntityId, effect: String?) {
+        val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
+        if (entity.id.domain != Domain.LIGHT) return
+        R1Log.i("CardStack.setEffect", "$entityId: ${entity.effect ?: "none"} → ${effect ?: "none"}")
+        viewModelScope.launch {
+            haRepository.call(ServiceCall.setLightEffect(entityId, effect))
+        }
+    }
+
     fun cycleLightWheelMode(entityId: EntityId) {
         val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
         if (entity.id.domain != Domain.LIGHT) return

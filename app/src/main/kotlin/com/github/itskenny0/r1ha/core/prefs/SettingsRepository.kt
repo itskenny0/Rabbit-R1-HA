@@ -352,7 +352,9 @@ private fun encodeEntityOverrides(map: Map<String, EntityOverride>): String {
         val decStr = o.maxDecimalPlaces?.toString() ?: "?"
         val accStr = o.accentColor?.toString() ?: "?"
         val ctStr = o.lightColorTempK?.toString() ?: "?"
-        "$idEnc=${o.textScale}|$pillStr|$areaStr|$lpEnc|$decStr|$accStr|$ctStr"
+        // Text size: stored as integer sp (e.g. "28"). "?" = inherit theme default.
+        val sizeStr = o.textSizeSp?.toString() ?: "?"
+        "$idEnc=$sizeStr|$pillStr|$areaStr|$lpEnc|$decStr|$accStr|$ctStr"
     }
 }
 
@@ -365,7 +367,22 @@ private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
             val id = java.net.URLDecoder.decode(line.substring(0, eq), "UTF-8")
             if (id.isBlank()) return@runCatching null
             val parts = line.substring(eq + 1).split('|')
-            val scale = parts.getOrNull(0)?.toFloatOrNull()?.coerceIn(0.1f, 2.0f) ?: 1.0f
+            // Legacy migration: the first slot used to hold a 0.1..2.0 float multiplier.
+            // New format stores integer sp (e.g. "28"). Detect format by whether the
+            // string parses as Int first; fall back to Float-scale × 72 sp default.
+            val sizeRaw = parts.getOrNull(0)
+            val size: Int? = when {
+                sizeRaw == null || sizeRaw == "?" || sizeRaw.isBlank() -> null
+                sizeRaw.toIntOrNull() != null -> sizeRaw.toInt().coerceIn(1, 256)
+                sizeRaw.toFloatOrNull() != null -> {
+                    val legacyScale = sizeRaw.toFloat().coerceIn(0.1f, 2.0f)
+                    // Map the old multiplier into absolute sp via the default 72 sp.
+                    // Don't reject scale=1.0 as "no override" because the user may have
+                    // explicitly selected it; preserve the explicit value.
+                    (legacyScale * EntityOverride.DEFAULT_TEXT_SIZE_SP).toInt().coerceIn(1, 256)
+                }
+                else -> null
+            }
             val pill = when (parts.getOrNull(1)) { "1" -> true; "0" -> false; else -> null }
             val area = when (parts.getOrNull(2)) { "1" -> true; "0" -> false; else -> null }
             val lpRaw = parts.getOrNull(3)?.takeIf { it.isNotBlank() }
@@ -374,7 +391,7 @@ private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
             val acc = parts.getOrNull(5)?.toIntOrNull()
             val ct = parts.getOrNull(6)?.toIntOrNull()?.coerceIn(1000, 10000)
             id to EntityOverride(
-                textScale = scale,
+                textSizeSp = size,
                 showOnOffPill = pill,
                 showAreaLabel = area,
                 longPressTarget = lp?.takeIf { it.isNotBlank() },
