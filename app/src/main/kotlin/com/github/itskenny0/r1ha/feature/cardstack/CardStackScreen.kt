@@ -108,6 +108,11 @@ fun CardStackScreen(
                 )
             }
         } else {
+            // Two empty-state variants:
+            //  - User has set favourites but Home Assistant hasn't echoed states yet:
+            //    say so explicitly so they don't think the data was lost.
+            //  - User has no favourites yet: prompt to add some.
+            val loading = state.favouritesCount > 0
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -117,19 +122,20 @@ fun CardStackScreen(
                 verticalArrangement = Arrangement.Center,
             ) {
                 Text(
-                    text = "No favourites yet",
+                    text = if (loading) "Loading entities…" else "No favourites yet",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Tap below to add some.",
+                    text = if (loading) "Connecting to ${state.favouritesCount} favourite${if (state.favouritesCount == 1) "" else "s"}…"
+                    else "Tap below to add some.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
                 Spacer(Modifier.height(20.dp))
                 Button(onClick = onOpenFavoritesPicker) {
-                    Text("Add favourites")
+                    Text(if (loading) "Edit favourites" else "Add favourites")
                 }
             }
         }

@@ -32,6 +32,12 @@ data class CardStackUiState(
     val currentIndex: Int = 0,
     /** Optimistic percent overrides per entity, applied while waiting for HA state_changed. */
     val optimisticPercents: Map<EntityId, Int> = emptyMap(),
+    /**
+     * Number of entity IDs in the user's favourites list, regardless of whether HA has
+     * sent state for them yet. Distinguishes "no favourites set" (zero) from "favourites
+     * set but waiting on HA" (non-zero with empty `cards`).
+     */
+    val favouritesCount: Int = 0,
 ) {
     val activeState: EntityState?
         get() = cards.getOrNull(currentIndex)?.let { state ->
@@ -115,6 +121,7 @@ class CardStackViewModel(
                     cards = ordered,
                     currentIndex = clampedIndex,
                     optimisticPercents = newOptimistic,
+                    favouritesCount = favouriteIds.size,
                 )
             }
             .launchIn(viewModelScope)
