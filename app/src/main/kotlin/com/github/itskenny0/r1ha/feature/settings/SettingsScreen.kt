@@ -193,6 +193,22 @@ fun SettingsScreen(
                     )
                 }
             }
+            item {
+                LabeledControl(label = "Temperature unit") {
+                    SegmentedEnumPicker(
+                        options = com.github.itskenny0.r1ha.core.prefs.TemperatureUnit.entries,
+                        selected = s.ui.tempUnit,
+                        label = {
+                            when (it) {
+                                com.github.itskenny0.r1ha.core.prefs.TemperatureUnit.AUTO -> "AUTO"
+                                com.github.itskenny0.r1ha.core.prefs.TemperatureUnit.CELSIUS -> "°C"
+                                com.github.itskenny0.r1ha.core.prefs.TemperatureUnit.FAHRENHEIT -> "°F"
+                            }
+                        },
+                        onSelect = { vm.setTempUnit(it) },
+                    )
+                }
+            }
 
             item { SectionDivider() }
 

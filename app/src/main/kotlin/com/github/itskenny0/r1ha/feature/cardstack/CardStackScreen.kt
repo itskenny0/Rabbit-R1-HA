@@ -73,8 +73,29 @@ fun CardStackScreen(
     // Wheel events are processed ONLY while CardStackScreen is composed. Navigating away
     // (e.g. into FavoritesPicker or Settings) suspends the collection so spinning the wheel
     // there can't silently move the active card's brightness behind the user's back.
+    //
+    // For read-only cards (sensors) the wheel doesn't drive any value, so we promote it
+    // to card-stack navigation instead — wheel up = previous card, wheel down = next.
+    // The pager state lives inside VerticalCardPager so we publish a navigation
+    // request through this MutableSharedFlow which the pager observes.
+    val pagerNavRequests = remember {
+        kotlinx.coroutines.flow.MutableSharedFlow<com.github.itskenny0.r1ha.core.input.WheelEvent.Direction>(
+            extraBufferCapacity = 4,
+            onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+        )
+    }
     LaunchedEffect(Unit) {
-        wheelInput.events.collect { event -> vm.onWheel(event) }
+        wheelInput.events.collect { event ->
+            val active = vm.state.value.activeState
+            // Sensors / binary_sensors → navigate. Action entities (scene/script/button)
+            // keep their normal "wheel does nothing" so the script-overscroll feature can
+            // own that gesture surface.
+            if (active != null && active.id.domain.isSensor) {
+                pagerNavRequests.tryEmit(event.direction)
+            } else {
+                vm.onWheel(event)
+            }
+        }
     }
 
     val view = LocalView.current
@@ -108,6 +129,12 @@ fun CardStackScreen(
         onDispose { view.keepScreenOn = false }
     }
 
+    // Customize-dialog entry from the card stack. `customizingId` is the entity_id under
+    // edit; null means the dialog is closed. We hold it locally because the dialog is a
+    // transient UI overlay — no need to thread it through the VM state.
+    val customizingId = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
     androidx.compose.runtime.CompositionLocalProvider(
         com.github.itskenny0.r1ha.core.theme.LocalHaRepository provides haRepository,
         com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides appSettings.entityOverrides,
@@ -123,6 +150,7 @@ fun CardStackScreen(
                 cards = cards,
                 vm = vm,
                 appSettings = appSettings,
+                navRequests = pagerNavRequests,
             )
         } else {
             EmptyState(
@@ -142,8 +170,41 @@ fun CardStackScreen(
             showCounter = cards.size > 1,
             onOpenFavoritesPicker = onOpenFavoritesPicker,
             onOpenSettings = onOpenSettings,
+            onEditActive = {
+                // Only allow editing when there's an active card to edit — empty deck
+                // is a no-op.
+                state.activeState?.let { customizingId.value = it.id.value }
+            },
             solidBackdrop = appSettings.ui.hideCardTailAbove,
         )
+
+        // ── Customize dialog ────────────────────────────────────────────────────────
+        // Reuses the favourites-picker's RenameDialog so the customize flow is identical
+        // from both entry points. Renders OVER the chrome since it's part of the screen-
+        // level Box stack here, not inside any pager content.
+        val editingId = customizingId.value
+        if (editingId != null) {
+            val entity = state.displayedCards.firstOrNull { it.id.value == editingId }
+                ?: state.cards.firstOrNull { it.id.value == editingId }
+            if (entity != null) {
+                val initialOverride = appSettings.entityOverrides[editingId]
+                    ?: com.github.itskenny0.r1ha.core.prefs.EntityOverride.NONE
+                val initialName = appSettings.nameOverrides[editingId] ?: entity.friendlyName
+                com.github.itskenny0.r1ha.feature.favoritespicker.RenameDialog(
+                    entity = entity,
+                    initialName = initialName,
+                    initialOverride = initialOverride,
+                    onSave = { newName, newOverride ->
+                        vm.saveCustomize(editingId, newName, newOverride)
+                        customizingId.value = null
+                    },
+                    onCancel = { customizingId.value = null },
+                )
+            } else {
+                // Stale id (entity removed from favourites while dialog was open) — drop it.
+                customizingId.value = null
+            }
+        }
     }
     }
 }
@@ -153,6 +214,7 @@ private fun VerticalCardPager(
     cards: List<com.github.itskenny0.r1ha.core.ha.EntityState>,
     vm: CardStackViewModel,
     appSettings: AppSettings,
+    navRequests: kotlinx.coroutines.flow.SharedFlow<com.github.itskenny0.r1ha.core.input.WheelEvent.Direction>,
 ) {
     val pagerState = rememberPagerState(
         initialPage = vm.state.value.currentIndex.coerceAtMost(cards.size - 1).coerceAtLeast(0),
@@ -162,6 +224,19 @@ private fun VerticalCardPager(
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
             .collect { vm.setCurrentIndex(it) }
+    }
+    // Wheel-as-navigation, fired from CardStackScreen when the active card is read-only.
+    // animateScrollToPage so the transition is the same gentle spring the user gets when
+    // swiping the pager by finger — no jarring snap.
+    LaunchedEffect(pagerState, navRequests) {
+        navRequests.collect { dir ->
+            val current = pagerState.currentPage
+            val target = (current + when (dir) {
+                com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.UP -> -1
+                com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.DOWN -> +1
+            }).coerceIn(0, cards.lastIndex)
+            if (target != current) pagerState.animateScrollToPage(target)
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -355,6 +430,7 @@ private fun ChromeRow(
     showCounter: Boolean,
     onOpenFavoritesPicker: () -> Unit,
     onOpenSettings: () -> Unit,
+    onEditActive: () -> Unit = {},
     solidBackdrop: Boolean = true,
 ) {
     Row(
@@ -393,9 +469,28 @@ private fun ChromeRow(
             Spacer(Modifier.size(44.dp))
         }
 
-        // Top-right: settings gear + connection-state dot. The gear is a Canvas-drawn
-        // wireframe (see `SettingsCogGlyph`) so it matches the rest of the chrome's
-        // hairline-stroke language instead of Material's filled gear.
+        // Top-right cluster: edit pencil + settings gear + connection-state dot. Grouped
+        // in a Row so the parent SpaceBetween keeps the pip centred between hamburger
+        // and this cluster (rather than treating each element independently).
+        Row(verticalAlignment = Alignment.CenterVertically) {
+
+        // Edit pencil — opens the customize dialog for the active card. This was the
+        // entry point users were missing from the card stack (previously only in the
+        // favourites picker). 36 dp tap target rather than 44 so the gear next to it
+        // doesn't get crowded out on the R1's narrow chrome.
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .r1Pressable(onEditActive),
+            contentAlignment = Alignment.Center,
+        ) {
+            com.github.itskenny0.r1ha.ui.components.EditGlyph(size = 14.dp, tint = R1.Ink.copy(alpha = 0.85f))
+        }
+
+        // Settings gear + connection-state dot. The gear is a Canvas-drawn wireframe
+        // (see `SettingsCogGlyph`) so it matches the rest of the chrome's hairline-stroke
+        // language instead of Material's filled gear.
         Box(
             modifier = Modifier
                 .size(44.dp)
@@ -438,6 +533,7 @@ private fun ChromeRow(
                 )
             }
         }
+        }  // end right-cluster Row
     }
 }
 

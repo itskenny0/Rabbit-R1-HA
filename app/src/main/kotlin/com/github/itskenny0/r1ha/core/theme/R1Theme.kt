@@ -47,6 +47,8 @@ data class CardRenderModel(
         LOCK,
         HUMIDIFIER,
         CLIMATE,
+        NUMBER,
+        VALVE,
     }
     enum class AccentRole { WARM, COOL, GREEN, NEUTRAL }
 }

@@ -47,6 +47,21 @@ enum class Domain(val prefix: String) {
      * than a numeric reading. Read-only.
      */
     BINARY_SENSOR("binary_sensor"),
+    /**
+     * `number` entities — MQTT-common, exposes a settable numeric scalar with explicit
+     * `min` / `max` / `step` attributes. Many MQTT-Discovery integrations land here
+     * (volume knobs, temperature setpoints that don't fit climate, pump speeds, etc.).
+     * Service: `number.set_value` with `{value: <float>}`.
+     */
+    NUMBER("number"),
+    /** Same as [NUMBER] but lives in HA's helpers (`input_number.X`). */
+    INPUT_NUMBER("input_number"),
+    /**
+     * Valve entities — similar shape to covers (open/close/position/stop) but separate
+     * domain so HA can distinguish water valves from window covers. Services mirror
+     * cover (`open_valve`, `close_valve`, `set_valve_position`, `stop_valve`).
+     */
+    VALVE("valve"),
     ;
 
     /** Action-only domains — UI renders them as fire-and-forget ActionCard tiles. */

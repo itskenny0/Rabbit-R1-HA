@@ -125,6 +125,7 @@ class SettingsRepository private constructor(
         val uiTextHistoryLen = intPreferencesKey("ui.text_history_length")
         val uiHideCardTail = booleanPreferencesKey("ui.hide_card_tail")
         val uiMaxDecimals = intPreferencesKey("ui.max_decimals")
+        val uiTempUnit = stringPreferencesKey("ui.temp_unit")
 
         val theme = stringPreferencesKey("theme")
         /**
@@ -193,6 +194,7 @@ class SettingsRepository private constructor(
                     textHistoryLength = (p[K.uiTextHistoryLen] ?: 20).coerceIn(5, 100),
                     hideCardTailAbove = p[K.uiHideCardTail] ?: true,
                     maxDecimalPlaces = (p[K.uiMaxDecimals] ?: 2).coerceIn(0, 6),
+                    tempUnit = p[K.uiTempUnit]?.let { runCatching { TemperatureUnit.valueOf(it) }.getOrNull() } ?: TemperatureUnit.CELSIUS,
                 ),
                 behavior = Behavior(
                     haptics = p[K.behaviorHaptics] ?: true,
@@ -244,6 +246,7 @@ class SettingsRepository private constructor(
                 p[K.uiTextHistoryLen] = next.ui.textHistoryLength
                 p[K.uiHideCardTail] = next.ui.hideCardTailAbove
                 p[K.uiMaxDecimals] = next.ui.maxDecimalPlaces
+                p[K.uiTempUnit] = next.ui.tempUnit.name
                 p[K.theme] = next.theme.name
                 p[K.nameOverrides] = encodeNameOverrides(next.nameOverrides)
                 p[K.entityOverrides] = encodeEntityOverrides(next.entityOverrides)

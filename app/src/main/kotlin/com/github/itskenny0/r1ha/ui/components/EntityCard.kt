@@ -45,6 +45,8 @@ fun EntityCard(
         Domain.LOCK -> CardRenderModel.Glyph.LOCK
         Domain.HUMIDIFIER -> CardRenderModel.Glyph.HUMIDIFIER
         Domain.CLIMATE -> CardRenderModel.Glyph.CLIMATE
+        Domain.NUMBER, Domain.INPUT_NUMBER -> CardRenderModel.Glyph.NUMBER
+        Domain.VALVE -> CardRenderModel.Glyph.VALVE
         // Action entities don't reach the theme card path — handled below — so the glyph
         // mapping never lands on theme.Card. Routed to ActionCard which has its own label
         // ("SCENE"/"SCRIPT"/"BUTTON") via domainLabel above. The Glyph value is unused but
@@ -73,6 +75,8 @@ fun EntityCard(
         Domain.SCENE -> CardRenderModel.AccentRole.GREEN
         Domain.SCRIPT -> CardRenderModel.AccentRole.COOL
         Domain.BUTTON -> CardRenderModel.AccentRole.WARM
+        Domain.NUMBER, Domain.INPUT_NUMBER -> CardRenderModel.AccentRole.WARM
+        Domain.VALVE -> CardRenderModel.AccentRole.COOL
         // Sensors — colour by the most common device_class so the deck doesn't read as a
         // wall of orange. Temperature/humidity reads cool, motion/door reads green ("safe
         // / unobtrusive"), everything else falls back to neutral.
@@ -148,11 +152,31 @@ fun EntityCard(
                 modifier = Modifier.fillMaxSize().alpha(themeAlpha),
             )
         } else {
-            // Domain-native display value — for climate the percent abstraction is
-            // hidden (read "21 °C" not "60 %"). Anything else falls back to the percent.
+            // Domain-native display value — for climate / number entities the percent
+            // abstraction is hidden ("21.5 °C" not "60 %", "42 W" not "60 %"). The trick
+            // is that `state.percent` carries the OPTIMISTIC wheel input, so converting
+            // percent → range-position gives a value that tracks the wheel live rather
+            // than waiting for HA's echo. Falls back to state.raw (HA's confirmed value)
+            // only when no scalar range is available.
             val (displayValue, displayUnit) = when {
-                state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE && state.raw != null ->
-                    formatSensorValue(state.raw.toString(), maxDecimals = mergedUi.maxDecimalPlaces) to state.unit
+                state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE &&
+                    state.minRaw != null && state.maxRaw != null && state.percent != null -> {
+                    val tempNative = state.minRaw + (state.percent / 100.0) * (state.maxRaw - state.minRaw)
+                    // Snap to 0.5° (in native unit) so the display matches the service call.
+                    val snappedNative = Math.round(tempNative * 2.0) / 2.0
+                    val (converted, suffix) = convertTemperature(snappedNative, state.unit, mergedUi.tempUnit)
+                    formatSensorValue(converted.toString(), maxDecimals = mergedUi.maxDecimalPlaces) to suffix
+                }
+                state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE && state.raw != null -> {
+                    val (converted, suffix) = convertTemperature(state.raw.toDouble(), state.unit, mergedUi.tempUnit)
+                    formatSensorValue(converted.toString(), maxDecimals = mergedUi.maxDecimalPlaces) to suffix
+                }
+                (state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.NUMBER ||
+                    state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.INPUT_NUMBER) &&
+                    state.minRaw != null && state.maxRaw != null && state.percent != null -> {
+                    val value = state.minRaw + (state.percent / 100.0) * (state.maxRaw - state.minRaw)
+                    formatSensorValue(value.toString(), maxDecimals = mergedUi.maxDecimalPlaces) to state.unit
+                }
                 else -> null to null
             }
             theme.Card(
@@ -211,6 +235,8 @@ private fun domainLabel(glyph: CardRenderModel.Glyph): String = when (glyph) {
     CardRenderModel.Glyph.LOCK -> "LOCK"
     CardRenderModel.Glyph.HUMIDIFIER -> "HUMIDIFIER"
     CardRenderModel.Glyph.CLIMATE -> "CLIMATE"
+    CardRenderModel.Glyph.NUMBER -> "NUMBER"
+    CardRenderModel.Glyph.VALVE -> "VALVE"
 }
 
 /** Action-card label — bypasses the Glyph-based mapping above because action entities

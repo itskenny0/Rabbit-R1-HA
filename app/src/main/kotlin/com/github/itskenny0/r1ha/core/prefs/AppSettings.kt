@@ -4,6 +4,13 @@ enum class ThemeId { MINIMAL_DARK, PRAGMATIC_HYBRID, COLORFUL_CARDS }
 
 enum class DisplayMode { PERCENT, RAW }
 
+/**
+ * Display unit for temperature readouts. AUTO follows HA's reported unit
+ * (`temperature_unit` attribute on climate entities, defaults to Celsius); CELSIUS and
+ * FAHRENHEIT force the display + conversion regardless of HA's setting.
+ */
+enum class TemperatureUnit { AUTO, CELSIUS, FAHRENHEIT }
+
 /** What the wheel keycodes actually arrive as on this device. */
 enum class WheelKeySource { AUTO, DPAD, VOLUME }
 
@@ -31,6 +38,8 @@ data class UiOptions(
     val hideCardTailAbove: Boolean = true,
     /** Max decimal places shown for numeric sensor readings; 0 = integer, 2 = default. */
     val maxDecimalPlaces: Int = 2,
+    /** Force-display temperature unit; AUTO follows HA's native unit. Default Celsius. */
+    val tempUnit: TemperatureUnit = TemperatureUnit.CELSIUS,
 )
 
 data class Behavior(

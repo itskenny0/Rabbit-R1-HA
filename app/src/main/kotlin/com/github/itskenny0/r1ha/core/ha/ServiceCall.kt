@@ -79,7 +79,36 @@ data class ServiceCall(
                     "update_entity",
                     JsonObject(emptyMap()),
                 )
+                // Valve: same shape as cover; setPercent maps to set_valve_position.
+                Domain.VALVE -> ServiceCall(
+                    target,
+                    "set_valve_position",
+                    buildJsonObject { put("position", JsonPrimitive(clamped)) },
+                )
+                // Number / input_number: VM converts the wheel's percent into the
+                // entity's native range and calls setNumberValue directly — this path
+                // is the fallback (no range cached). Coerce 0..100 directly as the value.
+                Domain.NUMBER, Domain.INPUT_NUMBER -> ServiceCall(
+                    target,
+                    "set_value",
+                    buildJsonObject { put("value", JsonPrimitive(clamped)) },
+                )
             }
+        }
+
+        /**
+         * Number / input_number value setter. VM converts the wheel's 0..100 percent
+         * into the entity's [EntityState.minRaw]/[EntityState.maxRaw] range and calls
+         * this helper with the resolved value. Rounded to the nearest step where
+         * possible at the call site; here we just emit whatever Double the VM gave us.
+         */
+        fun setNumberValue(target: EntityId, value: Double): ServiceCall {
+            val rounded = (Math.round(value * 100.0) / 100.0)
+            return ServiceCall(
+                target,
+                "set_value",
+                buildJsonObject { put("value", JsonPrimitive(rounded)) },
+            )
         }
 
         fun tapAction(target: EntityId, isOn: Boolean): ServiceCall = when (target.domain) {
@@ -92,6 +121,8 @@ data class ServiceCall(
             // travel — close if open, open if closed/stopped/in-motion. (Sending open_cover
             // while the cover is already opening is a no-op on HA's side.)
             Domain.COVER -> ServiceCall(target, if (isOn) "close_cover" else "open_cover", JsonObject(emptyMap()))
+            // Valve: same dispatch shape as cover, parallel service names.
+            Domain.VALVE -> ServiceCall(target, if (isOn) "close_valve" else "open_valve", JsonObject(emptyMap()))
             Domain.MEDIA_PLAYER -> ServiceCall(target, "media_play_pause", JsonObject(emptyMap()))
             // Generic on/off — switch.foo, input_boolean.foo, automation.foo, humidifier.foo,
             // climate.foo all use the same turn_on/turn_off pair. For climate this restores
@@ -122,6 +153,13 @@ data class ServiceCall(
                 "update_entity",
                 JsonObject(emptyMap()),
             )
+            // Number / input_number — there's no "toggle" semantics. Tap is mostly
+            // dead code on these entities since the wheel does the work. Refresh.
+            Domain.NUMBER, Domain.INPUT_NUMBER -> ServiceCall(
+                target,
+                "update_entity",
+                JsonObject(emptyMap()),
+            )
         }
 
         /**
@@ -141,6 +179,16 @@ data class ServiceCall(
                 target,
                 if (on) "open_cover" else "close_cover",
                 JsonObject(emptyMap()),
+            )
+            Domain.VALVE -> ServiceCall(
+                target,
+                if (on) "open_valve" else "close_valve",
+                JsonObject(emptyMap()),
+            )
+            Domain.NUMBER, Domain.INPUT_NUMBER -> ServiceCall(
+                target,
+                "set_value",
+                buildJsonObject { put("value", JsonPrimitive(if (on) 100 else 0)) },
             )
             Domain.MEDIA_PLAYER -> ServiceCall(
                 target,

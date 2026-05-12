@@ -334,7 +334,7 @@ class DefaultHaRepository(
         val isOn = when (id.domain) {
             Domain.LIGHT, Domain.FAN, Domain.SWITCH, Domain.INPUT_BOOLEAN,
             Domain.AUTOMATION, Domain.HUMIDIFIER -> raw.state.equals("on", ignoreCase = true)
-            Domain.COVER -> raw.state.equals("open", ignoreCase = true)
+            Domain.COVER, Domain.VALVE -> raw.state.equals("open", ignoreCase = true)
             Domain.MEDIA_PLAYER -> raw.state.equals("playing", ignoreCase = true)
             Domain.LOCK -> raw.state.equals("unlocked", ignoreCase = true)
             Domain.CLIMATE -> !raw.state.equals("off", ignoreCase = true) &&
@@ -348,10 +348,16 @@ class DefaultHaRepository(
             // numeric/string readings and don't have a meaningful on/off mapping.
             Domain.BINARY_SENSOR -> raw.state.equals("on", ignoreCase = true)
             Domain.SENSOR -> false
+            // number / input_number entities — state is the numeric value as a string.
+            // "Non-zero" is the closest thing to "on" but it isn't very meaningful here;
+            // the wheel just drives the value. Treat as false so tap-toggle doesn't try
+            // to flip a slider to its zero/non-zero positions.
+            Domain.NUMBER, Domain.INPUT_NUMBER -> false
         }
         val available = raw.state != "unavailable" && raw.state != "unknown"
-        val pct = computePercent(id.domain, raw.attributes)
+        val pct = computePercentWithState(id.domain, raw.attributes, raw.state)
         val rawNum = computeRaw(id.domain, raw.attributes)
+            ?: if (id.domain == Domain.NUMBER || id.domain == Domain.INPUT_NUMBER) raw.state.toDoubleOrNull() else null
         val newState = EntityState(
             id = id,
             friendlyName = raw.attributes["friendly_name"].asString() ?: id.objectId,
@@ -369,10 +375,44 @@ class DefaultHaRepository(
             unit = raw.attributes["unit_of_measurement"].asString()
                 ?: raw.attributes["temperature_unit"].asString(),
             deviceClass = raw.attributes["device_class"].asString(),
-            minRaw = raw.attributes["min_temp"].asDouble() ?: raw.attributes["min_humidity"].asDouble(),
-            maxRaw = raw.attributes["max_temp"].asDouble() ?: raw.attributes["max_humidity"].asDouble(),
+            // Range for any scalar with a custom span — climate (min_temp), humidifier
+            // (min_humidity), number/input_number (min). Picked by domain so HA's
+            // overloaded attribute names don't bleed across.
+            minRaw = when (id.domain) {
+                Domain.CLIMATE -> raw.attributes["min_temp"].asDouble()
+                Domain.HUMIDIFIER -> raw.attributes["min_humidity"].asDouble()
+                Domain.NUMBER, Domain.INPUT_NUMBER -> raw.attributes["min"].asDouble() ?: 0.0
+                else -> null
+            },
+            maxRaw = when (id.domain) {
+                Domain.CLIMATE -> raw.attributes["max_temp"].asDouble()
+                Domain.HUMIDIFIER -> raw.attributes["max_humidity"].asDouble()
+                Domain.NUMBER, Domain.INPUT_NUMBER -> raw.attributes["max"].asDouble() ?: 100.0
+                else -> null
+            },
         )
         cache.update { it + (id to newState) }
+    }
+
+    /**
+     * Percent computation that needs the entity *state* in addition to attributes —
+     * NUMBER and INPUT_NUMBER carry their value in `state`, not in an attribute. Calls
+     * out to [computePercent] for everything else.
+     */
+    private fun computePercentWithState(
+        domain: Domain,
+        attrs: kotlinx.serialization.json.JsonObject,
+        stateStr: String,
+    ): Int? = when (domain) {
+        Domain.NUMBER, Domain.INPUT_NUMBER -> {
+            val v = stateStr.toDoubleOrNull()
+            val mn = attrs["min"].asDouble() ?: 0.0
+            val mx = attrs["max"].asDouble() ?: 100.0
+            if (v != null && mx > mn) {
+                (((v - mn) / (mx - mn)) * 100.0).roundToInt().coerceIn(0, 100)
+            } else null
+        }
+        else -> computePercent(domain, attrs)
     }
 
     private fun computePercent(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Int? = when (domain) {
@@ -386,28 +426,53 @@ class DefaultHaRepository(
         // back to null (and the card stays on the switch-only path) when the range attrs
         // are missing on a particular HA install.
         Domain.CLIMATE -> {
-            val target = attrs["temperature"].asDouble()
+            val target = climateTargetTemp(attrs)
             val min = attrs["min_temp"].asDouble()
             val max = attrs["max_temp"].asDouble()
             if (target != null && min != null && max != null && max > min) {
                 (((target - min) / (max - min)) * 100.0).roundToInt().coerceIn(0, 100)
             } else null
         }
+        // Valve: same shape as cover — `current_position` 0..100 (closed..open).
+        Domain.VALVE -> attrs["current_position"].asInt()?.coerceIn(0, 100)
+        // Number / input_number: state is the value. We don't have access to row.state
+        // here (computePercent takes only attrs), but we can read the entity's range
+        // from attributes; the actual conversion uses minRaw/maxRaw at the VM layer
+        // when sending the service call. For DISPLAY of percent, the caller threads
+        // the current value through differently — see [EntityState.percent].
+        Domain.NUMBER, Domain.INPUT_NUMBER -> null
         // No scalar — pure on/off / read-only / action.
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
         Domain.SENSOR, Domain.BINARY_SENSOR -> null
     }
 
+    /**
+     * Best-effort climate target-temperature read. HA exposes `temperature` for single-
+     * setpoint HVAC modes (heat or cool); in `heat_cool` mode the entity has separate
+     * `target_temp_high` (cooling target) and `target_temp_low` (heating target). We
+     * pick the high one as the user-driven setpoint — that's what the slider usually
+     * represents on dashboards. Falls back to `current_temperature` only as a last
+     * resort (it's not a target value but at least gives a sensible scaled position
+     * when the entity has no settable target at all).
+     */
+    private fun climateTargetTemp(attrs: kotlinx.serialization.json.JsonObject): Double? =
+        attrs["temperature"].asDouble()
+            ?: attrs["target_temp_high"].asDouble()
+            ?: attrs["target_temp_low"].asDouble()
+            ?: attrs["current_temperature"].asDouble()
+
     private fun computeRaw(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Number? = when (domain) {
         Domain.LIGHT -> attrs["brightness"].asInt()
         Domain.FAN -> attrs["percentage"].asInt()
         Domain.COVER -> attrs["current_position"].asInt()
+        Domain.VALVE -> attrs["current_position"].asInt()
         Domain.MEDIA_PLAYER -> attrs["volume_level"].asDouble()
         Domain.HUMIDIFIER -> attrs["humidity"].asInt()
-        // Climate's raw is the actual target_temperature for SensorCard-style display
-        // when we know the range — themes show "21 °C" via CardRenderModel.displayValue.
-        Domain.CLIMATE -> attrs["temperature"].asDouble()
+        // Climate's raw is the actual target_temperature for the card's display, with
+        // the same fallback chain as computePercent so a `heat_cool` mode entity that
+        // only exposes target_temp_high/low still renders sensibly.
+        Domain.CLIMATE -> climateTargetTemp(attrs)
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
         Domain.BINARY_SENSOR -> null
@@ -416,6 +481,10 @@ class DefaultHaRepository(
         // into a Number here because that loses precision (e.g. "21.7" → 21) and locale
         // formatting (HA already sends a presentation-ready string).
         Domain.SENSOR -> null
+        // Number / input_number: same as plain sensor — the entity state is the value.
+        // Repurposing rawState string for display + threading it through the VM at
+        // service-call time keeps the precision intact.
+        Domain.NUMBER, Domain.INPUT_NUMBER -> null
     }
 
     /**
@@ -464,8 +533,21 @@ class DefaultHaRepository(
         // (min/max). Without the range we can't map percent → °C, so the card falls back
         // to the switch-only path (turn_on / turn_off). ClimateEntityFeature.TARGET_TEMPERATURE
         // is bit 1 — we trust the supported_features bitmask AND the presence of min_temp.
-        Domain.CLIMATE -> ((attrs["supported_features"].asInt() ?: 0) and 1) != 0 &&
+        // Climate: scalar when we have a temperature target AND a range. Earlier this
+        // gated only on supported_features bit 1 (TARGET_TEMPERATURE) plus min/max, but
+        // some integrations (notably MQTT-thermostats) forget the bit while still
+        // exposing the attribute — fall back to climateTargetTemp() probing the
+        // attributes themselves so those entities don't degrade to switch-only.
+        Domain.CLIMATE -> climateTargetTemp(attrs) != null &&
             attrs["min_temp"] != null && attrs["max_temp"] != null
+        // Valve: same shape as cover — has the SET_POSITION bit (1<<1) or an explicit
+        // current_position attribute. Falls back to switch (open_valve/close_valve)
+        // when neither is present.
+        Domain.VALVE -> ((attrs["supported_features"].asInt() ?: 0) and 2) != 0 ||
+            attrs["current_position"] != null
+        // number / input_number: always scalar — that's the entity's whole reason for
+        // existing. Range comes from min/max attrs (defaulted to 0..100 if absent).
+        Domain.NUMBER, Domain.INPUT_NUMBER -> true
         // Pure on/off domains — no scalar; rendered as switch cards.
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK -> false
         // Action-only domains — no scalar; rendered as ActionCard tiles.
@@ -522,14 +604,24 @@ class DefaultHaRepository(
                 it.entity_id.substringBefore('.', missingDelimiterValue = "")
             }.eachCount()
             R1Log.i("HaRepo.listAll", "decoded ${rows.size} rows; by domain=$countsByDomain")
+            // Log unsupported domains separately so users investigating "where's my
+            // entity?" can run `adb logcat -s HaRepo.listAll` and see exactly which
+            // domain prefixes we're dropping (with counts). The supported set is
+            // implicit via Domain.isSupportedPrefix.
+            val unsupported = countsByDomain.filterKeys { !Domain.isSupportedPrefix(it) }
+            if (unsupported.isNotEmpty()) {
+                R1Log.i("HaRepo.listAll", "unsupported (dropped): $unsupported")
+            }
             rows.mapNotNull { row ->
                 val prefix = row.entity_id.substringBefore('.', missingDelimiterValue = "")
                 if (!Domain.isSupportedPrefix(prefix)) return@mapNotNull null
                 val id = EntityId(row.entity_id)
-                val available = row.state != "unavailable" && row.state != "unknown"
-                val attrs = row.attributes ?: kotlinx.serialization.json.JsonObject(emptyMap())
-                val pct = if (available) computePercent(id.domain, attrs) else null
+                val stateStr = row.stateStr
+                val attrs = row.attrsObj
+                val available = stateStr != "unavailable" && stateStr != "unknown"
+                val pct = if (available) computePercentWithState(id.domain, attrs, stateStr) else null
                 val rawNum = computeRaw(id.domain, attrs)
+                    ?: if (id.domain == Domain.NUMBER || id.domain == Domain.INPUT_NUMBER) stateStr.toDoubleOrNull() else null
                 EntityState(
                     id = id,
                     friendlyName = attrs["friendly_name"].asString() ?: row.entity_id.substringAfter('.'),
@@ -539,27 +631,38 @@ class DefaultHaRepository(
                     // function stays self-contained for testing.
                     isOn = when (id.domain) {
                         Domain.LIGHT, Domain.FAN, Domain.SWITCH, Domain.INPUT_BOOLEAN,
-                        Domain.AUTOMATION, Domain.HUMIDIFIER -> row.state.equals("on", ignoreCase = true)
-                        Domain.COVER -> row.state.equals("open", ignoreCase = true)
-                        Domain.MEDIA_PLAYER -> row.state.equals("playing", ignoreCase = true)
-                        Domain.LOCK -> row.state.equals("unlocked", ignoreCase = true)
-                        Domain.CLIMATE -> !row.state.equals("off", ignoreCase = true) && available
-                        Domain.SCRIPT -> row.state.equals("on", ignoreCase = true)
+                        Domain.AUTOMATION, Domain.HUMIDIFIER -> stateStr.equals("on", ignoreCase = true)
+                        Domain.COVER, Domain.VALVE -> stateStr.equals("open", ignoreCase = true)
+                        Domain.MEDIA_PLAYER -> stateStr.equals("playing", ignoreCase = true)
+                        Domain.LOCK -> stateStr.equals("unlocked", ignoreCase = true)
+                        Domain.CLIMATE -> !stateStr.equals("off", ignoreCase = true) && available
+                        Domain.SCRIPT -> stateStr.equals("on", ignoreCase = true)
                         Domain.SCENE, Domain.BUTTON -> false
-                        Domain.BINARY_SENSOR -> row.state.equals("on", ignoreCase = true)
+                        Domain.BINARY_SENSOR -> stateStr.equals("on", ignoreCase = true)
                         Domain.SENSOR -> false
+                        Domain.NUMBER, Domain.INPUT_NUMBER -> false
                     },
                     percent = pct,
                     raw = rawNum,
                     lastChanged = runCatching { Instant.parse(row.last_changed ?: "") }.getOrDefault(Instant.now()),
                     isAvailable = available,
                     supportsScalar = supportsScalar(id.domain, attrs),
-                    rawState = row.state,
+                    rawState = stateStr,
                     unit = attrs["unit_of_measurement"].asString()
                         ?: attrs["temperature_unit"].asString(),
                     deviceClass = attrs["device_class"].asString(),
-                    minRaw = attrs["min_temp"].asDouble() ?: attrs["min_humidity"].asDouble(),
-                    maxRaw = attrs["max_temp"].asDouble() ?: attrs["max_humidity"].asDouble(),
+                    minRaw = when (id.domain) {
+                        Domain.CLIMATE -> attrs["min_temp"].asDouble()
+                        Domain.HUMIDIFIER -> attrs["min_humidity"].asDouble()
+                        Domain.NUMBER, Domain.INPUT_NUMBER -> attrs["min"].asDouble() ?: 0.0
+                        else -> null
+                    },
+                    maxRaw = when (id.domain) {
+                        Domain.CLIMATE -> attrs["max_temp"].asDouble()
+                        Domain.HUMIDIFIER -> attrs["max_humidity"].asDouble()
+                        Domain.NUMBER, Domain.INPUT_NUMBER -> attrs["max"].asDouble() ?: 100.0
+                        else -> null
+                    },
                 )
             }
         }
@@ -686,13 +789,37 @@ class DefaultHaRepository(
         const val CALL_TIMEOUT_MS = 15_000L
     }
 
+    /**
+     * Lenient shape for HA's /api/states rows. Originally `state: String` rejected any
+     * row where HA reported state as a JSON number (some MQTT integrations leak the
+     * native MQTT payload through without coercing it to a string), and the per-row
+     * decoder would drop the entity entirely. JsonElement absorbs both forms; we
+     * normalise to a plain String in [stateStr]. `attributes` is also JsonElement
+     * rather than JsonObject so a misbehaving integration that emits an array (yes,
+     * really) doesn't kill the row either.
+     */
     @kotlinx.serialization.Serializable
     private data class RawStateRow(
         val entity_id: String,
-        val state: String,
-        val attributes: kotlinx.serialization.json.JsonObject? = null,
+        val state: kotlinx.serialization.json.JsonElement? = null,
+        val attributes: kotlinx.serialization.json.JsonElement? = null,
         val last_changed: String? = null,
-    )
+    ) {
+        /** Normalised state string. Empty / null state in the wire payload reads as "unknown"
+         *  so downstream availability/isOn computations treat the row consistently. */
+        val stateStr: String
+            get() = when (val s = state) {
+                null -> "unknown"
+                is JsonPrimitive -> s.content
+                else -> s.toString()
+            }
+
+        /** Normalised attributes object. Anything that isn't a JSON object (null, array,
+         *  primitive) reads as empty so attribute lookups return null. */
+        val attrsObj: kotlinx.serialization.json.JsonObject
+            get() = (attributes as? kotlinx.serialization.json.JsonObject)
+                ?: kotlinx.serialization.json.JsonObject(emptyMap())
+    }
 
     private fun resubscribe() {
         scope.launch {

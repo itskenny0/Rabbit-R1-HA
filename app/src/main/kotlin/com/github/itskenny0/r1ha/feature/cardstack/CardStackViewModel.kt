@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 data class CardStackUiState(
     /** Ordered by the user's favorites list (NOT by entity_id). The HA cache snapshot —
@@ -128,9 +129,22 @@ class CardStackViewModel(
             // but defensive code in case the cached state is stale).
             entityState?.id?.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE &&
                 entityState.minRaw != null && entityState.maxRaw != null -> {
-                val temp = entityState.minRaw + (pct / 100.0) * (entityState.maxRaw - entityState.minRaw)
+                // Snap to the nearest 0.5° so the wheel's percent-step (~1.67% per detent
+                // for a 30° span) doesn't accumulate floating-point drift; the user gets
+                // reliable half-degree increments matching thermostat conventions.
+                val raw = entityState.minRaw + (pct / 100.0) * (entityState.maxRaw - entityState.minRaw)
+                val temp = Math.round(raw * 2.0) / 2.0
                 R1Log.i("CardStack.debounced", "sending setTemperature($entityId, ${"%.1f".format(temp)})")
                 ServiceCall.setTemperature(entityId, temp)
+            }
+            // Number / input_number scalar — same shape as climate but emits set_value
+            // on the entity's own domain. Wheel's 0..100 maps onto min..max from attrs.
+            entityState != null && entityState.minRaw != null && entityState.maxRaw != null &&
+                (entityState.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.NUMBER ||
+                    entityState.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.INPUT_NUMBER) -> {
+                val value = entityState.minRaw + (pct / 100.0) * (entityState.maxRaw - entityState.minRaw)
+                R1Log.i("CardStack.debounced", "sending setNumberValue($entityId, ${"%.2f".format(value)})")
+                ServiceCall.setNumberValue(entityId, value)
             }
             else -> {
                 // Standard scalar dispatch. If this is a light AND the user has set a
@@ -304,7 +318,21 @@ class CardStackViewModel(
         }
         val ratePerSec = wheelTimestamps.size * (1000.0 / rateWindowMillis)
 
-        val step = WheelInput.effectiveStep(wheel.stepPercent, ratePerSec, wheel.acceleration)
+        // For climate the user wants 0.5° increments and "half the speed of lights" —
+        // i.e. each detent should advance the temperature by a deliberate small amount,
+        // not a fixed % of brightness. Compute the percent-equivalent of 0.5° from the
+        // entity's min/max range. With a typical 5..35°C range (30° span), 0.5° ≈ 1.67%
+        // which rounds to 2% — and combined with the snap-to-0.5° at service-call time
+        // the wheel feels exactly like a thermostat dial.
+        val step = if (activeState.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE &&
+            activeState.minRaw != null && activeState.maxRaw != null) {
+            val range = activeState.maxRaw - activeState.minRaw
+            if (range > 0) {
+                ((50.0 / range).roundToInt()).coerceAtLeast(1)
+            } else 1
+        } else {
+            WheelInput.effectiveStep(wheel.stepPercent, ratePerSec, wheel.acceleration)
+        }
         val currentPct = _state.value.optimisticPercents[activeState.id] ?: activeState.percent ?: 0
         val newPct = (currentPct + sign * step).coerceIn(0, 100)
         R1Log.d("CardStack.onWheel", "dir=${event.direction} step=$step (rate=$ratePerSec) -> $currentPct→$newPct")
@@ -334,6 +362,31 @@ class CardStackViewModel(
      * own card would, which means scenes/scripts fire turn_on, buttons fire press,
      * switches toggle, etc. Invalid or unsupported targets toast and noop.
      */
+    /** Persist a customize-dialog edit straight from the card-stack. Same write path as
+     *  the favourites picker's saveCustomize — name override + entity override map.
+     *  Empty new name removes the name override; defaults-only entity override removes
+     *  the entry from the entityOverrides map. */
+    fun saveCustomize(
+        entityId: String,
+        newName: String,
+        newOverride: com.github.itskenny0.r1ha.core.prefs.EntityOverride,
+    ) {
+        viewModelScope.launch {
+            settings.update { cur ->
+                val trimmed = newName.trim()
+                val nextNames = cur.nameOverrides.toMutableMap()
+                if (trimmed.isBlank()) nextNames.remove(entityId) else nextNames[entityId] = trimmed
+                val nextOverrides = cur.entityOverrides.toMutableMap()
+                if (newOverride == com.github.itskenny0.r1ha.core.prefs.EntityOverride.NONE) {
+                    nextOverrides.remove(entityId)
+                } else {
+                    nextOverrides[entityId] = newOverride
+                }
+                cur.copy(nameOverrides = nextNames, entityOverrides = nextOverrides)
+            }
+        }
+    }
+
     fun fireLongPress(target: String) {
         val targetId = runCatching { EntityId(target) }.getOrNull()
         if (targetId == null) {

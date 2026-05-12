@@ -54,6 +54,8 @@ object PragmaticHybridTheme : R1Theme {
         CardRenderModel.Glyph.LOCK -> "LOCK"
         CardRenderModel.Glyph.HUMIDIFIER -> "HUMIDIFIER"
         CardRenderModel.Glyph.CLIMATE -> "CLIMATE"
+        CardRenderModel.Glyph.NUMBER -> "NUMBER"
+        CardRenderModel.Glyph.VALVE -> "VALVE"
     }
 
     @Composable

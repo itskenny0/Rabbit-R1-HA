@@ -130,11 +130,22 @@ class FavoritesPickerViewModel(
     fun setQuery(q: String) {
         val cur = _ui.value
         if (cur.query == q) return
+        // SYNC update of the query string so the search field's value parameter reflects
+        // every keystroke immediately. Without this, the previous implementation hopped
+        // through viewModelScope.launch → settings.first() before publishing the new
+        // query, leaving BasicTextField recomposing with a one-step-old value. The IME's
+        // composing region landed on a stale string and characters appeared transposed
+        // ("testing" → "tetings"). Filtering work (which needs settings access) hops
+        // async below; the visible text stays in lock-step with the user's keystrokes.
+        _ui.value = cur.copy(query = q)
         viewModelScope.launch {
             val snapshot = settings.settings.first()
-            _ui.value = cur.copy(
-                query = q,
-                rows = buildRows(entitiesCache, snapshot.favorites, cur.filter, q, snapshot.nameOverrides),
+            // Read the LATEST query and filter (not the captured `cur`) — by the time
+            // this coroutine runs the user may have typed more characters, and we want
+            // the result list to reflect that.
+            val now = _ui.value
+            _ui.value = now.copy(
+                rows = buildRows(entitiesCache, snapshot.favorites, now.filter, now.query, snapshot.nameOverrides),
             )
         }
     }
