@@ -20,6 +20,7 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.flow.first
 import com.github.itskenny0.r1ha.core.input.WheelEvent
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
+import com.github.itskenny0.r1ha.core.prefs.WheelKeySource
 import com.github.itskenny0.r1ha.core.theme.LocalUiOptions
 import com.github.itskenny0.r1ha.core.theme.R1ThemeHost
 import com.github.itskenny0.r1ha.core.util.R1Log
@@ -115,20 +116,30 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // Consume the four wheel-related keycodes unconditionally — regardless of action —
-        // so the system volume UI never appears on top of the app. Only ACTION_DOWN feeds
-        // the WheelInput; other actions (UP, MULTIPLE) are swallowed.
+        // Honour the user's "Key source" setting (AUTO = both, DPAD = only D-pad keys, VOLUME =
+        // only volume keys). Filtered-out keycodes fall through to super so the system can act
+        // on them normally (e.g. volume keys actually change media volume when the user has
+        // explicitly chosen DPAD only).
+        val src = graph.latestKeySource
+        val acceptsDpad = src == WheelKeySource.AUTO || src == WheelKeySource.DPAD
+        val acceptsVolume = src == WheelKeySource.AUTO || src == WheelKeySource.VOLUME
         return when (event.keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_VOLUME_UP -> {
+            KeyEvent.KEYCODE_DPAD_UP -> if (acceptsDpad) {
                 if (event.action == KeyEvent.ACTION_DOWN) graph.wheelInput.emit(WheelEvent.Direction.UP)
                 true
-            }
-            KeyEvent.KEYCODE_DPAD_DOWN,
-            KeyEvent.KEYCODE_VOLUME_DOWN -> {
+            } else super.dispatchKeyEvent(event)
+            KeyEvent.KEYCODE_VOLUME_UP -> if (acceptsVolume) {
+                if (event.action == KeyEvent.ACTION_DOWN) graph.wheelInput.emit(WheelEvent.Direction.UP)
+                true
+            } else super.dispatchKeyEvent(event)
+            KeyEvent.KEYCODE_DPAD_DOWN -> if (acceptsDpad) {
                 if (event.action == KeyEvent.ACTION_DOWN) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
                 true
-            }
+            } else super.dispatchKeyEvent(event)
+            KeyEvent.KEYCODE_VOLUME_DOWN -> if (acceptsVolume) {
+                if (event.action == KeyEvent.ACTION_DOWN) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
+                true
+            } else super.dispatchKeyEvent(event)
             else -> super.dispatchKeyEvent(event)
         }
     }
