@@ -25,6 +25,10 @@ class FavoritesPickerViewModel(
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
+    /** Cached list of all controllable entities from the latest /api/states fetch. Toggling or
+     *  reordering favourites doesn't change this list, so we can update [_ui] locally without
+     *  re-fetching every time the user taps a checkbox. */
+    private var entitiesCache: List<EntityState> = emptyList()
 
     init { refresh() }
 
@@ -37,14 +41,9 @@ class FavoritesPickerViewModel(
             val favs = snapshot.favorites
             all.fold(
                 onSuccess = { list ->
-                    val favOrder = favs.withIndex().associate { (idx, id) -> id to idx }
-                    val rows = list.sortedBy { it.friendlyName.lowercase() }.map {
-                        Row(it, isFavorite = it.id.value in favOrder, orderIndex = favOrder[it.id.value])
-                    }
-                    R1Log.i("FavoritesPicker.refresh", "fetched ${rows.size} entities")
-                    // No toast here; the UI update itself is the feedback. seedCacheFromHa
-                    // already toasts for the user when its load succeeds.
-                    _ui.value = UiState(loading = false, rows = rows)
+                    entitiesCache = list
+                    _ui.value = UiState(loading = false, rows = buildRows(list, favs))
+                    R1Log.i("FavoritesPicker.refresh", "fetched ${list.size} entities")
                 },
                 onFailure = {
                     R1Log.e("FavoritesPicker.refresh", "fetch failed", it)
@@ -55,38 +54,54 @@ class FavoritesPickerViewModel(
         }
     }
 
+    /** Build the row list from cached entities + the current favourites list. Favourites are
+     *  pinned to the top of the list in user-chosen order so the up/down arrows produce
+     *  visible movement; non-favourites follow alphabetically. */
+    private fun buildRows(entities: List<EntityState>, favs: List<String>): List<Row> {
+        val favOrder = favs.withIndex().associate { (idx, id) -> id to idx }
+        val byId = entities.associateBy { it.id.value }
+        // Favourites first, in the order the user set.
+        val favouriteRows = favs.mapNotNull { id ->
+            byId[id]?.let { Row(it, isFavorite = true, orderIndex = favOrder[id]) }
+        }
+        // Then everything else, alphabetical.
+        val otherRows = entities
+            .filter { it.id.value !in favOrder }
+            .sortedBy { it.friendlyName.lowercase() }
+            .map { Row(it, isFavorite = false, orderIndex = null) }
+        return favouriteRows + otherRows
+    }
+
     fun toggle(entityId: String) {
         viewModelScope.launch {
-            settings.update { cur ->
-                val l = cur.favorites.toMutableList()
-                if (entityId in l) l.remove(entityId) else l += entityId
-                cur.copy(favorites = l)
+            val newFavs = settings.settings.first().favorites.toMutableList().apply {
+                if (entityId in this) remove(entityId) else add(entityId)
             }
-            refresh()
+            settings.update { it.copy(favorites = newFavs) }
+            // Local re-render without re-fetching the entity list.
+            _ui.value = _ui.value.copy(rows = buildRows(entitiesCache, newFavs))
         }
     }
 
     fun moveUp(entityId: String) {
         viewModelScope.launch {
-            settings.update { cur ->
-                val l = cur.favorites.toMutableList()
-                val idx = l.indexOf(entityId)
-                if (idx > 0) { l.removeAt(idx); l.add(idx - 1, entityId) }
-                cur.copy(favorites = l)
+            val newFavs = settings.settings.first().favorites.toMutableList().apply {
+                val idx = indexOf(entityId)
+                if (idx > 0) { removeAt(idx); add(idx - 1, entityId) }
             }
-            refresh()
+            settings.update { it.copy(favorites = newFavs) }
+            _ui.value = _ui.value.copy(rows = buildRows(entitiesCache, newFavs))
         }
     }
 
     fun moveDown(entityId: String) {
         viewModelScope.launch {
-            settings.update { cur ->
-                val l = cur.favorites.toMutableList()
-                val idx = l.indexOf(entityId)
-                if (idx in 0 until l.size - 1) { l.removeAt(idx); l.add(idx + 1, entityId) }
-                cur.copy(favorites = l)
+            val newFavs = settings.settings.first().favorites.toMutableList().apply {
+                val idx = indexOf(entityId)
+                if (idx in 0 until size - 1) { removeAt(idx); add(idx + 1, entityId) }
             }
-            refresh()
+            settings.update { it.copy(favorites = newFavs) }
+            _ui.value = _ui.value.copy(rows = buildRows(entitiesCache, newFavs))
         }
     }
 
