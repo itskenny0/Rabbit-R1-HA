@@ -137,13 +137,22 @@ fun FavoritesPickerScreen(
                             )
                         }
                         if (row.isFavorite) {
-                            IconButton(onClick = { vm.moveUp(row.state.id.value) }) {
+                            val favCount = ui.rows.count { it.isFavorite }
+                            val canMoveUp = row.orderIndex != null && row.orderIndex > 0
+                            val canMoveDown = row.orderIndex != null && row.orderIndex < favCount - 1
+                            IconButton(
+                                onClick = { vm.moveUp(row.state.id.value) },
+                                enabled = canMoveUp,
+                            ) {
                                 Icon(
                                     imageVector = Icons.Filled.KeyboardArrowUp,
                                     contentDescription = "Move up",
                                 )
                             }
-                            IconButton(onClick = { vm.moveDown(row.state.id.value) }) {
+                            IconButton(
+                                onClick = { vm.moveDown(row.state.id.value) },
+                                enabled = canMoveDown,
+                            ) {
                                 Icon(
                                     imageVector = Icons.Filled.KeyboardArrowDown,
                                     contentDescription = "Move down",
