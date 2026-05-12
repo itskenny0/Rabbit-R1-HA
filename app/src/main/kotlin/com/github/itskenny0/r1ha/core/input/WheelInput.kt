@@ -1,5 +1,6 @@
 package com.github.itskenny0.r1ha.core.input
 
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -14,11 +15,18 @@ data class WheelEvent(val direction: Direction, val timestampMillis: Long) {
  * combine them with current settings to apply effective steps.
  */
 class WheelInput {
-    // No buffer + no replay: wheel events fired while CardStackScreen isn't in composition
-    // are simply dropped, instead of queueing up and replaying when the user navigates back.
-    // tryEmit() returns false silently in that case — acceptable, the user has already moved
-    // on visually.
-    private val _events = MutableSharedFlow<WheelEvent>(extraBufferCapacity = 0)
+    // A small buffer with DROP_OLDEST so an in-flight subscriber consuming a slow frame doesn't
+    // lose events fired during that frame — but bursts that exceed the buffer drop the oldest
+    // entries rather than the newest, keeping the most recent rotation direction "fresh".
+    //
+    // SharedFlow buffers are scoped to current subscribers: when CardStackScreen leaves
+    // composition the subscriber cancels and any buffered events vanish with it. So this does
+    // NOT re-introduce the "wheel events queue while off-screen and replay on return" bug
+    // that buffer=0 fixed earlier — the no-subscriber case still silently drops.
+    private val _events = MutableSharedFlow<WheelEvent>(
+        extraBufferCapacity = 8,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
     val events: SharedFlow<WheelEvent> = _events.asSharedFlow()
 
     fun emit(direction: WheelEvent.Direction, now: Long = System.currentTimeMillis()) {
