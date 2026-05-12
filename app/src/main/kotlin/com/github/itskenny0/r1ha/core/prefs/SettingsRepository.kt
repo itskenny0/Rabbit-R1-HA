@@ -126,28 +126,26 @@ class SettingsRepository private constructor(
         shadowChanges,
     ) { p, _ -> p }
         .map { p ->
-            // Server URL: prefer DataStore, fall back to shadow SharedPreferences.
-            val urlFromStore = p[K.serverUrl]
+            // Server URL: prefer SHADOW over DataStore. update() writes the shadow synchronously
+            // first, then DataStore asynchronously — so the shadow is always at-least-as-fresh
+            // as DataStore. If the DataStore write silently fails on this device, DataStore can
+            // hold a stale value while shadow holds the new one; preferring shadow lets the new
+            // value win regardless.
             val urlFromShadow = shadow.getString(SHADOW_SERVER_URL, null)
-            val url = urlFromStore ?: urlFromShadow
-            val haVersion = p[K.haVersion] ?: shadow.getString(SHADOW_HA_VERSION, null)
+            val urlFromStore = p[K.serverUrl]
+            val url = urlFromShadow ?: urlFromStore
+            if (urlFromShadow != null && urlFromStore != null && urlFromShadow != urlFromStore) {
+                R1Log.w(
+                    "SettingsRepo",
+                    "shadow=$urlFromShadow disagrees with store=$urlFromStore; using shadow"
+                )
+            }
+            val haVersion = shadow.getString(SHADOW_HA_VERSION, null) ?: p[K.haVersion]
             val server = url?.takeIf { it.isNotBlank() }?.let { ServerConfig(url = it, haVersion = haVersion) }
-            if (urlFromStore == null && urlFromShadow != null) {
-                R1Log.w(
-                    "SettingsRepo",
-                    "DataStore had no server.url but shadow did ($urlFromShadow); using shadow value"
-                )
-            }
-            // Favorites: same shadow-fallback pattern as server.url.
-            val favoritesFromStore = p[K.favorites]?.takeIf { it.isNotBlank() }?.split('\n')
+            // Favorites: same shadow-first pattern as server.url.
             val favoritesFromShadow = shadow.getString(SHADOW_FAVORITES, null)?.takeIf { it.isNotBlank() }?.split('\n')
-            val favorites = favoritesFromStore ?: favoritesFromShadow.orEmpty()
-            if (favoritesFromStore == null && favoritesFromShadow != null) {
-                R1Log.w(
-                    "SettingsRepo",
-                    "DataStore had no favorites but shadow did (${favoritesFromShadow.size}); using shadow value"
-                )
-            }
+            val favoritesFromStore = p[K.favorites]?.takeIf { it.isNotBlank() }?.split('\n')
+            val favorites = favoritesFromShadow ?: favoritesFromStore.orEmpty()
             AppSettings(
                 server = server,
                 favorites = favorites,
