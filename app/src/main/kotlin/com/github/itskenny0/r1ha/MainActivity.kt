@@ -123,26 +123,28 @@ class MainActivity : ComponentActivity() {
         val src = graph.latestKeySource
         val acceptsDpad = src == WheelKeySource.AUTO || src == WheelKeySource.DPAD
         val acceptsVolume = src == WheelKeySource.AUTO || src == WheelKeySource.VOLUME
-        // Only emit on the *first* ACTION_DOWN of a press (repeatCount == 0). Holding a
-        // physical volume button would otherwise auto-repeat at ~30 Hz and runaway the
-        // optimistic percent; wheel detents always come through as repeatCount=0 events so
-        // this filter doesn't drop legitimate wheel input.
-        val fresh = event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0
+        val isDown = event.action == KeyEvent.ACTION_DOWN
+        // For physical VOLUME buttons, the framework synthesises auto-repeat events at ~30 Hz
+        // when the user holds the button — those have repeatCount > 0 and would run the
+        // brightness away if we fired on each one. The wheel emits each detent as a separate
+        // ACTION_DOWN with repeatCount=0, so we DO NOT apply this filter to DPAD keycodes
+        // (the wheel's typical mapping) — a buggy driver that emits repeatCount>0 per detent
+        // would otherwise silently lose every other wheel event.
         return when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> if (acceptsDpad) {
-                if (fresh) graph.wheelInput.emit(WheelEvent.Direction.UP)
+                if (isDown) graph.wheelInput.emit(WheelEvent.Direction.UP)
                 true
             } else super.dispatchKeyEvent(event)
             KeyEvent.KEYCODE_VOLUME_UP -> if (acceptsVolume) {
-                if (fresh) graph.wheelInput.emit(WheelEvent.Direction.UP)
+                if (isDown && event.repeatCount == 0) graph.wheelInput.emit(WheelEvent.Direction.UP)
                 true
             } else super.dispatchKeyEvent(event)
             KeyEvent.KEYCODE_DPAD_DOWN -> if (acceptsDpad) {
-                if (fresh) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
+                if (isDown) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
                 true
             } else super.dispatchKeyEvent(event)
             KeyEvent.KEYCODE_VOLUME_DOWN -> if (acceptsVolume) {
-                if (fresh) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
+                if (isDown && event.repeatCount == 0) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
                 true
             } else super.dispatchKeyEvent(event)
             else -> super.dispatchKeyEvent(event)
