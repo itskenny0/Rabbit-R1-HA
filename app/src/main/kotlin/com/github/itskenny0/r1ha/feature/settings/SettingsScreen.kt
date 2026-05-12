@@ -175,6 +175,24 @@ fun SettingsScreen(
                     onCheckedChange = { vm.setShowPositionDots(it) },
                 )
             }
+            item {
+                SwitchRow(
+                    label = "Hide card hint above current",
+                    subtitle = "Solid chrome backdrop covers the previous card's tail",
+                    checked = s.ui.hideCardTailAbove,
+                    onCheckedChange = { vm.setHideCardTailAbove(it) },
+                )
+            }
+            item {
+                LabeledControl(label = "Sensor decimals") {
+                    SegmentedIntPicker(
+                        options = listOf(0, 1, 2, 3, 4),
+                        selected = s.ui.maxDecimalPlaces,
+                        label = { if (it == 0) "INT" else "$it" },
+                        onSelect = { vm.setMaxDecimalPlaces(it) },
+                    )
+                }
+            }
 
             item { SectionDivider() }
 

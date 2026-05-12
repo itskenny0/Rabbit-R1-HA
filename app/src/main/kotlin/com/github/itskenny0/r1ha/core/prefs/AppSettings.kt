@@ -21,6 +21,16 @@ data class UiOptions(
     val showPositionDots: Boolean = true,
     /** Number of recent state-change entries shown on text/categorical SensorCard history. */
     val textHistoryLength: Int = 20,
+    /**
+     * When on, the chrome row at the top of the card stack draws a solid background so
+     * the previous card's tail-end can't peek through into the chrome area. On by
+     * default — most users wanted a clean transition rather than a "deck of cards"
+     * look. Off restores the original transparent-chrome behaviour where the previous
+     * card is visible under the chrome.
+     */
+    val hideCardTailAbove: Boolean = true,
+    /** Max decimal places shown for numeric sensor readings; 0 = integer, 2 = default. */
+    val maxDecimalPlaces: Int = 2,
 )
 
 data class Behavior(

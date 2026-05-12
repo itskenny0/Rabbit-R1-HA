@@ -51,6 +51,10 @@ object MinimalDarkTheme : R1Theme {
     @Composable
     override fun Card(model: CardRenderModel, modifier: Modifier, onTapToggle: () -> Unit) {
         val ui = LocalUiOptions.current
+        // Per-card accent override (from EntityOverride.accentColor) takes precedence
+        // over MinimalDark's single warm accent. Lets the user tint a card without
+        // switching themes.
+        val accent = model.accentOverride ?: this.accent
         Row(
             modifier = modifier
                 .fillMaxSize()

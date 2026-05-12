@@ -58,7 +58,10 @@ object PragmaticHybridTheme : R1Theme {
 
     @Composable
     override fun Card(model: CardRenderModel, modifier: Modifier, onTapToggle: () -> Unit) {
-        val accent = accentColor(model.accent)
+        // Per-card accent override (from EntityOverride.accentColor) takes precedence
+        // over the domain-derived role colour. Lets users tint individual cards without
+        // touching their HA setup.
+        val accent = model.accentOverride ?: accentColor(model.accent)
         val ui = LocalUiOptions.current
 
         Row(

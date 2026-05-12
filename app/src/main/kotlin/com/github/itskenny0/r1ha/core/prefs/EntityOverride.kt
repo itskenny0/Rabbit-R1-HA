@@ -29,10 +29,39 @@ data class EntityOverride(
      * prefix must be a domain we know how to dispatch (anything supported, basically).
      */
     val longPressTarget: String? = null,
+    /**
+     * Per-card override for [UiOptions.maxDecimalPlaces]. Null = inherit global. Range
+     * 0..6; 0 means "no decimals, integer only" which is useful for power meters and the
+     * like where a fractional watt is just noise. Only relevant for sensor entities; the
+     * customize dialog hides the picker for non-sensors.
+     */
+    val maxDecimalPlaces: Int? = null,
+    /**
+     * Per-card accent colour as an ARGB int, null = inherit the domain-derived accent.
+     * The accent flows through to the card's domain-tab, the percent suffix, the switch
+     * thumb when on, etc. Stored as Int rather than Color so the same encoding works in
+     * preferences without needing a separate serializer.
+     */
+    val accentColor: Int? = null,
 ) {
     companion object {
         /** Allowed text-scale steps. Picker offers a chip per step. */
         val TEXT_SCALES = listOf(0.7f, 0.85f, 1.0f, 1.15f, 1.3f)
+
+        /** Curated palette for the per-card accent picker. Hand-picked to feel cohesive
+         *  on the near-black background — no neon, no muddy mid-tones. Names track the
+         *  R1 design vocabulary where possible (Warm = stock orange). */
+        val ACCENT_PALETTE: List<Pair<String, Int>> = listOf(
+            "WARM" to 0xFFF36F21.toInt(),
+            "COOL" to 0xFF41BDF5.toInt(),
+            "GREEN" to 0xFF52C77F.toInt(),
+            "NEUTRAL" to 0xFFB0B0B0.toInt(),
+            "RED" to 0xFFE53935.toInt(),
+            "AMBER" to 0xFFFFB300.toInt(),
+            "VIOLET" to 0xFFB388FF.toInt(),
+            "PINK" to 0xFFFF6F91.toInt(),
+            "CYAN" to 0xFF26C6DA.toInt(),
+        )
 
         val NONE = EntityOverride()
     }

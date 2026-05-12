@@ -23,6 +23,9 @@ data class CardRenderModel(
     val domainGlyph: Glyph,
     val accent: AccentRole,
     val isAvailable: Boolean,
+    /** Optional per-card override colour from [EntityOverride.accentColor]. Themes
+     *  consult this before falling back to their role→colour mapping. */
+    val accentOverride: Color? = null,
 ) {
     enum class Glyph {
         LIGHT, FAN, COVER, MEDIA_PLAYER,

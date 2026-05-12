@@ -123,6 +123,8 @@ class SettingsRepository private constructor(
         val behaviorTapToggle = booleanPreferencesKey("behavior.tap_toggle")
         val behaviorHideStatus = booleanPreferencesKey("behavior.hide_status_bar")
         val uiTextHistoryLen = intPreferencesKey("ui.text_history_length")
+        val uiHideCardTail = booleanPreferencesKey("ui.hide_card_tail")
+        val uiMaxDecimals = intPreferencesKey("ui.max_decimals")
 
         val theme = stringPreferencesKey("theme")
         /**
@@ -189,6 +191,8 @@ class SettingsRepository private constructor(
                     showAreaLabel = p[K.uiShowArea] ?: true,
                     showPositionDots = p[K.uiShowDots] ?: true,
                     textHistoryLength = (p[K.uiTextHistoryLen] ?: 20).coerceIn(5, 100),
+                    hideCardTailAbove = p[K.uiHideCardTail] ?: true,
+                    maxDecimalPlaces = (p[K.uiMaxDecimals] ?: 2).coerceIn(0, 6),
                 ),
                 behavior = Behavior(
                     haptics = p[K.behaviorHaptics] ?: true,
@@ -238,6 +242,8 @@ class SettingsRepository private constructor(
                 p[K.behaviorTapToggle] = next.behavior.tapToToggle
                 p[K.behaviorHideStatus] = next.behavior.hideStatusBar
                 p[K.uiTextHistoryLen] = next.ui.textHistoryLength
+                p[K.uiHideCardTail] = next.ui.hideCardTailAbove
+                p[K.uiMaxDecimals] = next.ui.maxDecimalPlaces
                 p[K.theme] = next.theme.name
                 p[K.nameOverrides] = encodeNameOverrides(next.nameOverrides)
                 p[K.entityOverrides] = encodeEntityOverrides(next.entityOverrides)
@@ -326,7 +332,9 @@ private fun encodeEntityOverrides(map: Map<String, EntityOverride>): String {
         val pillStr = when (o.showOnOffPill) { true -> "1"; false -> "0"; null -> "?" }
         val areaStr = when (o.showAreaLabel) { true -> "1"; false -> "0"; null -> "?" }
         val lpEnc = o.longPressTarget?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
-        "$idEnc=${o.textScale}|$pillStr|$areaStr|$lpEnc"
+        val decStr = o.maxDecimalPlaces?.toString() ?: "?"
+        val accStr = o.accentColor?.toString() ?: "?"
+        "$idEnc=${o.textScale}|$pillStr|$areaStr|$lpEnc|$decStr|$accStr"
     }
 }
 
@@ -344,11 +352,15 @@ private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
             val area = when (parts.getOrNull(2)) { "1" -> true; "0" -> false; else -> null }
             val lpRaw = parts.getOrNull(3)?.takeIf { it.isNotBlank() }
             val lp = lpRaw?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrNull() }
+            val dec = parts.getOrNull(4)?.toIntOrNull()?.coerceIn(0, 6)
+            val acc = parts.getOrNull(5)?.toIntOrNull()
             id to EntityOverride(
                 textScale = scale,
                 showOnOffPill = pill,
                 showAreaLabel = area,
                 longPressTarget = lp?.takeIf { it.isNotBlank() },
+                maxDecimalPlaces = dec,
+                accentColor = acc,
             )
         }.getOrNull()
     }.toMap()

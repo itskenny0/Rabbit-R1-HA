@@ -41,6 +41,8 @@ class SettingsViewModel(
     fun setShowOnOffPill(show: Boolean) = update { it.copy(ui = it.ui.copy(showOnOffPill = show)) }
     fun setShowAreaLabel(show: Boolean) = update { it.copy(ui = it.ui.copy(showAreaLabel = show)) }
     fun setShowPositionDots(show: Boolean) = update { it.copy(ui = it.ui.copy(showPositionDots = show)) }
+    fun setHideCardTailAbove(hide: Boolean) = update { it.copy(ui = it.ui.copy(hideCardTailAbove = hide)) }
+    fun setMaxDecimalPlaces(n: Int) = update { it.copy(ui = it.ui.copy(maxDecimalPlaces = n)) }
 
     // ── Behavior ────────────────────────────────────────────────────────────
 

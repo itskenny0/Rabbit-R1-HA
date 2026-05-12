@@ -110,7 +110,8 @@ fun SensorCard(
             // suffix sits inline with the bottom of the digits like the "%" suffix on
             // scalar cards. Bigger negative letter-spacing on long readings (>4 chars,
             // e.g. "1234.5") keeps them on one line on the 240 px display.
-            val value = formatSensorValue(state.rawState)
+            val maxDecimals = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.maxDecimalPlaces
+            val value = formatSensorValue(state.rawState, maxDecimals = maxDecimals)
             val tightenForLength = if (value.length >= 4) R1.numeralXl.copy(letterSpacing = (-3).sp)
             else R1.numeralXl
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.wrapContentSize()) {

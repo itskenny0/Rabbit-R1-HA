@@ -142,6 +142,7 @@ fun CardStackScreen(
             showCounter = cards.size > 1,
             onOpenFavoritesPicker = onOpenFavoritesPicker,
             onOpenSettings = onOpenSettings,
+            solidBackdrop = appSettings.ui.hideCardTailAbove,
         )
     }
     }
@@ -354,10 +355,16 @@ private fun ChromeRow(
     showCounter: Boolean,
     onOpenFavoritesPicker: () -> Unit,
     onOpenSettings: () -> Unit,
+    solidBackdrop: Boolean = true,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // Solid backdrop hides the previous card's tail as it slides into the
+            // 72 dp content-padding area above the active card. Transparent backdrop
+            // keeps the deck-overlap aesthetic where the user can see the preceding
+            // card peeking under the chrome.
+            .then(if (solidBackdrop) Modifier.background(R1.Bg) else Modifier)
             .statusBarsPadding()
             .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,

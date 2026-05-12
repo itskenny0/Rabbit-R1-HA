@@ -3,6 +3,7 @@ package com.github.itskenny0.r1ha.feature.favoritespicker
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -134,6 +136,34 @@ fun RenameDialog(
                 onChange = { override = override.copy(showAreaLabel = it) },
             )
 
+            // ── COLOUR ──────────────────────────────────────────────────────────────
+            SectionHeader("COLOUR")
+            Text(
+                text = "Override the card's accent tone. DEFAULT = domain colour.",
+                style = R1.body,
+                color = R1.InkMuted,
+            )
+            Spacer(Modifier.height(6.dp))
+            ColourSwatchRow(
+                selected = override.accentColor,
+                onSelect = { override = override.copy(accentColor = it) },
+            )
+
+            // ── DECIMALS (sensors only — the option is meaningless on other entities)
+            if (entity.id.domain.isSensor) {
+                SectionHeader("DECIMALS")
+                Text(
+                    text = "Trim noisy precise readings. DEFAULT inherits the global setting.",
+                    style = R1.body,
+                    color = R1.InkMuted,
+                )
+                Spacer(Modifier.height(6.dp))
+                DecimalSegmentedRow(
+                    selected = override.maxDecimalPlaces,
+                    onSelect = { override = override.copy(maxDecimalPlaces = it) },
+                )
+            }
+
             // ── GESTURE ──────────────────────────────────────────────────────────────
             SectionHeader("GESTURE")
             Text(
@@ -232,3 +262,77 @@ private fun androidx.compose.foundation.layout.RowScope.TristateCell(
 private fun CellDivider() {
     Box(modifier = Modifier.width(1.dp).height(34.dp).background(R1.Bg))
 }
+
+/** Horizontal-scrolling swatch row for the per-card accent colour. First chip resets to
+ *  default (domain colour); the rest are pulled from [EntityOverride.ACCENT_PALETTE]. */
+@Composable
+private fun ColourSwatchRow(
+    selected: Int?,
+    onSelect: (Int?) -> Unit,
+) {
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(scroll),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // DEFAULT chip — wider than the swatches so it reads as a text label rather than
+        // an unidentified colour-less square.
+        Box(
+            modifier = Modifier
+                .padding(end = 6.dp)
+                .clip(R1.ShapeS)
+                .background(if (selected == null) R1.AccentWarm else R1.Bg)
+                .let { m -> if (selected == null) m else m.border(1.dp, R1.Hairline, R1.ShapeS) }
+                .r1Pressable({ onSelect(null) })
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            Text(
+                text = "DEFAULT",
+                style = R1.labelMicro,
+                color = if (selected == null) R1.Bg else R1.InkSoft,
+            )
+        }
+        EntityOverride.ACCENT_PALETTE.forEach { (label, argb) ->
+            val isSelected = selected == argb
+            // Each swatch is a coloured square; selected one gets a hairline accent ring
+            // so the choice reads at a glance.
+            Box(
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .size(28.dp)
+                    .clip(R1.ShapeS)
+                    .background(androidx.compose.ui.graphics.Color(argb))
+                    .let { m ->
+                        if (isSelected) m.border(2.dp, R1.Ink, R1.ShapeS)
+                        else m
+                    }
+                    .r1Pressable({ onSelect(argb) }),
+            )
+            // `label` is unused visually but kept for future "hover label" UX —
+            // currently swatch is just colour. Suppress unused with a no-op reference.
+            @Suppress("UNUSED_EXPRESSION") label
+        }
+    }
+}
+
+@Composable
+private fun DecimalSegmentedRow(
+    selected: Int?,
+    onSelect: (Int?) -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxWidth().clip(R1.ShapeS).background(R1.SurfaceMuted)) {
+        TristateCell(text = "DEFAULT", selected = selected == null, onClick = { onSelect(null) })
+        CellDivider()
+        listOf(0, 1, 2, 3, 4).forEachIndexed { idx, n ->
+            TristateCell(
+                text = if (n == 0) "INT" else "$n",
+                selected = selected == n,
+                onClick = { onSelect(n) },
+            )
+            if (idx < 4) CellDivider()
+        }
+    }
+}
+

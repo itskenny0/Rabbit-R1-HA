@@ -109,45 +109,38 @@ fun EntityCard(
     val mergedUi = baseUi.copy(
         showOnOffPill = perCardOverride.showOnOffPill ?: baseUi.showOnOffPill,
         showAreaLabel = perCardOverride.showAreaLabel ?: baseUi.showAreaLabel,
+        maxDecimalPlaces = perCardOverride.maxDecimalPlaces ?: baseUi.maxDecimalPlaces,
     )
     androidx.compose.runtime.CompositionLocalProvider(
         com.github.itskenny0.r1ha.core.theme.LocalUiOptions provides mergedUi,
     ) {
     Box(modifier = modifier.then(tapModifier)) {
         val themeAlpha = if (state.isAvailable) 1f else 0.35f
+        // Per-card accent override resolves once here so every card variant gets the
+        // same colour. Null = fall back to the domain-derived role colour.
+        val overrideAccent = perCardOverride.accentColor?.let { androidx.compose.ui.graphics.Color(it) }
+        val resolvedAccent = overrideAccent ?: resolveAccentColor(accentRole)
         if (state.id.domain.isSensor) {
-            // Read-only sensor — render SensorCard. No tap, no wheel; the EntityCard's
-            // outer pressable also short-circuits because we pass tapToToggleEnabled=true
-            // but the SensorCard itself doesn't react to onTapToggle. (The wrapper still
-            // does the press-feedback dip, which is fine — it lets the user know the card
-            // received their tap, even if nothing changes.)
             SensorCard(
                 state = state,
-                accent = resolveAccentColor(accentRole),
+                accent = resolvedAccent,
                 domainLabel = sensorDomainLabel(state.id.domain),
                 showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
                 modifier = Modifier.fillMaxSize().alpha(themeAlpha),
             )
         } else if (state.id.domain.isAction) {
-            // Stateless trigger entity — scene, script, or button. Doesn't fit the
-            // scalar-percent OR the on/off-switch model; renders as ActionCard with one
-            // big ACTIVATE tile. Wheel input is ignored on these in the VM; only tap
-            // (whether on the whole card or on the button) fires the trigger.
             ActionCard(
                 state = state,
-                accent = resolveAccentColor(accentRole),
+                accent = resolvedAccent,
                 domainLabel = actionDomainLabel(state.id.domain),
                 showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
                 onFire = onTapToggle,
                 modifier = Modifier.fillMaxSize().alpha(themeAlpha),
             )
         } else if (!state.supportsScalar) {
-            // On/off-only entity — render the switch variant. We bypass the theme.Card path
-            // because the percent slider doesn't make sense here; the switch card uses the
-            // same R1 design tokens so it looks consistent across themes.
             SwitchCard(
                 state = state,
-                accent = resolveAccentColor(accentRole),
+                accent = resolvedAccent,
                 domainLabel = domainLabel(glyph),
                 showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
                 onTapToggle = onTapToggle,
@@ -165,6 +158,7 @@ fun EntityCard(
                     domainGlyph = glyph,
                     accent = accentRole,
                     isAvailable = state.isAvailable,
+                    accentOverride = overrideAccent,
                 ),
                 modifier = Modifier
                     .fillMaxSize()
