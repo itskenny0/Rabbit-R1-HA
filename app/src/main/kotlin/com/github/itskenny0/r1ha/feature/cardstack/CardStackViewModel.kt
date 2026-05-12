@@ -97,13 +97,17 @@ class CardStackViewModel(
                 val cur = _state.value
                 val clampedIndex = if (ordered.isEmpty()) 0
                     else cur.currentIndex.coerceIn(0, ordered.size - 1)
-                // Drop optimistic entries that the server has caught up on.
-                val staleOptimistic = cur.optimisticPercents.filter { (id, optPct) ->
+                // Trim optimistic entries in two cases:
+                //   1) The server caught up (cached value matches the optimistic override).
+                //   2) The entity is no longer in the favourites set at all (user un-favourited
+                //      it before HA echoed back). Without (2) the override map slowly grows
+                //      every time someone toggles a favourite off.
+                val favoriteSet = ordered.map { it.id }.toSet()
+                val newOptimistic = cur.optimisticPercents.filter { (id, optPct) ->
+                    if (id !in favoriteSet) return@filter false
                     val cached = entityMap[id]?.percent
-                    cached != null && cached == optPct
-                }.keys
-                val newOptimistic = if (staleOptimistic.isEmpty()) cur.optimisticPercents
-                    else cur.optimisticPercents - staleOptimistic
+                    cached == null || cached != optPct
+                }
                 _state.value = cur.copy(
                     cards = ordered,
                     currentIndex = clampedIndex,
