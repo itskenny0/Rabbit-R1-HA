@@ -134,16 +134,29 @@ class CardStackViewModel(
                 val cur = _state.value
                 val clampedIndex = if (ordered.isEmpty()) 0
                     else cur.currentIndex.coerceIn(0, ordered.size - 1)
-                // Trim optimistic entries in two cases:
-                //   1) The server caught up (cached value matches the optimistic override).
+                // Trim optimistic entries in three cases:
+                //   1) The server caught up — for SCALAR entities, that means cached percent
+                //      matches the optimistic value. For SWITCH entities, the repo never
+                //      produces a percent (only isOn), so we instead check whether the
+                //      cached isOn matches our optimistic intent (override > 0). Without this
+                //      switch-aware branch, an automation that flips the entity from outside
+                //      the app leaves the optimistic stuck and the card keeps showing the
+                //      old state until the user manually toggles it back.
                 //   2) The entity is no longer in the favourites set at all (user un-favourited
                 //      it before HA echoed back). Without (2) the override map slowly grows
                 //      every time someone toggles a favourite off.
+                //   3) The cache hasn't seen this entity yet — keep the optimistic so the UI
+                //      doesn't bounce while waiting for the first state.
                 val favoriteSet = ordered.map { it.id }.toSet()
                 val newOptimistic = cur.optimisticPercents.filter { (id, optPct) ->
                     if (id !in favoriteSet) return@filter false
-                    val cached = entityMap[id]?.percent
-                    cached == null || cached != optPct
+                    val cached = entityMap[id] ?: return@filter true
+                    if (cached.supportsScalar) {
+                        val cachedPct = cached.percent
+                        cachedPct == null || cachedPct != optPct
+                    } else {
+                        cached.isOn != (optPct > 0)
+                    }
                 }
                 _state.value = cur.copy(
                     cards = ordered,
