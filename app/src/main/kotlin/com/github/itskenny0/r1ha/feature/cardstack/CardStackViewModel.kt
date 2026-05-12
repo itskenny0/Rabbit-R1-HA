@@ -13,7 +13,6 @@ import com.github.itskenny0.r1ha.core.input.WheelEvent
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.util.R1Log
-import com.github.itskenny0.r1ha.core.util.Toaster
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -71,23 +70,9 @@ class CardStackViewModel(
 
     init {
         observeFavorites()
-        announceServerOnce()
         // Wheel events are NOT collected here. They're collected by CardStackScreen only
         // while it is in composition, so spinning the wheel from any other screen does not
         // silently change the active card's brightness.
-    }
-
-    /** Show a one-shot toast on first mount so the user can see the resolved server URL. */
-    private fun announceServerOnce() {
-        viewModelScope.launch {
-            val s = settings.settings.first()
-            val url = s.server?.url
-            if (url != null) {
-                Toaster.show("Connected to $url")
-            } else {
-                Toaster.show("No server configured — open Settings", long = true)
-            }
-        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
