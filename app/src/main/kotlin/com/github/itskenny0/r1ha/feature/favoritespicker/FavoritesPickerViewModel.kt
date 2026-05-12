@@ -41,9 +41,14 @@ class FavoritesPickerViewModel(
             val favs = snapshot.favorites
             all.fold(
                 onSuccess = { list ->
-                    entitiesCache = list
-                    _ui.value = UiState(loading = false, rows = buildRows(list, favs))
-                    R1Log.i("FavoritesPicker.refresh", "fetched ${list.size} entities")
+                    // Filter out on/off-only entities (no settable scalar) — the wheel has
+                    // nothing to do on them, and HA silently ignores brightness_pct on a
+                    // non-dimmable light. Existing favourites that no longer pass this filter
+                    // remain accessible via CardStack (where they show with the on/off pill).
+                    val filtered = list.filter { it.supportsScalar }
+                    entitiesCache = filtered
+                    _ui.value = UiState(loading = false, rows = buildRows(filtered, favs))
+                    R1Log.i("FavoritesPicker.refresh", "fetched ${list.size} entities, ${filtered.size} scalar-capable")
                 },
                 onFailure = {
                     R1Log.e("FavoritesPicker.refresh", "fetch failed", it)

@@ -273,6 +273,7 @@ class DefaultHaRepository(
             raw = rawNum,
             lastChanged = runCatching { Instant.parse(raw.lastChanged ?: "") }.getOrDefault(Instant.now()),
             isAvailable = available,
+            supportsScalar = supportsScalar(id.domain, raw.attributes),
         )
         cache.update { it + (id to newState) }
     }
@@ -289,6 +290,40 @@ class DefaultHaRepository(
         Domain.FAN -> attrs["percentage"].asInt()
         Domain.COVER -> attrs["current_position"].asInt()
         Domain.MEDIA_PLAYER -> attrs["volume_level"].asDouble()
+    }
+
+    /**
+     * Whether the entity exposes a settable scalar (brightness/percentage/position/volume) that
+     * the wheel can drive. Used to filter on/off-only entities out of the Favourites picker —
+     * otherwise users see brightness % controls for switches dressed as lights, which the wheel
+     * can change visually but HA silently ignores.
+     */
+    private fun supportsScalar(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Boolean = when (domain) {
+        Domain.LIGHT -> {
+            // HA's `color_mode` is "onoff" for switches and brightness-less lights; anything
+            // else means at least brightness control. Some integrations advertise via
+            // `supported_color_modes` — accept either signal.
+            val mode = attrs["color_mode"].asString()
+            val supportedModes = (attrs["supported_color_modes"] as? kotlinx.serialization.json.JsonArray)
+                ?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
+            when {
+                mode != null && mode != "onoff" -> true
+                supportedModes.any { it != "onoff" } -> true
+                // No color_mode info yet (entity off, never reported). Fall back to brightness
+                // attribute presence as a hint that the platform supports it.
+                attrs["brightness"] != null -> true
+                else -> false
+            }
+        }
+        // FanEntityFeature.SET_SPEED = bit 0 of supported_features.
+        Domain.FAN -> ((attrs["supported_features"].asInt() ?: 0) and 1) != 0 ||
+            attrs["percentage"] != null
+        // CoverEntityFeature.SET_POSITION = bit 2.
+        Domain.COVER -> ((attrs["supported_features"].asInt() ?: 0) and 4) != 0 ||
+            attrs["current_position"] != null
+        // MediaPlayerEntityFeature.VOLUME_SET = bit 2.
+        Domain.MEDIA_PLAYER -> ((attrs["supported_features"].asInt() ?: 0) and 4) != 0 ||
+            attrs["volume_level"] != null
     }
 
     override fun observe(entities: Set<EntityId>): Flow<Map<EntityId, EntityState>> =
@@ -333,6 +368,7 @@ class DefaultHaRepository(
                     raw = rawNum,
                     lastChanged = runCatching { Instant.parse(row.last_changed ?: "") }.getOrDefault(Instant.now()),
                     isAvailable = available,
+                    supportsScalar = supportsScalar(id.domain, attrs),
                 )
             }
         }

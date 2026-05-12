@@ -14,6 +14,13 @@ data class EntityState(
     val raw: Number?,
     val lastChanged: Instant,
     val isAvailable: Boolean,
+    /**
+     * Does HA expose a settable scalar for this entity? `false` for an on/off-only light
+     * (color_mode = "onoff"), a fan without speed support, a cover without position support,
+     * a media_player without VOLUME_SET. Used to keep on/off-only entities out of the
+     * Favourites picker — there'd be nothing for the wheel to do.
+     */
+    val supportsScalar: Boolean = true,
 ) {
     companion object {
         fun normaliseLightBrightness(raw: Int): Int = ((raw.coerceIn(0, 255)) * 100.0 / 255.0).roundToInt()
