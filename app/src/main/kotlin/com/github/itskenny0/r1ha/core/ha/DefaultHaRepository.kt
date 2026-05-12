@@ -60,6 +60,12 @@ class DefaultHaRepository(
     /** Tracks consecutive reconnect attempts so BackoffPolicy actually backs off. */
     @Volatile private var reconnectAttempt: Int = 0
 
+    /**
+     * Tracks AuthLost-driven refresh attempts so we don't tight-loop if a misconfigured HA
+     * keeps issuing access tokens that fail auth. Reset on Connected.
+     */
+    @Volatile private var authLostRefreshAttempt: Int = 0
+
     private val debouncer = DebouncedCaller<EntityId, ServiceCall>(scope, debounceMillis = 120) { _, call ->
         val id = ws.nextRequestId()
         val deferred = CompletableDeferred<Result<Unit>>()
@@ -86,6 +92,7 @@ class DefaultHaRepository(
                 when (st) {
                     is ConnectionState.Connected -> {
                         reconnectAttempt = 0
+                        authLostRefreshAttempt = 0
                         resubscribe()
                         seedCacheFromHa()
                     }
@@ -101,8 +108,18 @@ class DefaultHaRepository(
                         // expired. Try one refresh; if it succeeds, reconnect. If the refresh
                         // itself fails (revoked refresh token, server unreachable, etc.) we stay
                         // in AuthLost and the user has to manually sign out & reconnect.
-                        R1Log.w("HaRepo.authLost", "reason=${st.reason}; attempting token refresh")
+                        // Bounded to MAX_AUTHLOST_RETRIES to avoid tight-looping if HA keeps
+                        // issuing access tokens that fail auth (rare misconfiguration).
+                        val attempt = authLostRefreshAttempt
+                        if (attempt >= MAX_AUTHLOST_RETRIES) {
+                            R1Log.w("HaRepo.authLost", "max refresh attempts ($attempt) reached; staying AuthLost")
+                            return@onEach
+                        }
+                        authLostRefreshAttempt = attempt + 1
+                        R1Log.w("HaRepo.authLost", "reason=${st.reason}; attempting token refresh (try ${attempt + 1})")
                         scope.launch {
+                            // Small backoff so a misbehaving HA doesn't get hammered.
+                            delay(backoff.delayForAttempt(attempt))
                             if (refresher?.forceRefresh() == true) {
                                 R1Log.i("HaRepo.authLost", "refresh succeeded; reconnecting")
                                 connectFromSettings()
@@ -316,6 +333,10 @@ class DefaultHaRepository(
 
     /** Single Json instance for /api/states deserialisation to avoid the per-call allocation lint. */
     private val listStatesJson = Json { ignoreUnknownKeys = true }
+
+    private companion object {
+        const val MAX_AUTHLOST_RETRIES = 3
+    }
 
     @kotlinx.serialization.Serializable
     private data class RawStateRow(
