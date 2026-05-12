@@ -1,6 +1,7 @@
 package com.github.itskenny0.r1ha.core.theme
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -138,6 +139,10 @@ object PragmaticHybridTheme : R1Theme {
                 percent = model.percent,
                 accent = accent,
                 tickLabels = model.meterLabels,
+                // Rainbow fill when the wheel is in HUE mode — the bar then doubles as
+                // a colour reference so the user can see what the wheel is selecting
+                // (top: red, scrolling through to violet/red again at the bottom).
+                rainbow = model.lightWheelMode == com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE,
             )
         }
     }
@@ -260,6 +265,11 @@ internal fun VerticalTapeMeter(
     /** Top→bottom tick labels. Null = the default 0..100 percent labels. Climate /
      *  number cards pass their domain-native range so the meter reads in real units. */
     tickLabels: List<String>? = null,
+    /** When true (HUE mode on a light card), render the FULL track as a rainbow
+     *  gradient and use a white-bordered thumb at the current hue instead of an
+     *  accent-coloured grow-from-bottom fill. The track then doubles as a colour
+     *  reference for the wheel. */
+    rainbow: Boolean = false,
 ) {
     val fraction = rememberSliderFraction(percent).coerceIn(0f, 1f)
     val labels = tickLabels ?: listOf("100", "75", "50", "25", "0")
@@ -285,38 +295,60 @@ internal fun VerticalTapeMeter(
                 .fillMaxHeight()
                 .width(12.dp),
         ) {
-            // Hairline track.
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(2.dp)
-                    .align(Alignment.Center)
-                    .background(R1.SurfaceMuted),
-            )
-            // Fill — grows from the bottom up to `fraction` of available height.
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight(fraction)
-                    .width(4.dp)
-                    .align(Alignment.BottomCenter)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(accent),
-            )
-            // Thumb — a 12 dp wide capsule sitting at the top of the fill.
+            if (rainbow) {
+                // Rainbow track — full-height vertical gradient covering the hue
+                // wheel (0..360°). Top = red (0°), middle = green (~120°), bottom =
+                // violet/red again (300°→360°). Slightly wider than the standard
+                // 2 dp hairline so the colours are actually legible.
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(6.dp)
+                        .align(Alignment.Center)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(androidx.compose.ui.graphics.Brush.verticalGradient(rainbowStops())),
+                )
+            } else {
+                // Hairline track.
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(2.dp)
+                        .align(Alignment.Center)
+                        .background(R1.SurfaceMuted),
+                )
+                // Fill — grows from the bottom up to `fraction` of available height.
+                // Skipped in rainbow mode because there's no "level" being displayed;
+                // the thumb position alone communicates the wheel value.
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight(fraction)
+                        .width(4.dp)
+                        .align(Alignment.BottomCenter)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(accent),
+                )
+            }
+            // Thumb — a 12 dp wide capsule sitting at the top of the fill. In rainbow
+            // mode the thumb is white-bordered so it stays visible against any colour
+            // of the rainbow track.
             Box(
                 modifier = Modifier.fillMaxHeight(),
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 Spacer(Modifier.fillMaxHeight(fraction))
             }
-            // Thumb capsule — positioned by chaining a Spacer that pushes it up by `fraction`.
-            ThumbCapsule(fraction = fraction, accent = accent)
+            ThumbCapsule(
+                fraction = fraction,
+                accent = if (rainbow) R1.Ink else accent,
+                borderInRainbow = rainbow,
+            )
         }
     }
 }
 
 @Composable
-private fun ThumbCapsule(fraction: Float, accent: Color) {
+private fun ThumbCapsule(fraction: Float, accent: Color, borderInRainbow: Boolean = false) {
     // BoxWithConstraints lets us compute the absolute thumb Y from `fraction` cheaply —
     // recomposes only when `fraction` does (post-spring settle).
     androidx.compose.foundation.layout.BoxWithConstraints(
@@ -333,10 +365,13 @@ private fun ThumbCapsule(fraction: Float, accent: Color) {
         Box(
             modifier = Modifier
                 .offset(y = offsetFromTop)
-                .width(12.dp)
-                .height(thumbH)
+                .width(14.dp)
+                .height(thumbH + if (borderInRainbow) 2.dp else 0.dp)
                 .clip(RoundedCornerShape(3.dp))
-                .background(accent),
+                .background(accent)
+                .let { m ->
+                    if (borderInRainbow) m.border(1.dp, R1.Bg, RoundedCornerShape(3.dp)) else m
+                },
         )
     }
 }
@@ -368,26 +403,28 @@ internal fun LightControlsRow(
     val visibleModes = availableModes.ifEmpty {
         listOf(com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS)
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        // Segmented mode buttons — only render the ones the bulb supports. A single-
-        // mode (brightness-only) bulb gets nothing because there's no choice to make,
-        // matching the original cycle-chip's "size ≤ 1 = no-op" behaviour.
+    // Column rather than Row — the R1 is a portrait device with abundant vertical
+    // space but only 240 px wide, so a horizontal row of three mode buttons plus an
+    // FX button collided into the right-side meter. Stacking them gives each button
+    // the full card width and stays comfortable even when the user picks long labels.
+    Column(modifier = Modifier.fillMaxWidth()) {
         if (visibleModes.size > 1) {
             visibleModes.forEachIndexed { idx, mode ->
                 val active = mode == currentMode
                 val label = when (mode) {
                     com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS -> "BRIGHT"
                     com.github.itskenny0.r1ha.core.ha.LightWheelMode.COLOR_TEMP -> "WHITE"
-                    com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> "COLOUR"
+                    com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> "HUE"
                 }
                 Box(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .clip(R1.ShapeS)
                         .background(if (active) accent else R1.SurfaceMuted)
                         .let { m ->
                             if (onSetMode != null) m.r1Pressable(onClick = { onSetMode(entityId, mode) }) else m
                         }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
                 ) {
                     Text(
                         text = label,
@@ -395,30 +432,45 @@ internal fun LightControlsRow(
                         color = if (active) R1.Bg else R1.InkSoft,
                     )
                 }
-                if (idx < visibleModes.lastIndex) Spacer(Modifier.width(4.dp))
+                if (idx < visibleModes.lastIndex) Spacer(Modifier.height(4.dp))
             }
         }
-        // EFFECTS button — surfaces only on bulbs that expose effect_list. Label
-        // includes the active effect name so the user can see what's running without
-        // opening the picker. Tap requests the screen-level overlay via
-        // [LocalOnOpenEffectPicker] — the actual picker sheet lives in CardStackScreen
-        // so it can render full-screen above all card chrome rather than being clipped
-        // to this row's bounds.
+        // EFFECTS button — surfaces only on bulbs that expose effect_list. The label
+        // is just "FX" with a small ● indicator on the right when an effect is active,
+        // never the effect name itself (long Nanoleaf effect names like "Northern
+        // Lights" would dominate the card; the active name belongs in the picker, not
+        // on the dismissed button). Tap opens the screen-level picker via
+        // [LocalOnOpenEffectPicker] — the actual sheet lives in CardStackScreen so it
+        // can render full-screen above the card chrome.
         if (effectList.isNotEmpty() && onOpenPicker != null) {
-            if (visibleModes.size > 1) Spacer(Modifier.width(8.dp))
+            if (visibleModes.size > 1) Spacer(Modifier.height(4.dp))
             val active = !currentEffect.isNullOrBlank()
             Box(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .clip(R1.ShapeS)
-                    .background(if (active) accent else R1.SurfaceMuted)
+                    .background(R1.SurfaceMuted)
                     .r1Pressable(onClick = { onOpenPicker(entityId) })
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
-                Text(
-                    text = if (active) "FX · ${currentEffect!!.uppercase()}" else "FX",
-                    style = R1.labelMicro,
-                    color = if (active) R1.Bg else R1.InkSoft,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "FX",
+                        style = R1.labelMicro,
+                        color = R1.InkSoft,
+                    )
+                    if (active) {
+                        Spacer(Modifier.width(6.dp))
+                        // Filled dot in accent reads as "an effect is on" without
+                        // dominating the button. Open the picker to see / change which.
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(accent),
+                        )
+                    }
+                }
             }
         }
     }
@@ -526,6 +578,23 @@ private fun EffectRow(label: String, isActive: Boolean, accent: Color, onClick: 
         }
     }
 }
+
+/**
+ * Vertical-gradient colour stops for the HUE-mode rainbow track. Distinct points are
+ * pinned at red / yellow / green / cyan / blue / magenta / red so the gradient walks
+ * once around the colour wheel from top (0°) to bottom (360°). The wheel-in-hue-mode
+ * percent maps 0..100 onto 0..360°, so the user can read off the rough colour by
+ * looking where the thumb sits on the track.
+ */
+private fun rainbowStops(): List<Color> = listOf(
+    Color(0xFFFF0000), // 0°   red
+    Color(0xFFFFFF00), // 60°  yellow
+    Color(0xFF00FF00), // 120° green
+    Color(0xFF00FFFF), // 180° cyan
+    Color(0xFF0000FF), // 240° blue
+    Color(0xFFFF00FF), // 300° magenta
+    Color(0xFFFF0000), // 360° red — closes the wheel
+)
 
 /** Alias for `androidx.compose.foundation.verticalScroll` so the picker call site reads
  *  cleanly. Keeps the import surface small at the top of the file. */

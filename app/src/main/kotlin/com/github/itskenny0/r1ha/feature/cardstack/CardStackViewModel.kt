@@ -475,12 +475,23 @@ class CardStackViewModel(
      * Apply a specific effect to a light, picked from its [EntityState.effectList]. Null
      * clears the effect (HA accepts the literal string "None" for "no effect"). Used
      * by the effect picker sheet so the user can jump directly to a named effect rather
-     * than tapping through the cycle.
+     * than tapping through the cycle. Also force the wheel back to BRIGHTNESS — once an
+     * effect is running it owns the bulb's colour, so HUE / WHITE wheel modes can't do
+     * anything useful and only brightness remains as a meaningful axis to nudge. When
+     * the user clears the effect (effect = null) the mode is left alone so they don't
+     * lose a HUE/WHITE selection they may want to return to.
      */
     fun setLightEffect(entityId: EntityId, effect: String?) {
         val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
         if (entity.id.domain != Domain.LIGHT) return
         R1Log.i("CardStack.setEffect", "$entityId: ${entity.effect ?: "none"} → ${effect ?: "none"}")
+        if (!effect.isNullOrBlank()) {
+            val brightnessMode = com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS
+            val cur = _state.value.lightWheelMode[entityId]
+            if (cur != null && cur != brightnessMode) {
+                setLightWheelMode(entityId, brightnessMode)
+            }
+        }
         viewModelScope.launch {
             haRepository.call(ServiceCall.setLightEffect(entityId, effect))
         }

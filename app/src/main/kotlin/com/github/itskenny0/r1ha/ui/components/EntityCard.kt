@@ -141,6 +141,7 @@ fun EntityCard(
                 accent = resolvedAccent,
                 domainLabel = sensorDomainLabel(state.id.domain),
                 showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
+                textSizeSp = perCardOverride.textSizeSp,
                 modifier = Modifier.fillMaxSize().alpha(themeAlpha),
             )
         } else if (state.id.domain.isAction) {

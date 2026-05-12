@@ -43,6 +43,14 @@ fun SensorCard(
     accent: Color,
     domainLabel: String,
     showArea: Boolean,
+    /**
+     * Absolute readout size in sp from [EntityOverride.textSizeSp]. Null = the smart
+     * default — long-text sensors auto-shrink so a news headline / tweet / verbose
+     * enum state can fit on a single card without truncation. The user's customize
+     * dialog can override this to lock the size at any sp value in
+     * [EntityOverride.TEXT_SIZES_SP] regardless of string length.
+     */
+    textSizeSp: Int? = null,
     modifier: Modifier = Modifier,
 ) {
     val isBinary = state.id.domain == Domain.BINARY_SENSOR
@@ -100,31 +108,54 @@ fun SensorCard(
             // common device_class values to friendlier words; everything else falls back
             // to the raw state text uppercased.
             val word = friendlyBinaryWord(state)
+            val (bodyStyle, _) = sensorReadoutStyle(word, textSizeSp)
             Text(
                 text = word,
-                style = R1.numeralXl,
+                style = bodyStyle,
                 color = if (state.isOn) accent else R1.InkSoft,
+                softWrap = true,
             )
         } else {
-            // Plain sensors — render the rawState as the body. Use a Row so the unit
-            // suffix sits inline with the bottom of the digits like the "%" suffix on
-            // scalar cards. Bigger negative letter-spacing on long readings (>4 chars,
-            // e.g. "1234.5") keeps them on one line on the 240 px display.
+            // Plain sensors — render the rawState as the body. A sensor's value can be
+            // anything from "21" (temperature) to a 240-char weather summary or an
+            // entire tweet, so the body needs to fluidly scale. When the user hasn't
+            // pinned a size via the customize dialog, [sensorReadoutStyle] picks a
+            // smart default based on string length so long values wrap to multiple
+            // lines at a legible size rather than overflowing the card. Soft-wrap is
+            // enabled so long text just keeps wrapping; the surrounding Column gives
+            // it the full card width to consume.
             val maxDecimals = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.maxDecimalPlaces
             val value = formatSensorValue(state.rawState, maxDecimals = maxDecimals)
-            val tightenForLength = if (value.length >= 4) R1.numeralXl.copy(letterSpacing = (-3).sp)
-            else R1.numeralXl
-            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.wrapContentSize()) {
-                Text(text = value, style = tightenForLength, color = R1.Ink)
-                if (!state.unit.isNullOrBlank()) {
+            val (bodyStyle, suffixStyle) = sensorReadoutStyle(value, textSizeSp)
+            // Row when there's a unit suffix (it sits inline with the bottom of the
+            // value, R1's "21 °C" idiom); for unitless long-text sensors we drop the
+            // Row entirely so the wrapping Text gets the full container width without
+            // any horizontal-row layout overhead.
+            if (!state.unit.isNullOrBlank()) {
+                Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = value,
+                        style = bodyStyle,
+                        color = R1.Ink,
+                        softWrap = true,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = state.unit,
-                        style = R1.numeralM,
+                        style = suffixStyle,
                         color = accent,
-                        modifier = Modifier.padding(bottom = 14.dp),
+                        modifier = Modifier.padding(bottom = 6.dp),
                     )
                 }
+            } else {
+                Text(
+                    text = value,
+                    style = bodyStyle,
+                    color = R1.Ink,
+                    softWrap = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
 
@@ -180,6 +211,48 @@ fun SensorCard(
             color = R1.InkMuted,
         )
     }
+}
+
+/**
+ * Compute the body + suffix [androidx.compose.ui.text.TextStyle] for a sensor readout.
+ *
+ * When the user has pinned a size via the per-card customize dialog ([override] is
+ * non-null), that size is used verbatim and the suffix is scaled proportionally.
+ *
+ * Otherwise we smart-default: very short values (a temperature like "21" or "21.5")
+ * keep the full 72 sp display, but as the string grows we step down through a curated
+ * size ramp so longer content — enum states, RSS-style summaries, full tweets — fits
+ * on the card without truncation. The breakpoints assume a monospace font on a 240 px
+ * wide card (~20 chars/line at 12 sp).
+ */
+private fun sensorReadoutStyle(
+    value: String,
+    override: Int?,
+): Pair<androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle> {
+    val bodySp: Float = when {
+        override != null -> override.toFloat()
+        value.length <= 4 -> 72f
+        value.length <= 8 -> 56f
+        value.length <= 14 -> 40f
+        value.length <= 24 -> 28f
+        value.length <= 48 -> 20f
+        value.length <= 96 -> 14f
+        value.length <= 200 -> 11f
+        else -> 9f
+    }
+    // Lighten letter-spacing on the smaller sizes — the default -2sp tracking on
+    // numeralXl reads cramped when shrunk; reset to 0 below 24 sp.
+    val tracking = if (bodySp < 24f) 0.sp else (-2).sp
+    val body = R1.numeralXl.copy(
+        fontSize = bodySp.sp,
+        lineHeight = (bodySp * 1.15f).sp,
+        letterSpacing = tracking,
+    )
+    // Suffix tracks the body proportionally but never grows above the default 20 sp,
+    // and floors at 8 sp so it stays legible alongside a 9 sp body.
+    val suffixSp = (bodySp * 20f / 72f).coerceIn(8f, 20f)
+    val suffix = R1.numeralM.copy(fontSize = suffixSp.sp)
+    return body to suffix
 }
 
 /**
