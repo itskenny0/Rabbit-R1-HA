@@ -1,11 +1,16 @@
 package com.github.itskenny0.r1ha.core.theme
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -14,48 +19,101 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.ThemeId
 
+/**
+ * "Minimal Dark" — pure black, single orange accent, no ornamental colour. Card layout is the
+ * same instrument-panel as Pragmatic Hybrid but stripped down: no per-domain tinting, no
+ * tick labels under the slider, no on/off pill background (just inline text).
+ */
 object MinimalDarkTheme : R1Theme {
     override val id = ThemeId.MINIMAL_DARK
     override val displayName = "Minimal Dark"
     override val systemBars = SystemBarColors(status = Color.Black, nav = Color.Black)
     override val baseline = sharedDarkBaseline.copy(background = Color.Black, surface = Color.Black)
 
-    private val orange = Color(0xFFF36F21)
+    private val accent = R1.AccentWarm
+
+    private fun domainLabel(glyph: CardRenderModel.Glyph): String = when (glyph) {
+        CardRenderModel.Glyph.LIGHT -> "LIGHT"
+        CardRenderModel.Glyph.FAN -> "FAN"
+        CardRenderModel.Glyph.COVER -> "COVER"
+        CardRenderModel.Glyph.MEDIA_PLAYER -> "MEDIA"
+    }
 
     @Composable
-    override fun Card(
-        model: CardRenderModel,
-        modifier: Modifier,
-        onTapToggle: () -> Unit,
-    ) {
+    override fun Card(model: CardRenderModel, modifier: Modifier, onTapToggle: () -> Unit) {
         val ui = LocalUiOptions.current
-        Box(modifier = modifier.fillMaxSize().background(Color.Black).padding(14.dp)) {
-            if (ui.showAreaLabel) {
-                Text(model.area?.uppercase() ?: "", color = Color.White.copy(alpha = 0.55f), fontSize = 9.sp)
-            }
-            Text(model.friendlyName, color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp,
-                modifier = Modifier.padding(top = if (ui.showAreaLabel) 16.dp else 0.dp))
-            Row(verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.align(Alignment.CenterStart).padding(top = 56.dp)) {
-                Text("${model.percent}", color = Color.White, fontSize = 64.sp, fontWeight = FontWeight.Light)
-                if (ui.displayMode == DisplayMode.PERCENT) {
-                    Text("%", color = Color.White.copy(alpha = 0.5f), fontSize = 18.sp,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .padding(horizontal = 22.dp, vertical = 18.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 14.dp, height = 2.dp)
+                        .background(R1.InkSoft),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = domainLabel(model.domainGlyph),
+                    style = R1.labelMicro,
+                    color = R1.InkSoft,
+                )
+                if (ui.showAreaLabel && !model.area.isNullOrBlank()) {
+                    Spacer(Modifier.width(8.dp))
+                    Text("·", style = R1.labelMicro, color = R1.InkMuted)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = model.area.replace('_', ' ').uppercase(),
+                        style = R1.labelMicro,
+                        color = R1.InkMuted,
+                    )
                 }
             }
-            // vertical slider, right edge — spring-animated fill for bouncy wheel feedback
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = model.friendlyName,
+                style = R1.titleCard,
+                color = R1.Ink,
+                maxLines = 2,
+            )
+            Spacer(Modifier.height(20.dp))
+            BigReadout(
+                percent = model.percent,
+                showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
+                accent = accent,
+            )
+            Spacer(Modifier.height(14.dp))
+
+            // Stripped tape meter: just track + fill, no tick labels.
             val fraction = rememberSliderFraction(model.percent)
-            Box(modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(8.dp)
-                .clip(RoundedCornerShape(4.dp)).background(Color(0xFF111111))) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(R1.SurfaceMuted),
+            ) {
                 Box(
-                    modifier = Modifier.fillMaxHeight(fraction = fraction)
-                        .align(Alignment.BottomCenter).background(orange)
+                    modifier = Modifier
+                        .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(accent),
+                )
+            }
+
+            Spacer(Modifier.weight(1f))
+            if (ui.showOnOffPill) {
+                Text(
+                    text = if (model.isOn) "● ON" else "○ OFF",
+                    style = R1.labelMicro,
+                    color = if (model.isOn) accent else R1.InkMuted,
                 )
             }
         }

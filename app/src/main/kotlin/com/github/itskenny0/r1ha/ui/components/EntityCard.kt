@@ -47,12 +47,10 @@ fun EntityCard(state: EntityState, onTapToggle: () -> Unit, modifier: Modifier =
                 accent = accent,
                 isAvailable = state.isAvailable,
             ),
-            // Push the card content past the chrome row (status bar + 44dp icon button + 16dp
-            // padding) so the friendlyName and hamburger don't overlap.
+            // Chrome overlap is now handled by VerticalPager's contentPadding (it pushes the
+            // active card below the chrome row); the card itself fills its allotted slot.
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .padding(top = 56.dp)
                 .alpha(themeAlpha),
             onTapToggle = onTapToggle,
         )

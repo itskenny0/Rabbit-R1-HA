@@ -152,20 +152,13 @@ class CardStackViewModel(
         debounced.submit(activeState.id, newPct)
     }
 
-    fun next() {
+    /** Sync the VM's active-card index with the pager's settled page. The wheel/tap handlers
+     *  read activeState off of this index, so it has to track whatever page the user has just
+     *  paged to. */
+    fun setCurrentIndex(index: Int) {
         val size = _state.value.cards.size
         if (size == 0) return
-        _state.value = _state.value.copy(
-            currentIndex = (_state.value.currentIndex + 1).mod(size)
-        )
-    }
-
-    fun previous() {
-        val size = _state.value.cards.size
-        if (size == 0) return
-        _state.value = _state.value.copy(
-            currentIndex = (_state.value.currentIndex - 1).mod(size)
-        )
+        _state.value = _state.value.copy(currentIndex = index.coerceIn(0, size - 1))
     }
 
     fun tapToggle() {
