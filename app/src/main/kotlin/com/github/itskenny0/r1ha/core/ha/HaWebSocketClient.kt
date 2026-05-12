@@ -57,7 +57,9 @@ class HaWebSocketClient internal constructor(
         val req = Request.Builder().url(url).build()
         val listener = object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, resp: Response) {
-                webSocket = ws
+                // webSocket was already set from the http.newWebSocket() return value below so
+                // the onFailure/onClosed guards work even if the connection fails before onOpen
+                // is delivered. Nothing to do here beyond advancing the state.
                 _state.value = ConnectionState.Authenticating
                 receiverJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                     for (msg in outgoing) ws.send(HaJson.encodeToString(msg))
@@ -79,15 +81,30 @@ class HaWebSocketClient internal constructor(
             }
             override fun onMessage(ws: WebSocket, bytes: ByteString) { /* HA only sends text */ }
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                _state.value = ConnectionState.Disconnected(ConnectionState.Cause.ServerClosed, attempt = 0)
+                // Ignore stale callbacks: if disconnect() already ran (webSocket=null) or a new
+                // connection has replaced this one (webSocket != ws), don't downgrade the state
+                // to Disconnected — that would briefly flash "Disconnected (server closed)" on
+                // the About page right after sign-out.
+                if (this@HaWebSocketClient.webSocket !== ws) return
+                // Preserve a sticky AuthLost — we just called ws.close() ourselves in response
+                // to AuthInvalid; the resulting onClosed would otherwise overwrite a meaningful
+                // "auth invalid" message with the generic "server closed".
+                if (_state.value !is ConnectionState.AuthLost) {
+                    _state.value = ConnectionState.Disconnected(ConnectionState.Cause.ServerClosed, attempt = 0)
+                }
                 receiverJob?.cancel(); webSocket = null
             }
             override fun onFailure(ws: WebSocket, t: Throwable, resp: Response?) {
-                _state.value = ConnectionState.Disconnected(ConnectionState.Cause.Error(t), attempt = 0)
+                if (this@HaWebSocketClient.webSocket !== ws) return
+                if (_state.value !is ConnectionState.AuthLost) {
+                    _state.value = ConnectionState.Disconnected(ConnectionState.Cause.Error(t), attempt = 0)
+                }
                 receiverJob?.cancel(); webSocket = null
             }
         }
-        http.newWebSocket(req, listener)
+        // Store the WebSocket immediately so the listener's stale-callback guard works for
+        // failures that fire before onOpen (e.g. DNS failure, TLS handshake error).
+        webSocket = http.newWebSocket(req, listener)
     }
 
     /** Enqueue an outbound message. Safe to call before [connect] has completed; the queue drains once connected. */
