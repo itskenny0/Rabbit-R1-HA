@@ -149,6 +149,21 @@ fun RenameDialog(
                 onSelect = { override = override.copy(textScale = it) },
             )
 
+            // ── COLOUR TEMPERATURE (lights only) ─────────────────────────────────────
+            if (entity.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.LIGHT) {
+                SectionHeader("LIGHT COLOUR TEMP")
+                Text(
+                    text = "Apply a fixed colour temperature when this light turns on. Only works on lights that support color_temp_kelvin.",
+                    style = R1.body,
+                    color = R1.InkMuted,
+                )
+                Spacer(Modifier.height(6.dp))
+                CTRow(
+                    selected = override.lightColorTempK,
+                    onSelect = { override = override.copy(lightColorTempK = it) },
+                )
+            }
+
             // ── COLOUR ──────────────────────────────────────────────────────────────
             SectionHeader("COLOUR")
             Text(
@@ -328,6 +343,71 @@ private fun ColourSwatchRow(
             @Suppress("UNUSED_EXPRESSION") label
         }
     }
+}
+
+@Composable
+private fun CTRow(
+    selected: Int?,
+    onSelect: (Int?) -> Unit,
+) {
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(scroll),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // DEFAULT chip — HA keeps the last user-set CT.
+        Box(
+            modifier = Modifier
+                .padding(end = 6.dp)
+                .clip(R1.ShapeS)
+                .background(if (selected == null) R1.AccentWarm else R1.Bg)
+                .let { m -> if (selected == null) m else m.border(1.dp, R1.Hairline, R1.ShapeS) }
+                .r1Pressable({ onSelect(null) })
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            Text(
+                text = "DEFAULT",
+                style = R1.labelMicro,
+                color = if (selected == null) R1.Bg else R1.InkSoft,
+            )
+        }
+        EntityOverride.LIGHT_CT_PRESETS.forEach { (label, kelvin) ->
+            val isSelected = selected == kelvin
+            // Tinted box approximating the CT colour — warm reads orange-ish, cool reads
+            // bluish. Lets the user choose at a glance.
+            val tint = ctApproxColor(kelvin)
+            Box(
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .clip(R1.ShapeS)
+                    .background(if (isSelected) tint else R1.Bg)
+                    .border(1.dp, if (isSelected) tint else R1.Hairline, R1.ShapeS)
+                    .r1Pressable({ onSelect(kelvin) })
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = "$label · ${kelvin}K",
+                    style = R1.labelMicro,
+                    color = if (isSelected) R1.Bg else R1.InkSoft,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Approximate display colour for a kelvin value — quick visual cue in the CT chip row.
+ * Not a real blackbody interpolation; just five buckets covering the common 2700–6500
+ * range, biased so warm reads orange-amber and cool reads pale blue.
+ */
+private fun ctApproxColor(kelvin: Int): androidx.compose.ui.graphics.Color = when {
+    kelvin <= 2800 -> androidx.compose.ui.graphics.Color(0xFFFF9D5C)
+    kelvin <= 3700 -> androidx.compose.ui.graphics.Color(0xFFFFC58A)
+    kelvin <= 4500 -> androidx.compose.ui.graphics.Color(0xFFFFE3B6)
+    kelvin <= 5800 -> androidx.compose.ui.graphics.Color(0xFFE8EEF7)
+    else -> androidx.compose.ui.graphics.Color(0xFFB6CCF0)
 }
 
 @Composable

@@ -43,8 +43,25 @@ data class EntityOverride(
      * preferences without needing a separate serializer.
      */
     val accentColor: Int? = null,
+    /**
+     * Fixed colour-temperature in kelvin to apply every time the light is turned on
+     * (any wheel-up from 0% or tap-on to ON). Null = inherit HA's last value, which is
+     * HA's default behaviour anyway. Only meaningful for light entities that report
+     * `color_temp_kelvin` in their supported_color_modes. Sweet spots: 2700 warm,
+     * 4000 neutral, 5500 cool-white, 6500 daylight.
+     */
+    val lightColorTempK: Int? = null,
 ) {
     companion object {
+        /** Curated CT presets surfaced in the customize dialog. */
+        val LIGHT_CT_PRESETS = listOf(
+            "WARM" to 2700,
+            "SOFT" to 3500,
+            "NEUTRAL" to 4000,
+            "COOL" to 5500,
+            "DAY" to 6500,
+        )
+
         /** Allowed text-scale steps. Picker offers a chip per step. */
         val TEXT_SCALES = listOf(0.7f, 0.85f, 1.0f, 1.15f, 1.3f)
 

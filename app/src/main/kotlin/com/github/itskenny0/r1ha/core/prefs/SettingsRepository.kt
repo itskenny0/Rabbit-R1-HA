@@ -334,7 +334,8 @@ private fun encodeEntityOverrides(map: Map<String, EntityOverride>): String {
         val lpEnc = o.longPressTarget?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
         val decStr = o.maxDecimalPlaces?.toString() ?: "?"
         val accStr = o.accentColor?.toString() ?: "?"
-        "$idEnc=${o.textScale}|$pillStr|$areaStr|$lpEnc|$decStr|$accStr"
+        val ctStr = o.lightColorTempK?.toString() ?: "?"
+        "$idEnc=${o.textScale}|$pillStr|$areaStr|$lpEnc|$decStr|$accStr|$ctStr"
     }
 }
 
@@ -354,6 +355,7 @@ private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
             val lp = lpRaw?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrNull() }
             val dec = parts.getOrNull(4)?.toIntOrNull()?.coerceIn(0, 6)
             val acc = parts.getOrNull(5)?.toIntOrNull()
+            val ct = parts.getOrNull(6)?.toIntOrNull()?.coerceIn(1000, 10000)
             id to EntityOverride(
                 textScale = scale,
                 showOnOffPill = pill,
@@ -361,6 +363,7 @@ private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
                 longPressTarget = lp?.takeIf { it.isNotBlank() },
                 maxDecimalPlaces = dec,
                 accentColor = acc,
+                lightColorTempK = ct,
             )
         }.getOrNull()
     }.toMap()

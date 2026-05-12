@@ -101,6 +101,11 @@ class CardStackViewModel(
     private val wheelTimestamps = ArrayDeque<Long>()
     private val rateWindowMillis = 250L
 
+    /** Latest entityOverrides snapshot — same caching pattern as cachedWheel so the
+     *  debouncer doesn't have to suspend on settings.first() per fire. Updated by the
+     *  init observer below. */
+    @Volatile private var cachedOverrides: Map<String, com.github.itskenny0.r1ha.core.prefs.EntityOverride> = emptyMap()
+
     private val debounced = DebouncedCaller<EntityId, Int>(
         scope = viewModelScope,
         debounceMillis = 250L,
@@ -128,8 +133,28 @@ class CardStackViewModel(
                 ServiceCall.setTemperature(entityId, temp)
             }
             else -> {
-                R1Log.i("CardStack.debounced", "sending setPercent($entityId, $pct)")
-                ServiceCall.setPercent(entityId, pct)
+                // Standard scalar dispatch. If this is a light AND the user has set a
+                // per-card colour-temperature override, fold that into the turn_on so
+                // the bulb both brightens and shifts to the preferred CT in a single
+                // service call. HA accepts color_temp_kelvin alongside brightness_pct
+                // on lights that report `supported_color_modes` containing `color_temp`.
+                val override = cachedOverrides[entityId.value]
+                val ctK = override?.lightColorTempK
+                if (entityId.domain == com.github.itskenny0.r1ha.core.ha.Domain.LIGHT &&
+                    ctK != null && pct > 0) {
+                    R1Log.i("CardStack.debounced", "sending light.turn_on($entityId, ${pct}% @ ${ctK}K)")
+                    ServiceCall(
+                        target = entityId,
+                        service = "turn_on",
+                        data = kotlinx.serialization.json.buildJsonObject {
+                            put("brightness_pct", kotlinx.serialization.json.JsonPrimitive(pct))
+                            put("color_temp_kelvin", kotlinx.serialization.json.JsonPrimitive(ctK))
+                        },
+                    )
+                } else {
+                    R1Log.i("CardStack.debounced", "sending setPercent($entityId, $pct)")
+                    ServiceCall.setPercent(entityId, pct)
+                }
             }
         }
         // haRepository.call() returns success immediately (the actual HA round-trip lives
@@ -150,6 +175,11 @@ class CardStackViewModel(
             .map { it.wheel }
             .distinctUntilChanged()
             .onEach { cachedWheel = it }
+            .launchIn(viewModelScope)
+        settings.settings
+            .map { it.entityOverrides }
+            .distinctUntilChanged()
+            .onEach { cachedOverrides = it }
             .launchIn(viewModelScope)
         // Roll back the optimistic override whenever HA tells us a service call failed —
         // the UI bounces back to the last-known cached value so the user can see their
