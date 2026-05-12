@@ -50,6 +50,10 @@ object PragmaticHybridTheme : R1Theme {
         CardRenderModel.Glyph.FAN -> "FAN"
         CardRenderModel.Glyph.COVER -> "COVER"
         CardRenderModel.Glyph.MEDIA_PLAYER -> "MEDIA"
+        CardRenderModel.Glyph.SWITCH -> "SWITCH"
+        CardRenderModel.Glyph.LOCK -> "LOCK"
+        CardRenderModel.Glyph.HUMIDIFIER -> "HUMIDIFIER"
+        CardRenderModel.Glyph.CLIMATE -> "CLIMATE"
     }
 
     @Composable

@@ -35,12 +35,26 @@ fun EntityCard(
         Domain.FAN -> CardRenderModel.Glyph.FAN
         Domain.COVER -> CardRenderModel.Glyph.COVER
         Domain.MEDIA_PLAYER -> CardRenderModel.Glyph.MEDIA_PLAYER
+        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION -> CardRenderModel.Glyph.SWITCH
+        Domain.LOCK -> CardRenderModel.Glyph.LOCK
+        Domain.HUMIDIFIER -> CardRenderModel.Glyph.HUMIDIFIER
+        Domain.CLIMATE -> CardRenderModel.Glyph.CLIMATE
     }
     val accentRole = when (state.id.domain) {
         Domain.LIGHT -> CardRenderModel.AccentRole.WARM
         Domain.FAN -> CardRenderModel.AccentRole.GREEN
         Domain.COVER -> CardRenderModel.AccentRole.NEUTRAL
         Domain.MEDIA_PLAYER -> CardRenderModel.AccentRole.COOL
+        // Smart switches/plugs/automations get the warm accent — visually anchors the
+        // largest new domain group to the same colour the user already associates with
+        // "primary control".
+        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION -> CardRenderModel.AccentRole.WARM
+        Domain.LOCK -> CardRenderModel.AccentRole.NEUTRAL
+        Domain.HUMIDIFIER -> CardRenderModel.AccentRole.COOL
+        // Thermostats run hot most of the time on a Rabbit — warm reads right for "this
+        // controls temperature". Cooler accents can come back if/when a heat/cool sub-mode
+        // colour pass lands alongside scalar target-temperature support.
+        Domain.CLIMATE -> CardRenderModel.AccentRole.WARM
     }
     // When the entity is unavailable, dim the whole card and overlay a "UNAVAILABLE" label so
     // the user doesn't think the card is just at 0%. The themes themselves don't honour
@@ -117,4 +131,8 @@ private fun domainLabel(glyph: CardRenderModel.Glyph): String = when (glyph) {
     CardRenderModel.Glyph.FAN -> "FAN"
     CardRenderModel.Glyph.COVER -> "COVER"
     CardRenderModel.Glyph.MEDIA_PLAYER -> "MEDIA"
+    CardRenderModel.Glyph.SWITCH -> "SWITCH"
+    CardRenderModel.Glyph.LOCK -> "LOCK"
+    CardRenderModel.Glyph.HUMIDIFIER -> "HUMIDIFIER"
+    CardRenderModel.Glyph.CLIMATE -> "CLIMATE"
 }

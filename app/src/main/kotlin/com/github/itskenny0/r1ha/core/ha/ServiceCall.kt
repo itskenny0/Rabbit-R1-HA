@@ -33,16 +33,66 @@ data class ServiceCall(
                     ServiceCall(target, "volume_set", buildJsonObject {
                         put("volume_level", JsonPrimitive(EntityState.mediaVolumeFromPct(clamped)))
                     })
+
+                // Humidifier — `humidity` is already 0..100 in HA, no normalisation needed.
+                // We also auto-turn-on at the start of the wheel turn (clamped > 0) so the
+                // user doesn't have to engage the device with a separate tap before setting
+                // the target. clamped == 0 turns it off.
+                Domain.HUMIDIFIER -> if (clamped == 0)
+                    ServiceCall(target, "turn_off", JsonObject(emptyMap()))
+                else
+                    ServiceCall(target, "set_humidity", buildJsonObject { put("humidity", JsonPrimitive(clamped)) })
+
+                // Pure on/off domains shouldn't hit setPercent at all — the wheel routes
+                // them through setSwitch in the VM. Defensive default: any non-zero percent
+                // = on, zero = off.
+                Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION -> ServiceCall(
+                    target,
+                    if (clamped == 0) "turn_off" else "turn_on",
+                    JsonObject(emptyMap()),
+                )
+                Domain.LOCK -> ServiceCall(
+                    target,
+                    if (clamped == 0) "lock" else "unlock",
+                    JsonObject(emptyMap()),
+                )
+                // Climate is rendered as a switch in this release; any wheel input maps to
+                // power on/off until target-temperature scaling lands.
+                Domain.CLIMATE -> ServiceCall(
+                    target,
+                    if (clamped == 0) "turn_off" else "turn_on",
+                    JsonObject(emptyMap()),
+                )
             }
         }
 
         fun tapAction(target: EntityId, isOn: Boolean): ServiceCall = when (target.domain) {
-            Domain.LIGHT, Domain.FAN -> ServiceCall(target, if (isOn) "turn_off" else "turn_on", JsonObject(emptyMap()))
+            Domain.LIGHT, Domain.FAN -> ServiceCall(
+                target,
+                if (isOn) "turn_off" else "turn_on",
+                JsonObject(emptyMap()),
+            )
             // For covers, `isOn` here means "currently open". Toggle to the opposite end of
             // travel — close if open, open if closed/stopped/in-motion. (Sending open_cover
             // while the cover is already opening is a no-op on HA's side.)
             Domain.COVER -> ServiceCall(target, if (isOn) "close_cover" else "open_cover", JsonObject(emptyMap()))
             Domain.MEDIA_PLAYER -> ServiceCall(target, "media_play_pause", JsonObject(emptyMap()))
+            // Generic on/off — switch.foo, input_boolean.foo, automation.foo, humidifier.foo,
+            // climate.foo all use the same turn_on/turn_off pair. For climate this restores
+            // the previous HVAC mode (HA remembers it across off/on cycles).
+            Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION,
+            Domain.HUMIDIFIER, Domain.CLIMATE -> ServiceCall(
+                target,
+                if (isOn) "turn_off" else "turn_on",
+                JsonObject(emptyMap()),
+            )
+            // Lock entity — `isOn` here means "unlocked". Tap to flip: lock if unlocked,
+            // unlock if locked.
+            Domain.LOCK -> ServiceCall(
+                target,
+                if (isOn) "lock" else "unlock",
+                JsonObject(emptyMap()),
+            )
         }
 
         /**
@@ -52,7 +102,8 @@ data class ServiceCall(
          * give us deterministic behaviour from the wheel.
          */
         fun setSwitch(target: EntityId, on: Boolean): ServiceCall = when (target.domain) {
-            Domain.LIGHT, Domain.FAN -> ServiceCall(
+            Domain.LIGHT, Domain.FAN, Domain.HUMIDIFIER, Domain.CLIMATE,
+            Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION -> ServiceCall(
                 target,
                 if (on) "turn_on" else "turn_off",
                 JsonObject(emptyMap()),
@@ -65,6 +116,11 @@ data class ServiceCall(
             Domain.MEDIA_PLAYER -> ServiceCall(
                 target,
                 if (on) "media_play" else "media_pause",
+                JsonObject(emptyMap()),
+            )
+            Domain.LOCK -> ServiceCall(
+                target,
+                if (on) "unlock" else "lock",
                 JsonObject(emptyMap()),
             )
         }

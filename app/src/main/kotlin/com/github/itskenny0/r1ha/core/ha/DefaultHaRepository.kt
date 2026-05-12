@@ -322,9 +322,23 @@ class DefaultHaRepository(
         val prefix = idStr.substringBefore('.', missingDelimiterValue = "")
         if (!Domain.isSupportedPrefix(prefix)) return
         val id = EntityId(idStr)
-        val isOn = raw.state.equals("on", ignoreCase = true) ||
-            raw.state.equals("playing", ignoreCase = true) ||
-            (raw.state.equals("open", ignoreCase = true))
+        // State-string → isOn mapping, branched by domain. Each domain has its own state
+        // vocabulary in HA: lights/switches/input_boolean/automation/humidifier use
+        // "on"/"off", media_players use "playing"/"paused"/"idle", covers use "open"/
+        // "closed"/"opening"/"closing", locks use "locked"/"unlocked", thermostats use
+        // the HVAC mode itself ("off"/"heat"/"cool"/"auto"/"dry"/"fan_only"). `isOn=true`
+        // reads as "the affordance is engaged" — light on, switch on, cover open, lock
+        // UNLOCKED (so the toggle reads intuitively: tap to lock when unlocked), thermostat
+        // running.
+        val isOn = when (id.domain) {
+            Domain.LIGHT, Domain.FAN, Domain.SWITCH, Domain.INPUT_BOOLEAN,
+            Domain.AUTOMATION, Domain.HUMIDIFIER -> raw.state.equals("on", ignoreCase = true)
+            Domain.COVER -> raw.state.equals("open", ignoreCase = true)
+            Domain.MEDIA_PLAYER -> raw.state.equals("playing", ignoreCase = true)
+            Domain.LOCK -> raw.state.equals("unlocked", ignoreCase = true)
+            Domain.CLIMATE -> !raw.state.equals("off", ignoreCase = true) &&
+                raw.state != "unavailable" && raw.state != "unknown"
+        }
         val available = raw.state != "unavailable" && raw.state != "unknown"
         val pct = computePercent(id.domain, raw.attributes)
         val rawNum = computeRaw(id.domain, raw.attributes)
@@ -347,6 +361,11 @@ class DefaultHaRepository(
         Domain.FAN -> attrs["percentage"].asInt()?.let(EntityState::normaliseFanPercentage)
         Domain.COVER -> attrs["current_position"].asInt()?.let(EntityState::normaliseCoverPosition)
         Domain.MEDIA_PLAYER -> attrs["volume_level"].asDouble()?.let(EntityState::normaliseMediaVolume)
+        Domain.HUMIDIFIER -> attrs["humidity"].asInt()?.coerceIn(0, 100)
+        // No scalar — these domains are pure on/off (climate's target_temperature could be
+        // driven, but mapping it through 0..100 requires min_temp/max_temp range plumbing
+        // that's out of scope for the current release).
+        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK, Domain.CLIMATE -> null
     }
 
     private fun computeRaw(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Number? = when (domain) {
@@ -354,6 +373,8 @@ class DefaultHaRepository(
         Domain.FAN -> attrs["percentage"].asInt()
         Domain.COVER -> attrs["current_position"].asInt()
         Domain.MEDIA_PLAYER -> attrs["volume_level"].asDouble()
+        Domain.HUMIDIFIER -> attrs["humidity"].asInt()
+        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK, Domain.CLIMATE -> null
     }
 
     /**
@@ -394,6 +415,12 @@ class DefaultHaRepository(
         // MediaPlayerEntityFeature.VOLUME_SET = bit 2.
         Domain.MEDIA_PLAYER -> ((attrs["supported_features"].asInt() ?: 0) and 4) != 0 ||
             attrs["volume_level"] != null
+        // Humidifiers always expose `set_humidity` as a service; the wheel drives that.
+        // Treat presence of `humidity` attribute as authoritative — if it's missing
+        // (a misbehaving integration) we still want a switch-card representation.
+        Domain.HUMIDIFIER -> attrs["humidity"] != null
+        // Pure on/off domains — no scalar; rendered as switch cards.
+        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK, Domain.CLIMATE -> false
     }
 
     override fun observe(entities: Set<EntityId>): Flow<Map<EntityId, EntityState>> =

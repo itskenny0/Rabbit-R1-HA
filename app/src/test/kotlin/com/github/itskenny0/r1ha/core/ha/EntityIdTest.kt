@@ -22,6 +22,18 @@ class EntityIdTest {
     }
 
     @Test fun `rejects unsupported domain`() {
-        assertThrows<IllegalArgumentException> { EntityId("automation.foo") }
+        // sensor/binary_sensor/scene/script/button are still outside the supported set —
+        // they need separate UI affordances (read-only display or fire-and-forget action
+        // tiles) before the wheel-driven card stack can host them sensibly.
+        assertThrows<IllegalArgumentException> { EntityId("sensor.foo") }
+        assertThrows<IllegalArgumentException> { EntityId("scene.movie_night") }
+    }
+
+    @Test fun `parses new domains`() {
+        assertThat(EntityId("switch.desk_lamp").domain).isEqualTo(Domain.SWITCH)
+        assertThat(EntityId("input_boolean.guest_mode").domain).isEqualTo(Domain.INPUT_BOOLEAN)
+        assertThat(EntityId("automation.morning_routine").domain).isEqualTo(Domain.AUTOMATION)
+        assertThat(EntityId("lock.front_door").domain).isEqualTo(Domain.LOCK)
+        assertThat(EntityId("humidifier.bedroom").domain).isEqualTo(Domain.HUMIDIFIER)
     }
 }

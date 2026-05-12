@@ -24,7 +24,15 @@ data class CardRenderModel(
     val accent: AccentRole,
     val isAvailable: Boolean,
 ) {
-    enum class Glyph { LIGHT, FAN, COVER, MEDIA_PLAYER }
+    enum class Glyph {
+        LIGHT, FAN, COVER, MEDIA_PLAYER,
+        // Generic on/off — used for switch/input_boolean/automation. Theme cards just
+        // render the domain label text; the glyph itself isn't drawn as an icon today.
+        SWITCH,
+        LOCK,
+        HUMIDIFIER,
+        CLIMATE,
+    }
     enum class AccentRole { WARM, COOL, GREEN, NEUTRAL }
 }
 
