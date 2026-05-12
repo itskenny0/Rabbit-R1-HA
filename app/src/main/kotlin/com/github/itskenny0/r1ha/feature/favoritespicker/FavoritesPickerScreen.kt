@@ -51,8 +51,8 @@ fun FavoritesPickerScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             ChevronBack(onClick = onBack)
             Text(
-                text = "Favorites",
-                style = MaterialTheme.typography.titleSmall,
+                text = "Favourites",
+                style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(start = 4.dp),
             )
         }
