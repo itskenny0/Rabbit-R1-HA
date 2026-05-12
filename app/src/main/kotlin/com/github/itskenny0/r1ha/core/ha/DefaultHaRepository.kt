@@ -81,6 +81,7 @@ class DefaultHaRepository(
                     is ConnectionState.Connected -> {
                         reconnectAttempt = 0
                         resubscribe()
+                        seedCacheFromHa()
                     }
                     is ConnectionState.Disconnected -> {
                         // The WS client always reports st.attempt=0 (it has no notion of
@@ -92,6 +93,23 @@ class DefaultHaRepository(
                     else -> Unit
                 }
             }.launchIn(this)
+
+            // Re-subscribe + reseed the cache whenever the user's favourites change. Without
+            // this the WS only receives subscribe_trigger for the initial favourites list
+            // (taken at WS Connected) and never sees state_changed events for anything the
+            // user adds later — so newly-added cards would sit at 0% until manually toggled
+            // from elsewhere.
+            settings.settings
+                .map { it.favorites }
+                .distinctUntilChanged()
+                .onEach {
+                    R1Log.i("HaRepo.favsChange", "favorites changed to ${it.size} entries")
+                    if (ws.state.value is ConnectionState.Connected) {
+                        resubscribe()
+                        seedCacheFromHa()
+                    }
+                }
+                .launchIn(this)
 
             // Observe the server URL; connect when it appears and disconnect when it goes
             // away. We deliberately do NOT force-reconnect on URL changes while a connection
@@ -207,19 +225,51 @@ class DefaultHaRepository(
             states.mapNotNull { row ->
                 val prefix = row.entity_id.substringBefore('.', missingDelimiterValue = "")
                 if (!Domain.isSupportedPrefix(prefix)) return@mapNotNull null
+                val id = EntityId(row.entity_id)
+                val available = row.state != "unavailable" && row.state != "unknown"
+                val attrs = row.attributes ?: kotlinx.serialization.json.JsonObject(emptyMap())
+                val pct = if (available) computePercent(id.domain, attrs) else null
+                val rawNum = computeRaw(id.domain, attrs)
                 EntityState(
-                    id = EntityId(row.entity_id),
-                    friendlyName = row.attributes?.get("friendly_name").asString() ?: row.entity_id.substringAfter('.'),
-                    area = row.attributes?.get("area_id").asString(),
+                    id = id,
+                    friendlyName = attrs["friendly_name"].asString() ?: row.entity_id.substringAfter('.'),
+                    area = attrs["area_id"].asString(),
                     isOn = row.state.equals("on", ignoreCase = true) ||
                         row.state.equals("playing", ignoreCase = true) ||
                         row.state.equals("open", ignoreCase = true),
-                    percent = null, raw = null,
+                    percent = pct,
+                    raw = rawNum,
                     lastChanged = runCatching { Instant.parse(row.last_changed ?: "") }.getOrDefault(Instant.now()),
-                    isAvailable = row.state != "unavailable" && row.state != "unknown",
+                    isAvailable = available,
                 )
             }
         }
+    }
+
+    /**
+     * Seeds the in-memory cache from a one-shot REST `GET /api/states` so the user sees current
+     * values immediately after adding a favourite (subscribe_trigger only fires on the *next*
+     * transition, so without this seed the card would sit at 0% until the user actually changes
+     * the entity from elsewhere).
+     */
+    private suspend fun seedCacheFromHa() {
+        val favIds = settings.settings.first().favorites
+            .mapNotNull { runCatching { EntityId(it) }.getOrNull() }
+            .toSet()
+        if (favIds.isEmpty()) return
+        val result = listAllEntities()
+        result.fold(
+            onSuccess = { all ->
+                val byId = all.filter { it.id in favIds }.associateBy { it.id }
+                if (byId.isNotEmpty()) {
+                    cache.value = cache.value + byId
+                    R1Log.i("HaRepo.seed", "seeded ${byId.size} favourite entities from /api/states")
+                }
+            },
+            onFailure = {
+                R1Log.w("HaRepo.seed", "failed to seed cache: ${it.message}")
+            },
+        )
     }
 
     /** Single Json instance for /api/states deserialisation to avoid the per-call allocation lint. */

@@ -38,6 +38,7 @@ private val Context.r1haSettingsStore: DataStore<Preferences> by preferencesData
 private const val SHADOW_PREFS = "r1ha_shadow"
 private const val SHADOW_SERVER_URL = "server.url"
 private const val SHADOW_HA_VERSION = "server.ha_version"
+private const val SHADOW_FAVORITES = "favorites" // newline-separated, same format as DataStore
 
 class SettingsRepository private constructor(
     private val store: DataStore<Preferences>,
@@ -111,9 +112,19 @@ class SettingsRepository private constructor(
                     "DataStore had no server.url but shadow did ($urlFromShadow); using shadow value"
                 )
             }
+            // Favorites: same shadow-fallback pattern as server.url.
+            val favoritesFromStore = p[K.favorites]?.takeIf { it.isNotBlank() }?.split('\n')
+            val favoritesFromShadow = shadow.getString(SHADOW_FAVORITES, null)?.takeIf { it.isNotBlank() }?.split('\n')
+            val favorites = favoritesFromStore ?: favoritesFromShadow.orEmpty()
+            if (favoritesFromStore == null && favoritesFromShadow != null) {
+                R1Log.w(
+                    "SettingsRepo",
+                    "DataStore had no favorites but shadow did (${favoritesFromShadow.size}); using shadow value"
+                )
+            }
             AppSettings(
                 server = server,
-                favorites = p[K.favorites]?.takeIf { it.isNotBlank() }?.split('\n').orEmpty(),
+                favorites = favorites,
                 wheel = WheelSettings(
                     stepPercent = (p[K.wheelStep] ?: 5).coerceIn(1, 10),
                     acceleration = p[K.wheelAccel] ?: true,
@@ -146,7 +157,7 @@ class SettingsRepository private constructor(
         // Write shadow synchronously FIRST so a SharedPreferences commit lands even if the
         // DataStore edit below fails for any reason. The synchronous commit() can block on
         // disk I/O so we move it off whatever dispatcher the caller is on.
-        withContext(Dispatchers.IO) { writeShadow(next.server) }
+        withContext(Dispatchers.IO) { writeShadow(next.server, next.favorites) }
 
         try {
             store.edit { p ->
@@ -184,7 +195,7 @@ class SettingsRepository private constructor(
         }
     }
 
-    private fun writeShadow(server: ServerConfig?) {
+    private fun writeShadow(server: ServerConfig?, favorites: List<String>) {
         val editor = shadow.edit()
         if (server != null) {
             editor.putString(SHADOW_SERVER_URL, server.url)
@@ -194,10 +205,15 @@ class SettingsRepository private constructor(
             editor.remove(SHADOW_SERVER_URL)
             editor.remove(SHADOW_HA_VERSION)
         }
+        if (favorites.isNotEmpty()) {
+            editor.putString(SHADOW_FAVORITES, favorites.joinToString("\n"))
+        } else {
+            editor.remove(SHADOW_FAVORITES)
+        }
         val ok = editor.commit() // synchronous; we want to know if it actually wrote
-        R1Log.i("SettingsRepo.writeShadow", "server=${server?.url ?: "null"} commit=$ok")
+        R1Log.i("SettingsRepo.writeShadow", "server=${server?.url ?: "null"} favorites=${favorites.size} commit=$ok")
         if (server != null) {
-            Toaster.show("Shadow ${if (ok) "saved" else "FAILED"}: ${server.url}")
+            Toaster.show("Shadow ${if (ok) "saved" else "FAILED"}: ${server.url}, ${favorites.size} favs")
         }
     }
 

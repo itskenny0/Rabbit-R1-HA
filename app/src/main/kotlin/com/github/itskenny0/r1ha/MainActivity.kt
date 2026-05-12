@@ -7,11 +7,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.flow.first
 import com.github.itskenny0.r1ha.core.input.WheelEvent
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
 import com.github.itskenny0.r1ha.core.theme.LocalUiOptions
@@ -40,12 +46,33 @@ class MainActivity : ComponentActivity() {
         handleOAuthCallback(intent)
 
         setContent {
-            val settings by graph.settings.settings
-                .collectAsStateWithLifecycle(initialValue = AppSettings())
+            // Load the FIRST settings value synchronously (suspending) before we render the
+            // NavHost. Otherwise we'd mount Onboarding briefly (initialValue.server is null)
+            // and then jarringly switch to CardStack once the Flow emitted. produceState
+            // returns null until the coroutine assigns the first value.
+            val initialSettings by produceState<AppSettings?>(initialValue = null) {
+                value = graph.settings.settings.first()
+            }
+            val settings by graph.settings.settings.collectAsStateWithLifecycle(
+                initialValue = initialSettings ?: AppSettings(),
+            )
 
-            val startDestination = if (settings.server != null) Routes.CARD_STACK else Routes.ONBOARDING
+            val initial = initialSettings
+            if (initial == null) {
+                // Splashscreen API keeps the system-level splash up until the activity is
+                // ready to draw; we additionally render a blank surface to avoid any flash
+                // until the first settings emission is in hand.
+                Box(modifier = Modifier.fillMaxSize())
+                return@setContent
+            }
+
+            // Lock the start destination to the FIRST loaded value so theme changes, server
+            // changes, etc. don't re-graph the NavHost mid-session.
+            val startDestination = remember(initial) {
+                if (initial.server != null) Routes.CARD_STACK else Routes.ONBOARDING
+            }
             val navController = rememberNavController()
-            R1Log.d("MainActivity.setContent", "startDestination=$startDestination server=${settings.server?.url ?: "null"}")
+            R1Log.d("MainActivity.setContent", "startDestination=$startDestination server=${initial.server?.url ?: "null"}")
 
             R1ThemeHost(themeId = settings.theme) {
                 CompositionLocalProvider(LocalUiOptions provides settings.ui) {
