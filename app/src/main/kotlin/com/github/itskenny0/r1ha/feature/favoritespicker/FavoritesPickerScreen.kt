@@ -41,6 +41,7 @@ import com.github.itskenny0.r1ha.ui.components.ChevronDirection
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import com.github.itskenny0.r1ha.ui.components.r1RowPressable
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 
@@ -57,40 +58,88 @@ fun FavoritesPickerScreen(
     )
     val ui by vm.ui.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    WheelScrollFor(wheelInput = wheelInput, listState = listState)
+    WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(R1.Bg)
-            .systemBarsPadding(),
+    // Long-press preview state — local to the screen because it isn't business logic; the
+    // VM doesn't care which entity is being previewed.
+    val previewing = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<com.github.itskenny0.r1ha.core.ha.EntityState?>(null)
+    }
+
+    // Settings flow lifted so the entity-override map can be supplied to LocalEntityOverrides.
+    val appSettingsForOverrides by settings.settings.collectAsStateWithLifecycle(initialValue = com.github.itskenny0.r1ha.core.prefs.AppSettings())
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.github.itskenny0.r1ha.core.theme.LocalHaRepository provides haRepository,
+        com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides appSettingsForOverrides.entityOverrides,
     ) {
-        R1TopBar(title = "FAVOURITES", onBack = onBack)
+    Box(modifier = Modifier.fillMaxSize().background(R1.Bg)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .systemBarsPadding(),
+        ) {
+            R1TopBar(title = "FAVOURITES", onBack = onBack)
 
-        // Filter chip row — always visible (so the user can switch filters from any
-        // state). Sits between the topbar and the list so it stays pinned while the list
-        // scrolls underneath. Hidden during the initial-load spinner; not much sense
-        // showing filters before we know what's available.
-        if (!ui.loading && ui.error == null) {
-            FilterChipRow(
-                selected = ui.filter,
-                counts = ui.countsByFilter,
-                onSelect = { vm.setFilter(it) },
-            )
+            // Search + filter chips — both pinned above the list so the user can refine
+            // results from any scroll position. Hidden during initial load; no point
+            // showing them before we know what's available.
+            if (!ui.loading && ui.error == null) {
+                SearchBar(
+                    query = ui.query,
+                    onQueryChange = { vm.setQuery(it) },
+                )
+                FilterChipRow(
+                    selected = ui.filter,
+                    counts = ui.countsByFilter,
+                    onSelect = { vm.setFilter(it) },
+                )
+            }
+
+            when {
+                ui.loading -> CenteredLoading()
+                ui.error != null -> ErrorState(message = ui.error ?: "Error")
+                ui.rows.isEmpty() -> FilteredEmptyState(filter = ui.filter, query = ui.query)
+                else -> ChannelList(
+                    rows = ui.rows,
+                    listState = listState,
+                    onToggle = { vm.toggle(it) },
+                    onMoveUp = { vm.moveUp(it) },
+                    onMoveDown = { vm.moveDown(it) },
+                    onEdit = { vm.startEditing(it) },
+                    onPreview = { previewing.value = it },
+                )
+            }
         }
 
-        when {
-            ui.loading -> CenteredLoading()
-            ui.error != null -> ErrorState(message = ui.error ?: "Error")
-            ui.rows.isEmpty() -> FilteredEmptyState(filter = ui.filter)
-            else -> ChannelList(
-                rows = ui.rows,
-                listState = listState,
-                onToggle = { vm.toggle(it) },
-                onMoveUp = { vm.moveUp(it) },
-                onMoveDown = { vm.moveDown(it) },
+        // ── Customize dialog ────────────────────────────────────────────────────────
+        val editingId = ui.editingEntityId
+        if (editingId != null) {
+            val entity = ui.rows.firstOrNull { it.state.id.value == editingId }?.state
+            if (entity != null) {
+                val currentName = ui.rows.first { it.state.id.value == editingId }.displayName
+                val currentOverride = appSettingsForOverrides.entityOverrides[editingId]
+                    ?: com.github.itskenny0.r1ha.core.prefs.EntityOverride.NONE
+                RenameDialog(
+                    entity = entity,
+                    initialName = currentName,
+                    initialOverride = currentOverride,
+                    onSave = { newName, newOverride ->
+                        vm.saveCustomize(editingId, newName, newOverride)
+                    },
+                    onCancel = { vm.cancelEditing() },
+                )
+            }
+        }
+
+        // ── Hold-to-preview overlay ──────────────────────────────────────────────────
+        val previewState = previewing.value
+        if (previewState != null) {
+            PreviewOverlay(
+                entity = previewState,
+                onDismiss = { previewing.value = null },
             )
         }
+    }
     }
 }
 
@@ -144,13 +193,16 @@ private fun FilterChipRow(
 }
 
 @Composable
-private fun FilteredEmptyState(filter: PickerFilter) {
-    // Three flavours of "nothing here": no entities at all, filter pruned them all, or
-    // the favourites-only view with no favourites set yet. Each gets a short hint.
-    val (heading, body) = when (filter) {
-        PickerFilter.ALL -> "NO CONTROLLABLE ENTITIES" to
+private fun FilteredEmptyState(filter: PickerFilter, query: String) {
+    // Four flavours of "nothing here": active search returned no hits, no entities at
+    // all, filter pruned them all, or the favourites-only view with no favourites set
+    // yet. Each gets a short hint that points the user at the next step.
+    val (heading, body) = when {
+        query.isNotBlank() -> "NO MATCHES FOR \"${query.uppercase()}\"" to
+            "Try a different word — search looks at both the entity name and the\nentity_id (e.g. \"sensor.\")."
+        filter == PickerFilter.ALL -> "NO CONTROLLABLE ENTITIES" to
             "Home Assistant didn't return anything we know how to drive — no lights,\nswitches, scenes, or sensors."
-        PickerFilter.FAVS -> "NO FAVOURITES YET" to
+        filter == PickerFilter.FAVS -> "NO FAVOURITES YET" to
             "Pick a chip above to start browsing, then tap an entity to favourite it."
         else -> "NONE IN THIS FILTER" to "Tap ALL above to see every entity."
     }
@@ -164,6 +216,107 @@ private fun FilteredEmptyState(filter: PickerFilter) {
         Text(heading, style = R1.labelMicro, color = R1.InkSoft)
         Spacer(Modifier.height(8.dp))
         Text(body, style = R1.body, color = R1.InkMuted)
+    }
+}
+
+/**
+ * Free-text search above the filter chips. Tiny R1TextField with a magnifier-glyph
+ * prefix and a clear-X suffix when there's text. Filters by friendly_name + entity_id —
+ * see [FavoritesPickerViewModel.buildRows].
+ */
+@Composable
+private fun SearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Small "Q" prefix label — the canvas magnifier glyph would be lovely but adds
+        // a Canvas to every recomposition; a single character "⌕" or "Q" is cheaper and
+        // reads as "this is a search field" especially next to the placeholder copy.
+        Text(
+            text = "FIND",
+            style = R1.labelMicro,
+            color = R1.InkMuted,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        Box(modifier = Modifier.weight(1f)) {
+            com.github.itskenny0.r1ha.ui.components.R1TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = "kitchen, .door, scene, ...",
+                monospace = false,
+            )
+        }
+        // Clear-X appears only when there's something to clear. Smaller-than-pencil so
+        // it doesn't visually fight the field for attention.
+        if (query.isNotEmpty()) {
+            Spacer(Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .r1Pressable({ onQueryChange("") }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "✕", style = R1.numeralM, color = R1.InkSoft)
+            }
+        }
+    }
+}
+
+/**
+ * Long-press preview — pops a centred mini-card of the entity the user is holding,
+ * dismisses on any tap or back-press. Uses the same [com.github.itskenny0.r1ha.ui.components.EntityCard]
+ * the main stack uses, scaled to fit the overlay; that way the preview is pixel-faithful
+ * to what the user will actually see after they favourite the entity.
+ */
+@Composable
+private fun PreviewOverlay(
+    entity: com.github.itskenny0.r1ha.core.ha.EntityState,
+    onDismiss: () -> Unit,
+) {
+    BackHandler(onBack = onDismiss)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(R1.Bg.copy(alpha = 0.92f))
+            .r1Pressable(onDismiss, hapticOnClick = false),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // Header — tells the user this is a preview, not the live card.
+            Text("PREVIEW · HOLD", style = R1.labelMicro, color = R1.AccentWarm)
+            Spacer(Modifier.height(6.dp))
+            // The card itself — same EntityCard the live stack uses, framed in a hairline
+            // border so it reads as a "card surface" lifted off the overlay. The whole
+            // box is given a fixed height that matches the card-stack proportions so it
+            // doesn't visually morph between preview and live.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(R1.ShapeM)
+                    .border(1.dp, R1.Hairline, R1.ShapeM),
+            ) {
+                com.github.itskenny0.r1ha.ui.components.EntityCard(
+                    state = entity,
+                    onTapToggle = { /* preview is non-interactive */ },
+                    tapToToggleEnabled = false,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text("Tap anywhere to dismiss", style = R1.body, color = R1.InkMuted)
+        }
     }
 }
 
@@ -213,6 +366,8 @@ private fun ChannelList(
     onToggle: (String) -> Unit,
     onMoveUp: (String) -> Unit,
     onMoveDown: (String) -> Unit,
+    onEdit: (String) -> Unit,
+    onPreview: (com.github.itskenny0.r1ha.core.ha.EntityState) -> Unit,
 ) {
     // favCount used to drive move-arrow enable logic. Pre-computed once per list rather
     // than once per row composition.
@@ -239,6 +394,8 @@ private fun ChannelList(
                 onToggle = { onToggle(row.state.id.value) },
                 onMoveUp = { onMoveUp(row.state.id.value) },
                 onMoveDown = { onMoveDown(row.state.id.value) },
+                onEdit = { onEdit(row.state.id.value) },
+                onLongPress = { onPreview(row.state) },
             )
         }
     }
@@ -251,6 +408,8 @@ private fun ChannelRow(
     onToggle: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    onEdit: () -> Unit,
+    onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val domain = row.state.id.domain
@@ -258,9 +417,13 @@ private fun ChannelRow(
     val domainCode = domainLabel(domain)
     Row(
         verticalAlignment = Alignment.CenterVertically,
+        // Use the dedicated tap/long-press gesture detector rather than r1Pressable so a
+        // long press can fire the preview without first triggering onToggle. Press
+        // feedback (scale + alpha + haptic) is handled by [r1RowPressable] below to keep
+        // parity with the rest of the picker UI.
         modifier = modifier
             .fillMaxWidth()
-            .r1Pressable(onToggle)
+            .r1RowPressable(onTap = onToggle, onLongPress = onLongPress)
             .padding(horizontal = 22.dp, vertical = 12.dp),
     ) {
         // ── Left: domain block (coloured tab) + identity ────────────────────────────
@@ -304,17 +467,38 @@ private fun ChannelRow(
                 }
             }
             Spacer(Modifier.height(2.dp))
-            Text(
-                text = row.state.friendlyName,
-                style = R1.bodyEmph,
-                color = R1.Ink,
-                maxLines = 1,
-            )
+            // Friendly name — up to 2 lines so similarly-named entities
+            // ("Office lamp 1" vs "Office lamp 2") are distinguishable without truncating
+            // the suffix. The pencil edit button sits inline on the right of the name row
+            // so the rename affordance is close to the thing it acts on.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = row.displayName,
+                    style = R1.bodyEmph,
+                    color = R1.Ink,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .r1Pressable(onEdit, hapticOnClick = false),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    com.github.itskenny0.r1ha.ui.components.EditGlyph(
+                        size = 12.dp,
+                        tint = R1.InkMuted,
+                    )
+                }
+            }
             Text(
                 text = row.state.id.value,
                 style = R1.numeralS,
                 color = R1.InkMuted,
                 maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
 

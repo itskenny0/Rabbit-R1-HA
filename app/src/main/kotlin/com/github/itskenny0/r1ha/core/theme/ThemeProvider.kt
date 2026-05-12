@@ -15,6 +15,24 @@ val LocalR1Theme = staticCompositionLocalOf<R1Theme> { PragmaticHybridTheme }
 /** UI options surfaced to themes so they can honour user toggles without taking extra params. */
 val LocalUiOptions = staticCompositionLocalOf { UiOptions() }
 
+/**
+ * Repository handle injected near the top of each screen that needs it (CardStackScreen,
+ * FavoritesPickerScreen) so deep composables — [com.github.itskenny0.r1ha.ui.components.SensorCard]
+ * especially — can fetch history without every wrapper threading the repository through
+ * its parameter list. Null by default; consumers handle that gracefully (skip the chart,
+ * skip the history list).
+ */
+val LocalHaRepository = staticCompositionLocalOf<com.github.itskenny0.r1ha.core.ha.HaRepository?> { null }
+
+/**
+ * Per-entity overrides surfaced to deep card composables so the rename / display /
+ * long-press customizations can apply without each theme threading them through. The
+ * EntityCard wrapper looks up the override for its entity_id and merges visibility
+ * fields into a per-card [LocalUiOptions] before invoking the theme's Card. Empty map
+ * by default (the wrapper handles the missing-key case gracefully).
+ */
+val LocalEntityOverrides = staticCompositionLocalOf<Map<String, com.github.itskenny0.r1ha.core.prefs.EntityOverride>> { emptyMap() }
+
 @Composable
 fun R1ThemeHost(themeId: ThemeId, content: @Composable () -> Unit) {
     val theme = when (themeId) {

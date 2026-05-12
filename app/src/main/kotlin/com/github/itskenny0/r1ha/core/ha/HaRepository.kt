@@ -18,6 +18,14 @@ interface HaRepository {
     suspend fun call(call: ServiceCall): Result<Unit>
     /** One-shot REST GET /api/states equivalent, used by FavoritesPicker. */
     suspend fun listAllEntities(): Result<List<EntityState>>
+
+    /**
+     * History fetch — `GET /api/history/period/<since-iso>?filter_entity_id=<id>`. Returns
+     * the timestamped state changes for [entityId] going back [hours] hours from now,
+     * in chronological order. Used by SensorCard to render a line chart for numeric
+     * sensors and a recent-changes list for text/categorical sensors.
+     */
+    suspend fun fetchHistory(entityId: EntityId, hours: Int = 24): Result<List<HistoryPoint>>
     suspend fun start()
     suspend fun stop()
 

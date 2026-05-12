@@ -49,7 +49,7 @@ fun AboutScreen(
     val connection by haRepository.connection.collectAsStateWithLifecycle()
     val appSettings by settings.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
     val listState = rememberLazyListState()
-    WheelScrollFor(wheelInput = wheelInput, listState = listState)
+    WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
 
     Column(
         modifier = Modifier

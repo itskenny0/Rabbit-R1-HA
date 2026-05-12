@@ -121,8 +121,24 @@ class SettingsRepository private constructor(
         val behaviorHaptics = booleanPreferencesKey("behavior.haptics")
         val behaviorKeepOn = booleanPreferencesKey("behavior.keep_on")
         val behaviorTapToggle = booleanPreferencesKey("behavior.tap_toggle")
+        val behaviorHideStatus = booleanPreferencesKey("behavior.hide_status_bar")
+        val uiTextHistoryLen = intPreferencesKey("ui.text_history_length")
 
         val theme = stringPreferencesKey("theme")
+        /**
+         * Encoded as a single newline-separated string of `entityId=customName` pairs;
+         * names are URL-encoded so newlines/equals inside a name can't break the
+         * separator scheme. Kept in one preference key (vs a key per entity) so the
+         * preference file stays manageable and migrations are easy.
+         */
+        val nameOverrides = stringPreferencesKey("name_overrides")
+        /**
+         * Per-entity customization map. Same newline-separated URL-encoded encoding as
+         * [nameOverrides], but each value is `scale|pill|area|longpress` (with `?` for
+         * "inherit" on the nullable fields). Kept compact so the preference file stays
+         * small even with hundreds of customized cards.
+         */
+        val entityOverrides = stringPreferencesKey("entity_overrides")
     }
 
     val settings: Flow<AppSettings> = combine(
@@ -172,13 +188,17 @@ class SettingsRepository private constructor(
                     showOnOffPill = p[K.uiShowPill] ?: true,
                     showAreaLabel = p[K.uiShowArea] ?: true,
                     showPositionDots = p[K.uiShowDots] ?: true,
+                    textHistoryLength = (p[K.uiTextHistoryLen] ?: 20).coerceIn(5, 100),
                 ),
                 behavior = Behavior(
                     haptics = p[K.behaviorHaptics] ?: true,
                     keepScreenOn = p[K.behaviorKeepOn] ?: true,
                     tapToToggle = p[K.behaviorTapToggle] ?: true,
+                    hideStatusBar = p[K.behaviorHideStatus] ?: false,
                 ),
                 theme = p[K.theme]?.let { runCatching { ThemeId.valueOf(it) }.getOrNull() } ?: ThemeId.PRAGMATIC_HYBRID,
+                nameOverrides = decodeNameOverrides(p[K.nameOverrides]),
+                entityOverrides = decodeEntityOverrides(p[K.entityOverrides]),
             )
         }
         .onEach { s ->
@@ -216,7 +236,11 @@ class SettingsRepository private constructor(
                 p[K.behaviorHaptics] = next.behavior.haptics
                 p[K.behaviorKeepOn] = next.behavior.keepScreenOn
                 p[K.behaviorTapToggle] = next.behavior.tapToToggle
+                p[K.behaviorHideStatus] = next.behavior.hideStatusBar
+                p[K.uiTextHistoryLen] = next.ui.textHistoryLength
                 p[K.theme] = next.theme.name
+                p[K.nameOverrides] = encodeNameOverrides(next.nameOverrides)
+                p[K.entityOverrides] = encodeEntityOverrides(next.entityOverrides)
             }
             R1Log.i("SettingsRepo.update", "DataStore edit completed; next.server=${next.server?.url ?: "null"}")
         } catch (t: Throwable) {
@@ -259,4 +283,73 @@ class SettingsRepository private constructor(
     }
 
     private suspend fun currentBlocking(): AppSettings = settings.first()
+}
+
+/**
+ * Serialise the override map to a single newline-separated string of `entityId=name`
+ * pairs, with both the entity_id and the name URL-encoded so the separators can't appear
+ * inside a value. URL-encoding is far cheaper than a real serializer here — the map
+ * stays small (one entry per renamed entity, never more than a few dozen) and the
+ * format round-trips cleanly via [decodeNameOverrides].
+ */
+private fun encodeNameOverrides(map: Map<String, String>): String {
+    if (map.isEmpty()) return ""
+    return map.entries.joinToString("\n") { (id, name) ->
+        "${java.net.URLEncoder.encode(id, "UTF-8")}=${java.net.URLEncoder.encode(name, "UTF-8")}"
+    }
+}
+
+private fun decodeNameOverrides(raw: String?): Map<String, String> {
+    if (raw.isNullOrBlank()) return emptyMap()
+    return raw.split('\n').mapNotNull { line ->
+        val eq = line.indexOf('=')
+        if (eq < 0) return@mapNotNull null
+        runCatching {
+            val id = java.net.URLDecoder.decode(line.substring(0, eq), "UTF-8")
+            val name = java.net.URLDecoder.decode(line.substring(eq + 1), "UTF-8")
+            if (id.isBlank() || name.isBlank()) null else id to name
+        }.getOrNull()
+    }.toMap()
+}
+
+/**
+ * Per-entity customization map. Format per line: `urlEncodedId=scale|pill|area|longpress`
+ * where `pill` and `area` are "0"/"1"/"?" (false / true / inherit) and `longpress` is
+ * URL-encoded (or empty for "no action"). Parser is forgiving — missing trailing fields
+ * default to inherit, malformed lines are skipped with a log. Future fields append after
+ * `longpress` and stay backward-compatible by virtue of being absent on old saves.
+ */
+private fun encodeEntityOverrides(map: Map<String, EntityOverride>): String {
+    if (map.isEmpty()) return ""
+    return map.entries.joinToString("\n") { (id, o) ->
+        val idEnc = java.net.URLEncoder.encode(id, "UTF-8")
+        val pillStr = when (o.showOnOffPill) { true -> "1"; false -> "0"; null -> "?" }
+        val areaStr = when (o.showAreaLabel) { true -> "1"; false -> "0"; null -> "?" }
+        val lpEnc = o.longPressTarget?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
+        "$idEnc=${o.textScale}|$pillStr|$areaStr|$lpEnc"
+    }
+}
+
+private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
+    if (raw.isNullOrBlank()) return emptyMap()
+    return raw.split('\n').mapNotNull { line ->
+        val eq = line.indexOf('=')
+        if (eq < 0) return@mapNotNull null
+        runCatching {
+            val id = java.net.URLDecoder.decode(line.substring(0, eq), "UTF-8")
+            if (id.isBlank()) return@runCatching null
+            val parts = line.substring(eq + 1).split('|')
+            val scale = parts.getOrNull(0)?.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: 1.0f
+            val pill = when (parts.getOrNull(1)) { "1" -> true; "0" -> false; else -> null }
+            val area = when (parts.getOrNull(2)) { "1" -> true; "0" -> false; else -> null }
+            val lpRaw = parts.getOrNull(3)?.takeIf { it.isNotBlank() }
+            val lp = lpRaw?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrNull() }
+            id to EntityOverride(
+                textScale = scale,
+                showOnOffPill = pill,
+                showAreaLabel = area,
+                longPressTarget = lp?.takeIf { it.isNotBlank() },
+            )
+        }.getOrNull()
+    }.toMap()
 }

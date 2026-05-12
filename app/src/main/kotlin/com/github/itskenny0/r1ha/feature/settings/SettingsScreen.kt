@@ -51,7 +51,7 @@ fun SettingsScreen(
     )
     val s by vm.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    WheelScrollFor(wheelInput = wheelInput, listState = listState)
+    WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
 
     Column(
         modifier = Modifier
@@ -200,6 +200,14 @@ fun SettingsScreen(
                     subtitle = "Tap the card to flip the entity on/off",
                     checked = s.behavior.tapToToggle,
                     onCheckedChange = { vm.setTapToToggle(it) },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Hide status bar",
+                    subtitle = "Swipe down to peek the bar; auto-hides after release",
+                    checked = s.behavior.hideStatusBar,
+                    onCheckedChange = { vm.setHideStatusBar(it) },
                 )
             }
 

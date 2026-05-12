@@ -110,7 +110,7 @@ fun SensorCard(
             // suffix sits inline with the bottom of the digits like the "%" suffix on
             // scalar cards. Bigger negative letter-spacing on long readings (>4 chars,
             // e.g. "1234.5") keeps them on one line on the 240 px display.
-            val value = state.rawState ?: "—"
+            val value = formatSensorValue(state.rawState)
             val tightenForLength = if (value.length >= 4) R1.numeralXl.copy(letterSpacing = (-3).sp)
             else R1.numeralXl
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.wrapContentSize()) {
@@ -125,6 +125,41 @@ fun SensorCard(
                     )
                 }
             }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // ── History block — chart for numeric sensors, recent-changes list for everything
+        // else (binary sensors, enum sensors, weather strings, etc.). Fetched once per
+        // entity-id change via LaunchedEffect; degraded gracefully when no repository is
+        // provided through CompositionLocal (e.g. the rename-dialog's PreviewOverlay) or
+        // when HA's history endpoint errors — the card just doesn't show a chart in that
+        // case rather than failing.
+        val repo = com.github.itskenny0.r1ha.core.theme.LocalHaRepository.current
+        val historyState = androidx.compose.runtime.remember(state.id.value) {
+            androidx.compose.runtime.mutableStateOf<List<com.github.itskenny0.r1ha.core.ha.HistoryPoint>>(emptyList())
+        }
+        val textHistoryLength = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.textHistoryLength
+        if (repo != null) {
+            androidx.compose.runtime.LaunchedEffect(state.id.value) {
+                repo.fetchHistory(state.id, hours = 24)
+                    .onSuccess { historyState.value = it }
+            }
+        }
+        // Latest state numeric? Then it's a line chart; otherwise list of changes.
+        val latestIsNumeric = state.rawState?.toDoubleOrNull()?.isFinite() == true
+        if (latestIsNumeric) {
+            SensorHistoryChart(
+                points = historyState.value,
+                accent = accent,
+                unit = state.unit,
+            )
+        } else {
+            SensorHistoryList(
+                points = historyState.value,
+                accent = accent,
+                maxEntries = textHistoryLength,
+            )
         }
 
         Spacer(Modifier.weight(1f))

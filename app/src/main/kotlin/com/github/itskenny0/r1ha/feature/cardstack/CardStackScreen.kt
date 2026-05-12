@@ -108,6 +108,10 @@ fun CardStackScreen(
         onDispose { view.keepScreenOn = false }
     }
 
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.github.itskenny0.r1ha.core.theme.LocalHaRepository provides haRepository,
+        com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides appSettings.entityOverrides,
+    ) {
     Box(modifier = Modifier.fillMaxSize().background(R1.Bg)) {
         // displayedCards = cards with optimistic overrides applied per entity. Binding the
         // UI to this list (rather than to the raw HA-confirmed cards) is what makes the
@@ -139,6 +143,7 @@ fun CardStackScreen(
             onOpenFavoritesPicker = onOpenFavoritesPicker,
             onOpenSettings = onOpenSettings,
         )
+    }
     }
 }
 
@@ -187,11 +192,16 @@ private fun VerticalCardPager(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
+                // Look up the per-card long-press action so EntityCard only wires the
+                // gesture when there's actually something to fire (otherwise the heavier
+                // r1RowPressable would replace the cheaper r1Pressable for no gain).
+                val longPressTarget = appSettings.entityOverrides[cards[page].id.value]?.longPressTarget
                 EntityCard(
                     state = cards[page],
                     onTapToggle = { vm.tapToggle() },
                     tapToToggleEnabled = appSettings.behavior.tapToToggle,
                     onSetOn = { on -> vm.setSwitchOn(on) },
+                    onLongPress = longPressTarget?.let { target -> { vm.fireLongPress(target) } },
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {

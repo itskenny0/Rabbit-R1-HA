@@ -75,6 +75,25 @@ class MainActivity : ComponentActivity() {
             val navController = rememberNavController()
             R1Log.d("MainActivity.setContent", "startDestination=$startDestination server=${initial.server?.url ?: "null"}")
 
+            // Honour the user's "Hide status bar" toggle live — flipping it in Settings
+            // applies immediately without an activity restart. WindowInsetsController is
+            // the recommended API since SDK 30; we already require min 33 so no fallback
+            // path is needed.
+            androidx.compose.runtime.LaunchedEffect(settings.behavior.hideStatusBar) {
+                val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+                if (settings.behavior.hideStatusBar) {
+                    controller.hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+                    // Make the user-swipe-to-show transient (auto-hides after a beat) so
+                    // peeking the bar to check the time doesn't permanently break the
+                    // hidden state.
+                    controller.systemBarsBehavior =
+                        androidx.core.view.WindowInsetsControllerCompat
+                            .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                } else {
+                    controller.show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+                }
+            }
+
             R1ThemeHost(themeId = settings.theme) {
                 CompositionLocalProvider(LocalUiOptions provides settings.ui) {
                     AppNavGraph(

@@ -28,6 +28,12 @@ fun EntityCard(
      * all themes by wrapping the theme card in our own pressable Box.
      */
     tapToToggleEnabled: Boolean = true,
+    /**
+     * Optional long-press handler — fires when the user holds the card. Used by the card-
+     * stack screen to dispatch the [EntityOverride.longPressTarget] action; null on
+     * surfaces (like the picker preview) where long-press is meaningless.
+     */
+    onLongPress: (() -> Unit)? = null,
 ) {
     val theme = LocalR1Theme.current
     val glyph = when (state.id.domain) {
@@ -82,11 +88,31 @@ fun EntityCard(
     // haptic on a single tap reads as a stutter rather than a click. Sensors are skipped
     // because they're read-only — a press-state dip on a card that can't actually do
     // anything is just misleading.
-    val tapModifier = if (tapToToggleEnabled && state.isAvailable && !state.id.domain.isSensor) {
-        Modifier.r1Pressable(onClick = onTapToggle, hapticOnClick = false)
-    } else {
-        Modifier
+    // If the parent supplied a long-press handler, use r1RowPressable so both tap and
+    // long-press are detected. Otherwise stay on the cheaper r1Pressable which only
+    // wires tap. Either way: sensors and unavailable entities don't get a gesture
+    // surface at all — pressing them shouldn't even dip the card visually because
+    // nothing will happen.
+    val tapModifier = when {
+        !tapToToggleEnabled || !state.isAvailable || state.id.domain.isSensor -> Modifier
+        onLongPress != null -> Modifier.r1RowPressable(onTap = onTapToggle, onLongPress = onLongPress)
+        else -> Modifier.r1Pressable(onClick = onTapToggle, hapticOnClick = false)
     }
+    // Pull the per-card override out of the CompositionLocal that the screen layer
+    // (CardStackScreen / FavoritesPickerScreen) provides from settings.entityOverrides.
+    // Apply the visibility fields by merging into a per-card LocalUiOptions so themes /
+    // SwitchCard / ActionCard / SensorCard each see the right pill/area visibility
+    // without having to know that overrides exist.
+    val perCardOverride = com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides.current[state.id.value]
+        ?: com.github.itskenny0.r1ha.core.prefs.EntityOverride.NONE
+    val baseUi = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current
+    val mergedUi = baseUi.copy(
+        showOnOffPill = perCardOverride.showOnOffPill ?: baseUi.showOnOffPill,
+        showAreaLabel = perCardOverride.showAreaLabel ?: baseUi.showAreaLabel,
+    )
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.github.itskenny0.r1ha.core.theme.LocalUiOptions provides mergedUi,
+    ) {
     Box(modifier = modifier.then(tapModifier)) {
         val themeAlpha = if (state.isAvailable) 1f else 0.35f
         if (state.id.domain.isSensor) {
@@ -161,6 +187,7 @@ fun EntityCard(
                 )
             }
         }
+    }
     }
 }
 

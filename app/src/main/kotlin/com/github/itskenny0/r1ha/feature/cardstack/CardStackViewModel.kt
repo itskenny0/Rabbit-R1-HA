@@ -156,21 +156,35 @@ class CardStackViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeFavorites() {
-        // The favourites list is the source of truth for both membership and order.
-        val favoritesFlow = settings.settings
-            .map { it.favorites }
+        // The favourites list is the source of truth for both membership and order; the
+        // override map is the source of truth for display names. Combined so a rename
+        // surfaces on the card-stack screen immediately, without needing to re-fetch HA.
+        val sourceFlow = settings.settings
+            .map { it.favorites to it.nameOverrides }
             .distinctUntilChanged()
 
-        favoritesFlow
-            .flatMapLatest { favouriteIds ->
+        sourceFlow
+            .flatMapLatest { (favouriteIds, overrides) ->
                 val ids = favouriteIds.mapNotNull { runCatching { EntityId(it) }.getOrNull() }.toSet()
-                if (ids.isEmpty()) flowOf(Pair(favouriteIds, emptyMap<EntityId, EntityState>()))
-                else haRepository.observe(ids).map { favouriteIds to it }
+                if (ids.isEmpty()) {
+                    flowOf(Triple(favouriteIds, overrides, emptyMap<EntityId, EntityState>()))
+                } else {
+                    haRepository.observe(ids).map { Triple(favouriteIds, overrides, it) }
+                }
             }
-            .onEach { (favouriteIds, entityMap) ->
+            .onEach { (favouriteIds, overrides, entityMap) ->
                 // Preserve user-chosen order; drop entries that aren't yet known to HA.
+                // Apply the rename override at this layer so every UI surface (theme.Card,
+                // SwitchCard, ActionCard, SensorCard) sees the renamed name without each
+                // composable having to know about the override mechanism.
                 val ordered = favouriteIds.mapNotNull { id ->
-                    runCatching { EntityId(id) }.getOrNull()?.let { entityMap[it] }
+                    runCatching { EntityId(id) }.getOrNull()?.let { eid ->
+                        entityMap[eid]?.let { state ->
+                            overrides[state.id.value]?.let { renamed ->
+                                state.copy(friendlyName = renamed)
+                            } ?: state
+                        }
+                    }
                 }
                 R1Log.d("CardStack.observe", "favoriteIds=${favouriteIds.size} ordered=${ordered.size}")
                 val cur = _state.value
@@ -269,6 +283,34 @@ class CardStackViewModel(
         val size = _state.value.cards.size
         if (size == 0) return
         _state.value = _state.value.copy(currentIndex = index.coerceIn(0, size - 1))
+    }
+
+    /**
+     * Fire the per-card long-press action. [target] is an HA entity_id (e.g. `scene.x`,
+     * `script.y`, `switch.z`); we parse it and dispatch the same tap-action the entity's
+     * own card would, which means scenes/scripts fire turn_on, buttons fire press,
+     * switches toggle, etc. Invalid or unsupported targets toast and noop.
+     */
+    fun fireLongPress(target: String) {
+        val targetId = runCatching { EntityId(target) }.getOrNull()
+        if (targetId == null) {
+            R1Log.w("CardStack.longPress", "ignoring invalid target '$target'")
+            com.github.itskenny0.r1ha.core.util.Toaster.show(
+                "Long-press target '$target' isn't a recognised entity",
+            )
+            return
+        }
+        viewModelScope.launch {
+            R1Log.i("CardStack.longPress", "firing $targetId")
+            // For toggleable domains we tap-toggle relative to the current cached state;
+            // for action-only domains (scene/script/button) tapAction always fires the
+            // trigger regardless of isOn. The cached state may not exist (the user might
+            // point at an entity they haven't favourited) — default to isOn=false so the
+            // toggle dispatches a "turn_on" / "open_cover" / etc. which is the natural
+            // intent of "activate this from a long press".
+            val cachedIsOn = _state.value.cards.firstOrNull { it.id == targetId }?.isOn ?: false
+            haRepository.call(ServiceCall.tapAction(targetId, cachedIsOn))
+        }
     }
 
     fun tapToggle() {

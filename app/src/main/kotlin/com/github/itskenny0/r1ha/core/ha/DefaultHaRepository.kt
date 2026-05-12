@@ -595,6 +595,57 @@ class DefaultHaRepository(
     /** Single Json instance for /api/states deserialisation to avoid the per-call allocation lint. */
     private val listStatesJson = Json { ignoreUnknownKeys = true }
 
+    override suspend fun fetchHistory(entityId: EntityId, hours: Int): Result<List<HistoryPoint>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val s = settings.settings.first()
+                val server = s.server ?: error("Server URL not configured.")
+                val t = tokens.load() ?: error("Authentication tokens missing.")
+                val since = Instant.now().minusSeconds(hours.toLong() * 3600L)
+                // HA's history endpoint takes the ISO timestamp in the URL path. URL-encode
+                // the entity_id even though current HA versions don't require it — defensive
+                // against entity_ids that contain unusual characters in future versions.
+                val sinceIso = since.toString()
+                val url = "${server.url.trimEnd('/')}/api/history/period/$sinceIso" +
+                    "?filter_entity_id=${java.net.URLEncoder.encode(entityId.value, "UTF-8")}" +
+                    "&minimal_response&no_attributes"
+                val req = Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer ${t.accessToken}")
+                    .build()
+                val body = http.newCall(req).execute().use { resp ->
+                    require(resp.isSuccessful) {
+                        "Home Assistant returned HTTP ${resp.code} for /api/history"
+                    }
+                    resp.body!!.string()
+                }
+                // HA returns a JSON array of arrays — outermost level is one entry per
+                // requested entity (we only ask for one). Each inner entry is a state
+                // snapshot. `minimal_response` strips the attribute payload after the
+                // first sample which keeps the response small and parse fast.
+                val outer = listStatesJson.decodeFromString<List<List<HistoryRow>>>(body)
+                val first = outer.firstOrNull().orEmpty()
+                first.mapNotNull { row ->
+                    val state = row.state ?: return@mapNotNull null
+                    val ts = row.last_changed ?: row.last_updated ?: return@mapNotNull null
+                    val instant = runCatching { Instant.parse(ts) }.getOrNull() ?: return@mapNotNull null
+                    HistoryPoint.fromRaw(state, instant)
+                }
+            }.onFailure { t ->
+                R1Log.w("HaRepo.fetchHistory", "${entityId.value}: ${t.message}")
+            }
+        }
+
+    /** Minimal row shape for /api/history; uses `minimal_response` so attributes are absent
+     *  after the first sample. Both timestamp fields are nullable because HA omits one or
+     *  the other depending on whether the sample is the first in the window. */
+    @kotlinx.serialization.Serializable
+    private data class HistoryRow(
+        val state: String? = null,
+        val last_changed: String? = null,
+        val last_updated: String? = null,
+    )
+
     private companion object {
         const val MAX_AUTHLOST_RETRIES = 3
         /**

@@ -5,13 +5,17 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 
 /**
@@ -69,4 +73,77 @@ fun Modifier.r1Pressable(
                 onClick()
             },
         )
+}
+
+/**
+ * Variant of [r1Pressable] that also handles long-press. Same press-state visual + tap
+ * haptic, plus a one-shot [HapticFeedbackConstants.LONG_PRESS] when [onLongPress] fires.
+ * The press-state is driven through the same MutableInteractionSource so the scale dip
+ * matches; press-down → hold → long-press triggers and the scale stays dipped until
+ * release, which reads as "the system noticed the hold".
+ *
+ * Use this for list rows where short tap = primary action (toggle, navigate) and long
+ * press = secondary action (preview, context menu). Favourites picker uses it to wire
+ * long-press → card preview without making a short tap accidentally trigger it.
+ */
+fun Modifier.r1RowPressable(
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+    pressedScale: Float = 0.97f,
+    pressedAlpha: Float = 0.78f,
+): Modifier = composed {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) pressedScale else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "r1-row-press-scale",
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (pressed) pressedAlpha else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "r1-row-press-alpha",
+    )
+    val view = LocalView.current
+    this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+            this.alpha = alpha
+        }
+        .pointerInput(onTap, onLongPress) {
+            detectTapGestures(
+                onPress = { offset ->
+                    // Drive the MutableInteractionSource manually so the press-state spring
+                    // animates while the user is holding. tryAwaitRelease returns true on a
+                    // normal release, false if the gesture is cancelled (finger leaves the
+                    // bounds before release) — emit the matching Release / Cancel either way.
+                    val press = PressInteraction.Press(offset)
+                    interactionSource.emit(press)
+                    val released = tryAwaitRelease()
+                    interactionSource.emit(
+                        if (released) PressInteraction.Release(press)
+                        else PressInteraction.Cancel(press),
+                    )
+                },
+                onTap = {
+                    @Suppress("DEPRECATION")
+                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    onTap()
+                },
+                onLongPress = {
+                    // LONG_PRESS gives a noticeably heavier haptic than CLOCK_TICK so the
+                    // user can feel the gesture register as something distinct from a tap.
+                    @Suppress("DEPRECATION")
+                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    onLongPress()
+                },
+            )
+        }
 }
