@@ -212,10 +212,21 @@ fun RenameDialog(
             )
 
             Spacer(Modifier.height(18.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // Reset clears every override back to its default — the user gets a fast
+                // way to undo experimentation without manually un-picking each section.
+                // Stays on the LEFT (the destructive position) so it's not the natural
+                // gravity target for a fat-finger tap reaching for SAVE.
+                R1Button(
+                    text = "RESET",
+                    onClick = {
+                        name = ""
+                        override = EntityOverride.NONE
+                    },
+                    variant = R1ButtonVariant.Outlined,
+                    accent = R1.StatusRed,
+                )
+                Spacer(Modifier.weight(1f))
                 R1Button(
                     text = "CANCEL",
                     onClick = onCancel,
