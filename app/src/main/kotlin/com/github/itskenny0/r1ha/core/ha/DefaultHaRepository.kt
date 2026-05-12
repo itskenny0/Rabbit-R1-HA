@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -182,7 +183,7 @@ class DefaultHaRepository(
             lastChanged = runCatching { Instant.parse(raw.lastChanged ?: "") }.getOrDefault(Instant.now()),
             isAvailable = available,
         )
-        cache.value = cache.value + (id to newState)
+        cache.update { it + (id to newState) }
     }
 
     private fun computePercent(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Int? = when (domain) {
@@ -265,7 +266,7 @@ class DefaultHaRepository(
                 onSuccess = { all ->
                     val byId = all.filter { it.id in favIds }.associateBy { it.id }
                     if (byId.isNotEmpty()) {
-                        cache.value = cache.value + byId
+                        cache.update { it + byId }
                         R1Log.i("HaRepo.seed", "seeded ${byId.size}/${favIds.size} favourites (attempt ${attempt + 1})")
                         com.github.itskenny0.r1ha.core.util.Toaster.show("Loaded ${byId.size} entities")
                     } else {
