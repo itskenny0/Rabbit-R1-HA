@@ -40,7 +40,10 @@ class ServiceCallTest {
     @Test fun `tap action varies by domain`() {
         assertThat(ServiceCall.tapAction(EntityId("light.x"), isOn = true).service).isEqualTo("turn_off")
         assertThat(ServiceCall.tapAction(EntityId("light.x"), isOn = false).service).isEqualTo("turn_on")
-        assertThat(ServiceCall.tapAction(EntityId("cover.x"), isOn = true).service).isEqualTo("stop_cover")
+        // Cover tap toggles to the opposite extreme rather than just stopping — `stop_cover`
+        // on a stationary cover was a no-op which felt broken from the user's perspective.
+        assertThat(ServiceCall.tapAction(EntityId("cover.x"), isOn = true).service).isEqualTo("close_cover")
+        assertThat(ServiceCall.tapAction(EntityId("cover.x"), isOn = false).service).isEqualTo("open_cover")
         assertThat(ServiceCall.tapAction(EntityId("media_player.x"), isOn = true).service).isEqualTo("media_play_pause")
     }
 }

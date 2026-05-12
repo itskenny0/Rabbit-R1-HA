@@ -38,7 +38,10 @@ data class ServiceCall(
 
         fun tapAction(target: EntityId, isOn: Boolean): ServiceCall = when (target.domain) {
             Domain.LIGHT, Domain.FAN -> ServiceCall(target, if (isOn) "turn_off" else "turn_on", JsonObject(emptyMap()))
-            Domain.COVER -> ServiceCall(target, "stop_cover", JsonObject(emptyMap()))
+            // For covers, `isOn` here means "currently open". Toggle to the opposite end of
+            // travel — close if open, open if closed/stopped/in-motion. (Sending open_cover
+            // while the cover is already opening is a no-op on HA's side.)
+            Domain.COVER -> ServiceCall(target, if (isOn) "close_cover" else "open_cover", JsonObject(emptyMap()))
             Domain.MEDIA_PLAYER -> ServiceCall(target, "media_play_pause", JsonObject(emptyMap()))
         }
     }
