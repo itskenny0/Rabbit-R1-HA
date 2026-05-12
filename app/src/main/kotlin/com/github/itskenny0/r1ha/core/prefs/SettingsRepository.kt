@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -58,6 +60,13 @@ class SettingsRepository private constructor(
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     ).also { it.tryEmit(Unit) }
+
+    /**
+     * Serialises [update] so concurrent callers don't read-modify-write on top of each other.
+     * Without this, two fast taps on a favourites toggle would both read the pre-tap value,
+     * each apply their delta to it, and the second write would clobber the first.
+     */
+    private val updateMutex = Mutex()
 
     /** Production constructor: uses the singleton DataStore delegate and a stable shadow file. */
     constructor(context: Context) : this(
@@ -166,7 +175,7 @@ class SettingsRepository private constructor(
             R1Log.d("SettingsRepo.settings.emit", "server=${s.server?.url ?: "null"} favorites=${s.favorites.size} theme=${s.theme}")
         }
 
-    suspend fun update(transform: (AppSettings) -> AppSettings) {
+    suspend fun update(transform: (AppSettings) -> AppSettings): Unit = updateMutex.withLock {
         val current = currentBlocking()
         val next = transform(current)
         R1Log.i("SettingsRepo.update", "current.server=${current.server?.url ?: "null"} -> next.server=${next.server?.url ?: "null"}")
