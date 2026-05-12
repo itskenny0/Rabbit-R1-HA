@@ -68,7 +68,6 @@ class OnboardingViewModel(
             return
         }
         R1Log.i("Onboarding.probe", "start baseUrl=$baseUrl")
-        Toaster.show("Probing $baseUrl")
         _state.value = State.Probing
         viewModelScope.launch {
             try {
@@ -80,12 +79,10 @@ class OnboardingViewModel(
                     val code = http.newCall(req).execute().use { it.code }
                     R1Log.i("Onboarding.probe", "HEAD returned HTTP $code")
                 }
-                Toaster.show("Server reachable")
                 // Persist the URL so the rest of the app can use it.
                 R1Log.i("Onboarding.probe", "calling settings.update(server=$baseUrl)")
                 settings.update { it.copy(server = ServerConfig(url = baseUrl)) }
                 R1Log.i("Onboarding.probe", "settings.update returned")
-                Toaster.show("URL persisted (probe)")
                 val authorizeUrl = "$baseUrl/auth/authorize?response_type=code&client_id=https%3A%2F%2Fitskenny0.github.io%2FRabbit-R1-HA%2F&redirect_uri=r1ha%3A%2F%2Fauth-callback"
                 _state.value = State.ReadyToAuth(authorizeUrl)
             } catch (e: Exception) {
@@ -99,7 +96,6 @@ class OnboardingViewModel(
     /** Called by the WebView once the r1ha://auth-callback?code=… redirect is intercepted. */
     fun exchangeCode(code: String, serverUrl: String) {
         R1Log.i("Onboarding.exchange", "start serverUrl=$serverUrl codeLen=${code.length}")
-        Toaster.show("Exchanging code @ $serverUrl")
         if (serverUrl.isBlank()) {
             // Defensive: if the WebView screen couldn't extract a serverUrl, bail loudly rather
             // than POST to "/auth/token" (no host) and fail with a vague error.
@@ -131,7 +127,6 @@ class OnboardingViewModel(
                     }
                 }
                 R1Log.i("Onboarding.exchange", "token POST OK; saving")
-                Toaster.show("Token exchange OK")
                 val expiresAtMillis = System.currentTimeMillis() + tokenResponse.expires_in * 1_000L
                 tokens.save(
                     Tokens(
@@ -141,14 +136,12 @@ class OnboardingViewModel(
                     )
                 )
                 R1Log.i("Onboarding.exchange", "tokens.save returned")
-                Toaster.show("Tokens saved")
                 // Re-persist the server URL alongside the tokens. probe() also writes this,
                 // but doubling up means a successful login always lands a usable server config
                 // even if the probe-time write was lost for any reason.
                 R1Log.i("Onboarding.exchange", "calling settings.update(server=$serverUrl)")
                 settings.update { it.copy(server = ServerConfig(url = serverUrl)) }
                 R1Log.i("Onboarding.exchange", "settings.update returned")
-                Toaster.show("URL persisted (login)")
                 _state.value = State.Done
                 Toaster.show("Sign-in complete")
             } catch (e: Exception) {

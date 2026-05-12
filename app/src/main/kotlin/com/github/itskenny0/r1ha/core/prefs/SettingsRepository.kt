@@ -200,12 +200,10 @@ class SettingsRepository private constructor(
                 p[K.theme] = next.theme.name
             }
             R1Log.i("SettingsRepo.update", "DataStore edit completed; next.server=${next.server?.url ?: "null"}")
-            if (next.server != current.server) {
-                Toaster.show("DataStore commit OK: ${next.server?.url ?: "(cleared)"}")
-            }
         } catch (t: Throwable) {
             R1Log.e("SettingsRepo.update", "DataStore edit threw; shadow has the value as a fallback", t)
-            Toaster.show("DataStore commit FAILED — using shadow: ${t.message}", long = true)
+            // Only toast on failure (and the shadow store will keep things working).
+            Toaster.show("Settings save failed — using fallback storage", long = true)
             // Don't rethrow — the shadow store has the critical bits, and the caller (typically
             // OnboardingViewModel) should not be forced to error out the user's flow if only the
             // DataStore commit failed.
@@ -229,8 +227,9 @@ class SettingsRepository private constructor(
         }
         val ok = editor.commit() // synchronous; we want to know if it actually wrote
         R1Log.i("SettingsRepo.writeShadow", "server=${server?.url ?: "null"} favorites=${favorites.size} commit=$ok")
-        if (server != null) {
-            Toaster.show("Shadow ${if (ok) "saved" else "FAILED"}: ${server.url}, ${favorites.size} favs")
+        if (!ok) {
+            // Only toast on FAILURE; success would otherwise spam the user on every settings edit.
+            Toaster.show("Storage failed — please reboot the device", long = true)
         }
         // Tick the settings Flow so observers re-read — even if the DataStore commit below
         // fails, observers see the updated shadow values.

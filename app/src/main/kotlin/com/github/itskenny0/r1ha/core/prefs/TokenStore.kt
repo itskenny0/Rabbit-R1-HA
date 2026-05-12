@@ -101,8 +101,9 @@ class TokenStore(
             .putLong(S.expiresAt, tokens.expiresAtMillis)
             .commit()
         R1Log.i("TokenStore.save", "shadow commit=$shadowOk")
-        if (shadowOk) Toaster.show("Tokens shadow-saved")
-        else Toaster.show("Tokens shadow save FAILED", long = true)
+        if (!shadowOk) {
+            Toaster.show("Tokens couldn't save to fallback storage", long = true)
+        }
 
         try {
             store.edit { p ->
@@ -111,10 +112,11 @@ class TokenStore(
                 p[K.expiresAt] = tokens.expiresAtMillis
             }
             R1Log.i("TokenStore.save", "DataStore commit OK")
-            Toaster.show("Tokens DataStore-saved")
         } catch (t: Throwable) {
             R1Log.e("TokenStore.save", "DataStore edit threw; shadow has the value", t)
-            Toaster.show("Tokens DataStore FAILED — using shadow", long = true)
+            if (!shadowOk) {
+                Toaster.show("Tokens couldn't save anywhere", long = true)
+            }
         }
     }
 
