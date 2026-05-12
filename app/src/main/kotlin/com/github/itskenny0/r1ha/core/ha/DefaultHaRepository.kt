@@ -124,6 +124,14 @@ class DefaultHaRepository(
                         // in AuthLost and the user has to manually sign out & reconnect.
                         // Bounded to MAX_AUTHLOST_RETRIES to avoid tight-looping if HA keeps
                         // issuing access tokens that fail auth (rare misconfiguration).
+                        // Also drain pendingCalls — the WS was just closed by AuthInvalid so
+                        // any outstanding Result deferreds won't ever complete naturally.
+                        if (pendingCalls.isNotEmpty()) {
+                            pendingCalls.values.forEach {
+                                it.complete(Result.failure(IllegalStateException("WS auth lost")))
+                            }
+                            pendingCalls.clear()
+                        }
                         val attempt = authLostRefreshAttempt
                         if (attempt >= MAX_AUTHLOST_RETRIES) {
                             R1Log.w("HaRepo.authLost", "max refresh attempts ($attempt) reached; staying AuthLost")
