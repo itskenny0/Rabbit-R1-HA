@@ -15,8 +15,11 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import com.github.itskenny0.r1ha.core.util.R1Log
 import com.github.itskenny0.r1ha.core.util.Toaster
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -44,6 +47,17 @@ class SettingsRepository private constructor(
     private val store: DataStore<Preferences>,
     private val shadow: SharedPreferences,
 ) {
+
+    /**
+     * Tick channel that fires whenever the shadow store is written. Combined with
+     * `store.data` so the public `settings` Flow re-emits even when a write only landed
+     * in the shadow (DataStore commit failed for whatever reason on the device).
+     */
+    private val shadowChanges = MutableSharedFlow<Unit>(
+        replay = 1,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    ).also { it.tryEmit(Unit) }
 
     /** Production constructor: uses the singleton DataStore delegate and a stable shadow file. */
     constructor(context: Context) : this(
@@ -94,11 +108,14 @@ class SettingsRepository private constructor(
         val theme = stringPreferencesKey("theme")
     }
 
-    val settings: Flow<AppSettings> = store.data
-        .catch { t ->
-            R1Log.e("SettingsRepo", "store.data threw, emitting emptyPreferences()", t)
-            emit(emptyPreferences())
-        }
+    val settings: Flow<AppSettings> = combine(
+        store.data
+            .catch { t ->
+                R1Log.e("SettingsRepo", "store.data threw, emitting emptyPreferences()", t)
+                emit(emptyPreferences())
+            },
+        shadowChanges,
+    ) { p, _ -> p }
         .map { p ->
             // Server URL: prefer DataStore, fall back to shadow SharedPreferences.
             val urlFromStore = p[K.serverUrl]
@@ -215,6 +232,9 @@ class SettingsRepository private constructor(
         if (server != null) {
             Toaster.show("Shadow ${if (ok) "saved" else "FAILED"}: ${server.url}, ${favorites.size} favs")
         }
+        // Tick the settings Flow so observers re-read — even if the DataStore commit below
+        // fails, observers see the updated shadow values.
+        shadowChanges.tryEmit(Unit)
     }
 
     private suspend fun currentBlocking(): AppSettings = settings.first()
