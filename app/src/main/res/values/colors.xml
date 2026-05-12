@@ -2,4 +2,8 @@
 <resources>
     <color name="splash_bg">#F36F21</color>
     <color name="splash_icon">#FFFFFFFF</color>
+    <!-- The activity's window background. Matches sharedDarkBaseline.background in
+         R1Theme.kt so there's no flash between splashscreen dismissal and Compose
+         content drawing. -->
+    <color name="window_bg">#0A0A0A</color>
 </resources>

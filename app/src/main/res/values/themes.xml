@@ -10,5 +10,9 @@
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- App is always dark internally; force a near-black window background so the very
+             brief moment between splashscreen dismissal and first frame doesn't flash white
+             if the user's system is on light theme. -->
+        <item name="android:windowBackground">@color/window_bg</item>
     </style>
 </resources>
