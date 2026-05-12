@@ -29,6 +29,18 @@ data class EntityState(
      * the same kind of branching (e.g. climate HVAC-mode display) don't need fresh wiring.
      */
     val rawState: String? = null,
+    /**
+     * `unit_of_measurement` from HA attrs — "°C", "%RH", "W", etc. Surfaces on SensorCard
+     * as the suffix next to the reading; nullable because non-sensor entities (and some
+     * sensors with no unit, e.g. enum sensors) don't have one.
+     */
+    val unit: String? = null,
+    /**
+     * `device_class` from HA attrs — "temperature", "humidity", "power", "motion", etc.
+     * Used by SensorCard to pick an accent colour and the small label under the heading
+     * so the user can tell a power sensor from a temperature sensor at a glance.
+     */
+    val deviceClass: String? = null,
 ) {
     companion object {
         fun normaliseLightBrightness(raw: Int): Int = ((raw.coerceIn(0, 255)) * 100.0 / 255.0).roundToInt()

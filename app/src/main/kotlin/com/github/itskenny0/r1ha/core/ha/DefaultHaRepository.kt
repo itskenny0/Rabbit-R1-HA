@@ -342,6 +342,11 @@ class DefaultHaRepository(
             // a meaningful on state — their state attribute is a last-fired timestamp.
             Domain.SCRIPT -> raw.state.equals("on", ignoreCase = true)
             Domain.SCENE, Domain.BUTTON -> false
+            // binary_sensor uses "on"/"off" by HA convention — "on" means the triggered
+            // state (door open, motion detected, leak found). Plain sensor entities have
+            // numeric/string readings and don't have a meaningful on/off mapping.
+            Domain.BINARY_SENSOR -> raw.state.equals("on", ignoreCase = true)
+            Domain.SENSOR -> false
         }
         val available = raw.state != "unavailable" && raw.state != "unknown"
         val pct = computePercent(id.domain, raw.attributes)
@@ -357,6 +362,8 @@ class DefaultHaRepository(
             isAvailable = available,
             supportsScalar = supportsScalar(id.domain, raw.attributes),
             rawState = raw.state,
+            unit = raw.attributes["unit_of_measurement"].asString(),
+            deviceClass = raw.attributes["device_class"].asString(),
         )
         cache.update { it + (id to newState) }
     }
@@ -371,7 +378,8 @@ class DefaultHaRepository(
         // driven, but mapping it through 0..100 requires min_temp/max_temp range plumbing
         // that's out of scope for the current release).
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
-        Domain.CLIMATE, Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> null
+        Domain.CLIMATE, Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
+        Domain.SENSOR, Domain.BINARY_SENSOR -> null
     }
 
     private fun computeRaw(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Number? = when (domain) {
@@ -381,7 +389,13 @@ class DefaultHaRepository(
         Domain.MEDIA_PLAYER -> attrs["volume_level"].asDouble()
         Domain.HUMIDIFIER -> attrs["humidity"].asInt()
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
-        Domain.CLIMATE, Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> null
+        Domain.CLIMATE, Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
+        Domain.BINARY_SENSOR -> null
+        // For plain sensors the *state* IS the reading — there's no attribute to read from.
+        // The SensorCard renders the rawState string directly; we don't try to coerce it
+        // into a Number here because that loses precision (e.g. "21.7" → 21) and locale
+        // formatting (HA already sends a presentation-ready string).
+        Domain.SENSOR -> null
     }
 
     /**
@@ -430,6 +444,8 @@ class DefaultHaRepository(
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK, Domain.CLIMATE -> false
         // Action-only domains — no scalar; rendered as ActionCard tiles.
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> false
+        // Sensors are read-only — rendered as SensorCard, no wheel.
+        Domain.SENSOR, Domain.BINARY_SENSOR -> false
     }
 
     override fun observe(entities: Set<EntityId>): Flow<Map<EntityId, EntityState>> =
@@ -454,8 +470,33 @@ class DefaultHaRepository(
                 require(resp.isSuccessful) { "Home Assistant returned HTTP ${resp.code} for /api/states" }
                 resp.body!!.string()
             }
-            val states = listStatesJson.decodeFromString<List<RawStateRow>>(body)
-            states.mapNotNull { row ->
+            // Parse the response as a List<JsonElement> first, then decode each row
+            // independently. The earlier `decodeFromString<List<RawStateRow>>` was an
+            // all-or-nothing parse: a single weird row (state field missing, attributes
+            // shape unexpected, etc.) would throw and the entire entity list would be lost.
+            // That was almost certainly why scenes occasionally vanished from the picker —
+            // some scene entries in HA's response had shapes the strict decoder didn't
+            // accept. Per-row decoding with a try/catch keeps the rest of the list
+            // available and lets us log the offenders rather than silently empty the UI.
+            val rowsJson = listStatesJson.decodeFromString<List<kotlinx.serialization.json.JsonElement>>(body)
+            R1Log.i("HaRepo.listAll", "raw rows from /api/states: ${rowsJson.size}")
+            val rowSerializer = RawStateRow.serializer()
+            val rows = rowsJson.mapNotNull { el ->
+                runCatching { listStatesJson.decodeFromJsonElement(rowSerializer, el) }.getOrElse { t ->
+                    val eid = (el as? kotlinx.serialization.json.JsonObject)?.get("entity_id")?.let {
+                        (it as? JsonPrimitive)?.content
+                    } ?: "<unparseable>"
+                    R1Log.w("HaRepo.listAll", "skipping malformed row $eid: ${t.message}")
+                    null
+                }
+            }
+            // Quick visibility on what came back so the user can see scenes/sensors in
+            // logcat if the UI ever drops them; keeps debugging cheap in the field.
+            val countsByDomain = rows.groupingBy {
+                it.entity_id.substringBefore('.', missingDelimiterValue = "")
+            }.eachCount()
+            R1Log.i("HaRepo.listAll", "decoded ${rows.size} rows; by domain=$countsByDomain")
+            rows.mapNotNull { row ->
                 val prefix = row.entity_id.substringBefore('.', missingDelimiterValue = "")
                 if (!Domain.isSupportedPrefix(prefix)) return@mapNotNull null
                 val id = EntityId(row.entity_id)
@@ -479,6 +520,8 @@ class DefaultHaRepository(
                         Domain.CLIMATE -> !row.state.equals("off", ignoreCase = true) && available
                         Domain.SCRIPT -> row.state.equals("on", ignoreCase = true)
                         Domain.SCENE, Domain.BUTTON -> false
+                        Domain.BINARY_SENSOR -> row.state.equals("on", ignoreCase = true)
+                        Domain.SENSOR -> false
                     },
                     percent = pct,
                     raw = rawNum,
@@ -486,6 +529,8 @@ class DefaultHaRepository(
                     isAvailable = available,
                     supportsScalar = supportsScalar(id.domain, attrs),
                     rawState = row.state,
+                    unit = attrs["unit_of_measurement"].asString(),
+                    deviceClass = attrs["device_class"].asString(),
                 )
             }
         }

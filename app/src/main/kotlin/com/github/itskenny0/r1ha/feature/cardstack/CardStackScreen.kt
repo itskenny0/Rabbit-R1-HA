@@ -213,24 +213,12 @@ private fun VerticalCardPager(
             }
         }
 
-        // ── Chevron hints ─────────────────────────────────────────────────────────────
-        // A small ↑ just under the chrome row when there's a previous card, and a small ↓
-        // just above the bottom edge when there's a next card. Drawn with the same Chevron
-        // primitive as the back-button so the whole screen language stays consistent —
-        // no Material `KeyboardArrowUp/Down` glyphs. AnimatedVisibility softens the
-        // appear/disappear so the hint doesn't pop in when the user lands on the first or
-        // last card; reads as a deliberate hint rather than a UI bounce.
+        // ── Chevron hint ──────────────────────────────────────────────────────────────
+        // Down hint at the bottom edge when there's a next card. The up hint was dropped
+        // because it landed underneath the chrome's vertical position pip — redundant
+        // information at best, visual collision at worst. The down hint stays useful
+        // because the bottom of the card is otherwise empty.
         val currentPage = pagerState.currentPage
-        androidx.compose.animation.AnimatedVisibility(
-            visible = currentPage > 0,
-            enter = androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.fadeOut(),
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 60.dp),
-        ) {
-            Chevron(direction = ChevronDirection.Up, size = 14.dp, tint = R1.InkMuted)
-        }
         androidx.compose.animation.AnimatedVisibility(
             visible = currentPage < cards.size - 1,
             enter = androidx.compose.animation.fadeIn(),

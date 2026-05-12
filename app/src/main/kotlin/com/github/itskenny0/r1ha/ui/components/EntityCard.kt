@@ -43,7 +43,8 @@ fun EntityCard(
         // mapping never lands on theme.Card. Routed to ActionCard which has its own label
         // ("SCENE"/"SCRIPT"/"BUTTON") via domainLabel above. The Glyph value is unused but
         // has to be exhaustive for the when to compile.
-        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> CardRenderModel.Glyph.SWITCH
+        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
+        Domain.SENSOR, Domain.BINARY_SENSOR -> CardRenderModel.Glyph.SWITCH
     }
     val accentRole = when (state.id.domain) {
         Domain.LIGHT -> CardRenderModel.AccentRole.WARM
@@ -66,6 +67,11 @@ fun EntityCard(
         Domain.SCENE -> CardRenderModel.AccentRole.GREEN
         Domain.SCRIPT -> CardRenderModel.AccentRole.COOL
         Domain.BUTTON -> CardRenderModel.AccentRole.WARM
+        // Sensors — colour by the most common device_class so the deck doesn't read as a
+        // wall of orange. Temperature/humidity reads cool, motion/door reads green ("safe
+        // / unobtrusive"), everything else falls back to neutral.
+        Domain.SENSOR -> sensorAccent(state.deviceClass)
+        Domain.BINARY_SENSOR -> binarySensorAccent(state.deviceClass)
     }
     // When the entity is unavailable, dim the whole card and overlay a "UNAVAILABLE" label so
     // the user doesn't think the card is just at 0%. The themes themselves don't honour
@@ -73,15 +79,30 @@ fun EntityCard(
     // gesture is also wired here (rather than inside each theme) so all three themes get it
     // for free; r1Pressable's haptic is disabled because the existing percent-change effect
     // in CardStackScreen already fires CLOCK_TICK when the state actually flips — double-
-    // haptic on a single tap reads as a stutter rather than a click.
-    val tapModifier = if (tapToToggleEnabled && state.isAvailable) {
+    // haptic on a single tap reads as a stutter rather than a click. Sensors are skipped
+    // because they're read-only — a press-state dip on a card that can't actually do
+    // anything is just misleading.
+    val tapModifier = if (tapToToggleEnabled && state.isAvailable && !state.id.domain.isSensor) {
         Modifier.r1Pressable(onClick = onTapToggle, hapticOnClick = false)
     } else {
         Modifier
     }
     Box(modifier = modifier.then(tapModifier)) {
         val themeAlpha = if (state.isAvailable) 1f else 0.35f
-        if (state.id.domain.isAction) {
+        if (state.id.domain.isSensor) {
+            // Read-only sensor — render SensorCard. No tap, no wheel; the EntityCard's
+            // outer pressable also short-circuits because we pass tapToToggleEnabled=true
+            // but the SensorCard itself doesn't react to onTapToggle. (The wrapper still
+            // does the press-feedback dip, which is fine — it lets the user know the card
+            // received their tap, even if nothing changes.)
+            SensorCard(
+                state = state,
+                accent = resolveAccentColor(accentRole),
+                domainLabel = sensorDomainLabel(state.id.domain),
+                showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
+                modifier = Modifier.fillMaxSize().alpha(themeAlpha),
+            )
+        } else if (state.id.domain.isAction) {
             // Stateless trigger entity — scene, script, or button. Doesn't fit the
             // scalar-percent OR the on/off-switch model; renders as ActionCard with one
             // big ACTIVATE tile. Wheel input is ignored on these in the VM; only tap
@@ -169,4 +190,35 @@ private fun actionDomainLabel(domain: Domain): String = when (domain) {
     Domain.BUTTON -> "BUTTON"
     // Defensive: action-only path should only ever see action domains.
     else -> domain.prefix.uppercase()
+}
+
+/** Sensor-card label — sensor and binary_sensor get distinct labels so the user can tell
+ *  a numeric reading apart from a boolean trigger at a glance. */
+private fun sensorDomainLabel(domain: Domain): String = when (domain) {
+    Domain.SENSOR -> "SENSOR"
+    Domain.BINARY_SENSOR -> "DETECTOR"
+    else -> domain.prefix.uppercase()
+}
+
+/** Map a plain sensor's device_class to an accent colour. Read on the picker UI's
+ *  domainAccentFor too so the picker chip and the card agree. */
+private fun sensorAccent(deviceClass: String?): CardRenderModel.AccentRole = when (deviceClass) {
+    // Cool — physical environment readouts.
+    "temperature", "humidity", "pressure", "atmospheric_pressure", "water" -> CardRenderModel.AccentRole.COOL
+    // Warm — energy/power consumption.
+    "power", "energy", "current", "voltage", "gas", "frequency" -> CardRenderModel.AccentRole.WARM
+    // Green — outdoor/illuminance-ish.
+    "illuminance", "wind_speed", "speed", "battery" -> CardRenderModel.AccentRole.GREEN
+    else -> CardRenderModel.AccentRole.NEUTRAL
+}
+
+/** Same idea for binary sensors. Motion / door / leak each get a sensible accent. */
+private fun binarySensorAccent(deviceClass: String?): CardRenderModel.AccentRole = when (deviceClass) {
+    // Warm — high-attention triggers (motion, smoke, gas).
+    "motion", "occupancy", "presence", "smoke", "gas", "carbon_monoxide" -> CardRenderModel.AccentRole.WARM
+    // Cool — environmental contacts.
+    "door", "garage_door", "window", "opening", "moisture" -> CardRenderModel.AccentRole.COOL
+    // Green — informational.
+    "connectivity", "running", "plug" -> CardRenderModel.AccentRole.GREEN
+    else -> CardRenderModel.AccentRole.NEUTRAL
 }

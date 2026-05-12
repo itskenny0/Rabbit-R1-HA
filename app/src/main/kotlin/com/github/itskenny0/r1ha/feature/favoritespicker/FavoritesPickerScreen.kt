@@ -1,9 +1,6 @@
 package com.github.itskenny0.r1ha.feature.favoritespicker
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -68,10 +67,22 @@ fun FavoritesPickerScreen(
     ) {
         R1TopBar(title = "FAVOURITES", onBack = onBack)
 
+        // Filter chip row — always visible (so the user can switch filters from any
+        // state). Sits between the topbar and the list so it stays pinned while the list
+        // scrolls underneath. Hidden during the initial-load spinner; not much sense
+        // showing filters before we know what's available.
+        if (!ui.loading && ui.error == null) {
+            FilterChipRow(
+                selected = ui.filter,
+                counts = ui.countsByFilter,
+                onSelect = { vm.setFilter(it) },
+            )
+        }
+
         when {
             ui.loading -> CenteredLoading()
             ui.error != null -> ErrorState(message = ui.error ?: "Error")
-            ui.rows.isEmpty() -> EmptyState()
+            ui.rows.isEmpty() -> FilteredEmptyState(filter = ui.filter)
             else -> ChannelList(
                 rows = ui.rows,
                 listState = listState,
@@ -80,6 +91,79 @@ fun FavoritesPickerScreen(
                 onMoveDown = { vm.moveDown(it) },
             )
         }
+    }
+}
+
+/**
+ * Horizontal-scroll row of filter chips. Each chip shows the filter label + a tiny count
+ * suffix (e.g. "LIGHTS · 7") so the user can see at a glance which filters have entries.
+ * Selected chip is filled with the accent colour; unselected chips are hairline-bordered.
+ */
+@Composable
+private fun FilterChipRow(
+    selected: PickerFilter,
+    counts: Map<PickerFilter, Int>,
+    onSelect: (PickerFilter) -> Unit,
+) {
+    val scrollState = rememberScrollState()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(scrollState)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PickerFilter.entries.forEach { filter ->
+            val count = counts[filter] ?: 0
+            // Hide chips with zero matches (except ALL/FAVS which always show) — keeps
+            // the row tight on installs with only a handful of domains.
+            if (count == 0 && filter != PickerFilter.ALL && filter != PickerFilter.FAVS) {
+                return@forEach
+            }
+            val isSelected = filter == selected
+            Box(
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .clip(R1.ShapeS)
+                    .background(if (isSelected) R1.AccentWarm else R1.Bg)
+                    .then(
+                        if (isSelected) Modifier
+                        else Modifier.border(1.dp, R1.Hairline, R1.ShapeS),
+                    )
+                    .r1Pressable(onClick = { onSelect(filter) })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = "${filter.label} · $count",
+                    style = R1.labelMicro,
+                    color = if (isSelected) R1.Bg else R1.InkSoft,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilteredEmptyState(filter: PickerFilter) {
+    // Three flavours of "nothing here": no entities at all, filter pruned them all, or
+    // the favourites-only view with no favourites set yet. Each gets a short hint.
+    val (heading, body) = when (filter) {
+        PickerFilter.ALL -> "NO CONTROLLABLE ENTITIES" to
+            "Home Assistant didn't return anything we know how to drive — no lights,\nswitches, scenes, or sensors."
+        PickerFilter.FAVS -> "NO FAVOURITES YET" to
+            "Pick a chip above to start browsing, then tap an entity to favourite it."
+        else -> "NONE IN THIS FILTER" to "Tap ALL above to see every entity."
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 22.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(heading, style = R1.labelMicro, color = R1.InkSoft)
+        Spacer(Modifier.height(8.dp))
+        Text(body, style = R1.body, color = R1.InkMuted)
     }
 }
 
@@ -123,25 +207,6 @@ private fun ErrorState(message: String) {
 }
 
 @Composable
-private fun EmptyState() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 22.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text("NO CONTROLLABLE ENTITIES", style = R1.labelMicro, color = R1.InkSoft)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Home Assistant didn't return any lights, fans, covers, or media\nplayers with a settable scalar.",
-            style = R1.body,
-            color = R1.InkMuted,
-        )
-    }
-}
-
-@Composable
 private fun ChannelList(
     rows: List<FavoritesPickerViewModel.Row>,
     listState: androidx.compose.foundation.lazy.LazyListState,
@@ -149,24 +214,33 @@ private fun ChannelList(
     onMoveUp: (String) -> Unit,
     onMoveDown: (String) -> Unit,
 ) {
+    // favCount used to drive move-arrow enable logic. Pre-computed once per list rather
+    // than once per row composition.
     val favCount = rows.count { it.isFavorite }
     LazyColumn(
         state = listState,
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = 6.dp),
+            .padding(top = 4.dp),
+        // contentType lets Compose recycle row composables across items rather than
+        // throwing away the layout tree for every scroll step. Two contentTypes: one for
+        // favourite rows (have move-arrows) and one for non-favourites (don't). Without
+        // this hint, every row re-composes from scratch on swap.
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 48.dp),
     ) {
-        items(rows, key = { it.state.id.value }) { row ->
+        items(
+            items = rows,
+            key = { it.state.id.value },
+            contentType = { if (it.isFavorite) "fav" else "non-fav" },
+        ) { row ->
             ChannelRow(
                 row = row,
                 favCount = favCount,
                 onToggle = { onToggle(row.state.id.value) },
                 onMoveUp = { onMoveUp(row.state.id.value) },
                 onMoveDown = { onMoveDown(row.state.id.value) },
-                modifier = Modifier.animateItem(),
             )
         }
-        item { Spacer(Modifier.height(48.dp)) }
     }
 }
 
@@ -200,13 +274,19 @@ private fun ChannelRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(domainCode, style = R1.labelMicro, color = domainAccent)
-                if (!row.state.supportsScalar) {
+                // Tag the row so the user knows what kind of control they'll get when they
+                // favourite this entity. ACTION for fire-and-forget (scenes/scripts/buttons),
+                // SENSOR for read-only sensors, ON/OFF for on-off-only switches, and silent
+                // for scalar entities (the percent control is implicit from the domain).
+                val tag = when {
+                    row.state.id.domain.isAction -> "TRIGGER"
+                    row.state.id.domain == Domain.SENSOR -> "READING"
+                    !row.state.supportsScalar -> "ON/OFF"
+                    else -> null
+                }
+                if (tag != null) {
                     Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "· ON/OFF",
-                        style = R1.labelMicro,
-                        color = R1.InkMuted,
-                    )
+                    Text(text = "· $tag", style = R1.labelMicro, color = R1.InkMuted)
                 }
                 if (row.isFavorite && row.orderIndex != null) {
                     Spacer(Modifier.width(8.dp))
@@ -238,28 +318,26 @@ private fun ChannelRow(
             )
         }
 
-        // ── Right: move arrows (only for favorites) + selection state ───────────────
-        AnimatedVisibility(
-            visible = row.isFavorite,
-            enter = fadeIn(),
-            exit = fadeOut(),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val canMoveUp = row.orderIndex != null && row.orderIndex > 0
-                val canMoveDown = row.orderIndex != null && row.orderIndex < favCount - 1
-                MoveChevron(
-                    onClick = onMoveUp,
-                    enabled = canMoveUp,
-                    direction = ChevronDirection.Up,
-                    description = "Move up",
-                )
-                MoveChevron(
-                    onClick = onMoveDown,
-                    enabled = canMoveDown,
-                    direction = ChevronDirection.Down,
-                    description = "Move down",
-                )
-            }
+        // ── Right: move arrows (only for favourites) + selection state ──────────────
+        // Plain if/else instead of AnimatedVisibility — the fade-in/out costs a measure
+        // pass per row per state change, and with 50+ entities scrolling that snowballs.
+        // The arrows appearing/disappearing on favourite toggle is fine without animation;
+        // the SelectBox itself is the focal point of the state change anyway.
+        if (row.isFavorite) {
+            val canMoveUp = row.orderIndex != null && row.orderIndex > 0
+            val canMoveDown = row.orderIndex != null && row.orderIndex < favCount - 1
+            MoveChevron(
+                onClick = onMoveUp,
+                enabled = canMoveUp,
+                direction = ChevronDirection.Up,
+                description = "Move up",
+            )
+            MoveChevron(
+                onClick = onMoveDown,
+                enabled = canMoveDown,
+                direction = ChevronDirection.Down,
+                description = "Move down",
+            )
         }
         Spacer(Modifier.width(10.dp))
         SelectBox(selected = row.isFavorite, onClick = onToggle, accent = domainAccent)
@@ -323,7 +401,8 @@ private fun domainAccentFor(domain: Domain): Color = when (domain) {
     Domain.CLIMATE, Domain.BUTTON -> R1.AccentWarm
     Domain.FAN, Domain.SCENE -> R1.AccentGreen
     Domain.COVER, Domain.LOCK -> R1.AccentNeutral
-    Domain.MEDIA_PLAYER, Domain.HUMIDIFIER, Domain.SCRIPT -> R1.AccentCool
+    Domain.MEDIA_PLAYER, Domain.HUMIDIFIER, Domain.SCRIPT, Domain.SENSOR -> R1.AccentCool
+    Domain.BINARY_SENSOR -> R1.AccentNeutral
 }
 
 private fun domainLabel(domain: Domain): String = when (domain) {
@@ -340,4 +419,6 @@ private fun domainLabel(domain: Domain): String = when (domain) {
     Domain.SCENE -> "SCENE"
     Domain.SCRIPT -> "SCRIPT"
     Domain.BUTTON -> "BUTTON"
+    Domain.SENSOR -> "SENSOR"
+    Domain.BINARY_SENSOR -> "DETECTOR"
 }

@@ -34,10 +34,26 @@ enum class Domain(val prefix: String) {
     SCENE("scene"),
     SCRIPT("script"),
     BUTTON("button"),
+    /**
+     * Read-only sensors — temperature, humidity, power, etc. State is the reading itself,
+     * `unit_of_measurement` from attributes is the suffix. No wheel input, no tap action;
+     * rendered by SensorCard as a big numeric readout.
+     */
+    SENSOR("sensor"),
+    /**
+     * Binary sensors — door open/closed, motion detected, leak alarm. State is "on"/"off"
+     * (HA convention: "on" = the affordance is triggered, "off" = quiet). Same SensorCard
+     * variant as `sensor` but rendered as a binary state word + device-class label rather
+     * than a numeric reading. Read-only.
+     */
+    BINARY_SENSOR("binary_sensor"),
     ;
 
     /** Action-only domains — UI renders them as fire-and-forget ActionCard tiles. */
     val isAction: Boolean get() = this == SCENE || this == SCRIPT || this == BUTTON
+
+    /** Read-only sensor domains — UI renders them as SensorCard. No wheel, no tap. */
+    val isSensor: Boolean get() = this == SENSOR || this == BINARY_SENSOR
 
     companion object {
         private val byPrefix = entries.associateBy { it.prefix }

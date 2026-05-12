@@ -67,6 +67,15 @@ data class ServiceCall(
                 // ActionCards. Defensive fallback: just fire the action.
                 Domain.SCENE, Domain.SCRIPT -> ServiceCall(target, "turn_on", JsonObject(emptyMap()))
                 Domain.BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
+                // Sensors are read-only — the wheel and tap are no-ops at the VM level so
+                // this branch shouldn't fire. Defensive: emit homeassistant.update_entity
+                // which is the closest thing to "do something" without changing state, so
+                // the call is loggable but harmless if anything ever does reach here.
+                Domain.SENSOR, Domain.BINARY_SENSOR -> ServiceCall(
+                    target,
+                    "update_entity",
+                    JsonObject(emptyMap()),
+                )
             }
         }
 
@@ -102,6 +111,14 @@ data class ServiceCall(
             // scenes / scripts use `turn_on` to activate.
             Domain.SCENE, Domain.SCRIPT -> ServiceCall(target, "turn_on", JsonObject(emptyMap()))
             Domain.BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
+            // Sensors are read-only — tapToggle shouldn't reach them (EntityCard skips the
+            // tap modifier for sensor domains). Defensive: emit update_entity so any
+            // accidental dispatch is at least a no-op refresh.
+            Domain.SENSOR, Domain.BINARY_SENSOR -> ServiceCall(
+                target,
+                "update_entity",
+                JsonObject(emptyMap()),
+            )
         }
 
         /**
@@ -137,6 +154,12 @@ data class ServiceCall(
             // service; the off-side is a no-op (we just turn_on again, which is harmless).
             Domain.SCENE, Domain.SCRIPT -> ServiceCall(target, "turn_on", JsonObject(emptyMap()))
             Domain.BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
+            // Sensors are read-only — defensive update_entity no-op.
+            Domain.SENSOR, Domain.BINARY_SENSOR -> ServiceCall(
+                target,
+                "update_entity",
+                JsonObject(emptyMap()),
+            )
         }
     }
 }

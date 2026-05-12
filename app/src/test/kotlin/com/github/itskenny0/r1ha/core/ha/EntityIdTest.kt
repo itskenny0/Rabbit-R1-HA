@@ -22,11 +22,18 @@ class EntityIdTest {
     }
 
     @Test fun `rejects unsupported domain`() {
-        // sensor/binary_sensor are read-only displays — nothing for the wheel/tap to do.
-        // weather/device_tracker similarly read-only state surfaces.
-        assertThrows<IllegalArgumentException> { EntityId("sensor.living_room_temperature") }
-        assertThrows<IllegalArgumentException> { EntityId("binary_sensor.front_door") }
+        // weather / device_tracker / sun are read-only state surfaces without a clean
+        // R1 control affordance. Adding them would either show as inert cards or duplicate
+        // the sensor read-out path with no real value — keeping them out keeps the picker
+        // signal-to-noise high.
         assertThrows<IllegalArgumentException> { EntityId("weather.home") }
+        assertThrows<IllegalArgumentException> { EntityId("device_tracker.phone") }
+        assertThrows<IllegalArgumentException> { EntityId("sun.sun") }
+    }
+
+    @Test fun `parses sensor domains`() {
+        assertThat(EntityId("sensor.living_room_temperature").domain).isEqualTo(Domain.SENSOR)
+        assertThat(EntityId("binary_sensor.front_door").domain).isEqualTo(Domain.BINARY_SENSOR)
     }
 
     @Test fun `parses on-off and scalar domains`() {

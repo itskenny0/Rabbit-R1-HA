@@ -15,17 +15,16 @@ class EntityDomainTest {
         assertThat(Domain.fromPrefix("automation")).isEqualTo(Domain.AUTOMATION)
         assertThat(Domain.fromPrefix("lock")).isEqualTo(Domain.LOCK)
         assertThat(Domain.fromPrefix("humidifier")).isEqualTo(Domain.HUMIDIFIER)
+        assertThat(Domain.fromPrefix("sensor")).isEqualTo(Domain.SENSOR)
+        assertThat(Domain.fromPrefix("binary_sensor")).isEqualTo(Domain.BINARY_SENSOR)
     }
 
     @Test fun `fromPrefix rejects unknown prefix`() {
-        // Domains the app deliberately doesn't surface — sensor/binary_sensor are read-
-        // only displays (nothing to drive from a wheel/tap), device_tracker / weather
-        // similar. Keeping the negative list explicit makes the wire-supported set
-        // self-documenting in the test.
-        assertThrows<IllegalArgumentException> { Domain.fromPrefix("sensor") }
-        assertThrows<IllegalArgumentException> { Domain.fromPrefix("binary_sensor") }
+        // Domains the app deliberately doesn't surface yet — device_tracker / weather /
+        // sun / etc. are read-only state surfaces without a clean R1 affordance.
         assertThrows<IllegalArgumentException> { Domain.fromPrefix("device_tracker") }
         assertThrows<IllegalArgumentException> { Domain.fromPrefix("weather") }
+        assertThrows<IllegalArgumentException> { Domain.fromPrefix("sun") }
         assertThrows<IllegalArgumentException> { Domain.fromPrefix("") }
     }
 }

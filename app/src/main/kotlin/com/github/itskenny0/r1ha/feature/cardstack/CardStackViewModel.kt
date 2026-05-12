@@ -221,8 +221,9 @@ class CardStackViewModel(
         if (!activeState.isAvailable) return
         // Action-only entities (scenes, scripts, buttons) are tap-to-fire. Spinning the
         // wheel on top of an ActionCard shouldn't accidentally fire the trigger or paint
-        // a phantom percent — wheels are deliberately a no-op there.
-        if (activeState.id.domain.isAction) return
+        // a phantom percent — wheels are deliberately a no-op there. Same story for
+        // sensors / binary_sensors which are read-only.
+        if (activeState.id.domain.isAction || activeState.id.domain.isSensor) return
 
         val sign = WheelInput.applyDirection(event.direction, wheel.invertDirection)
 
