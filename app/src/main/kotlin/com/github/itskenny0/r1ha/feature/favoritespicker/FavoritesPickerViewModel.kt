@@ -59,22 +59,17 @@ class FavoritesPickerViewModel(
         }
     }
 
-    /** Build the row list from cached entities + the current favourites list. Favourites are
-     *  pinned to the top of the list in user-chosen order so the up/down arrows produce
-     *  visible movement; non-favourites follow alphabetically. */
+    /** Build the row list from cached entities + the current favourites list. Sorted by name
+     *  rather than favourites-first; toggling a checkbox no longer reorders the list, which
+     *  prevents the visible page from jumping when the user is selecting several entities
+     *  back-to-back. The up/down arrows still mutate favourites order — visible in CardStack. */
     private fun buildRows(entities: List<EntityState>, favs: List<String>): List<Row> {
         val favOrder = favs.withIndex().associate { (idx, id) -> id to idx }
-        val byId = entities.associateBy { it.id.value }
-        // Favourites first, in the order the user set.
-        val favouriteRows = favs.mapNotNull { id ->
-            byId[id]?.let { Row(it, isFavorite = true, orderIndex = favOrder[id]) }
-        }
-        // Then everything else, alphabetical.
-        val otherRows = entities
-            .filter { it.id.value !in favOrder }
+        return entities
             .sortedBy { it.friendlyName.lowercase() }
-            .map { Row(it, isFavorite = false, orderIndex = null) }
-        return favouriteRows + otherRows
+            .map {
+                Row(it, isFavorite = it.id.value in favOrder, orderIndex = favOrder[it.id.value])
+            }
     }
 
     fun toggle(entityId: String) {
