@@ -648,14 +648,27 @@ class DefaultHaRepository(
         runCatching {
             val s = settings.settings.first()
             val server = s.server ?: error("Server URL not configured — sign out & reconnect from Settings.")
-            val t = tokens.load() ?: error("Authentication tokens missing — sign out & reconnect from Settings.")
-            val req = Request.Builder()
-                .url("${server.url.trimEnd('/')}/api/states")
-                .header("Authorization", "Bearer ${t.accessToken}")
-                .build()
-            val body = http.newCall(req).execute().use { resp ->
-                require(resp.isSuccessful) { "Home Assistant returned HTTP ${resp.code} for /api/states" }
-                resp.body!!.string()
+            // Pre-emptive refresh — if the cached access token is within 60 s of
+            // expiry, swap it before issuing the call. Skips the round-trip-then-401
+            // dance in the common case where the app's been idle ~30 minutes and the
+            // user just opened the picker.
+            refresher?.ensureFresh()
+            // Try the request with the cached access token. On HTTP 401 (token expired
+            // mid-app or in the background) ask the TokenRefresher for a fresh one and
+            // retry once. Without this retry path the picker often greeted users with a
+            // "401 for /api/states" error after the app sat idle past the 30-minute
+            // access-token lifetime, even though the refresh-token was perfectly valid
+            // and the WS pipeline would have self-healed via AuthLost. Restarting the
+            // app worked because cold-start triggered a fresh auth flow; the retry here
+            // gives that same recovery in-place without the user noticing.
+            val body = fetchStatesBody(server.url) ?: run {
+                if (refresher?.forceRefresh() == true) {
+                    R1Log.i("HaRepo.listAll", "401 → refreshed access token; retrying once")
+                    fetchStatesBody(server.url)
+                        ?: error("Home Assistant returned HTTP 401 for /api/states even after refresh — sign out & reconnect.")
+                } else {
+                    error("Home Assistant returned HTTP 401 for /api/states — sign out & reconnect.")
+                }
             }
             // Parse the response as a List<JsonElement> first, then decode each row
             // independently. The earlier `decodeFromString<List<RawStateRow>>` was an
@@ -762,6 +775,48 @@ class DefaultHaRepository(
     }
 
     /**
+     * Issue a GET to [url] with the current access token. Returns null on HTTP 401 so
+     * the caller can refresh + retry; throws on any other non-success. Shared with the
+     * [listAllEntities] / [fetchHistory] paths so 401 self-heal works the same way for
+     * both.
+     */
+    private suspend fun fetchHistoryBody(url: String): String? = withContext(Dispatchers.IO) {
+        val t = tokens.load() ?: error("Authentication tokens missing — sign out & reconnect from Settings.")
+        val req = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer ${t.accessToken}")
+            .build()
+        http.newCall(req).execute().use { resp ->
+            if (resp.code == 401) return@withContext null
+            require(resp.isSuccessful) { "Home Assistant returned HTTP ${resp.code} for /api/history" }
+            resp.body!!.string()
+        }
+    }
+
+    /**
+     * One-shot REST `GET /api/states` returning the response body, or null on HTTP 401
+     * so the caller can attempt a token refresh + retry. Any other HTTP failure throws
+     * (the runCatching at the call site surfaces it). Always reads the access token
+     * fresh from the [tokens] store so a retry after [TokenRefresher.forceRefresh]
+     * picks up the newly-rotated value.
+     */
+    private suspend fun fetchStatesBody(serverUrl: String): String? = withContext(Dispatchers.IO) {
+        val t = tokens.load() ?: error("Authentication tokens missing — sign out & reconnect from Settings.")
+        val req = Request.Builder()
+            .url("${serverUrl.trimEnd('/')}/api/states")
+            .header("Authorization", "Bearer ${t.accessToken}")
+            .build()
+        http.newCall(req).execute().use { resp ->
+            // 401 is special — the caller decides whether to refresh + retry. Any
+            // other non-success is a hard error (404 on a missing /api endpoint,
+            // 500 from HA, network error, etc.) and gets reported as-is.
+            if (resp.code == 401) return@withContext null
+            require(resp.isSuccessful) { "Home Assistant returned HTTP ${resp.code} for /api/states" }
+            resp.body!!.string()
+        }
+    }
+
+    /**
      * Seeds the in-memory cache from a one-shot REST `GET /api/states` so the user sees current
      * values immediately after adding a favourite (subscribe_trigger only fires on the *next*
      * transition, so without this seed the card would sit at 0% until the user actually changes
@@ -825,7 +880,8 @@ class DefaultHaRepository(
             runCatching {
                 val s = settings.settings.first()
                 val server = s.server ?: error("Server URL not configured.")
-                val t = tokens.load() ?: error("Authentication tokens missing.")
+                // Pre-emptive refresh on near-expiry — same reasoning as listAllEntities.
+                refresher?.ensureFresh()
                 val since = Instant.now().minusSeconds(hours.toLong() * 3600L)
                 // HA's history endpoint takes the ISO timestamp in the URL path. URL-encode
                 // the entity_id even though current HA versions don't require it — defensive
@@ -834,15 +890,18 @@ class DefaultHaRepository(
                 val url = "${server.url.trimEnd('/')}/api/history/period/$sinceIso" +
                     "?filter_entity_id=${java.net.URLEncoder.encode(entityId.value, "UTF-8")}" +
                     "&minimal_response&no_attributes"
-                val req = Request.Builder()
-                    .url(url)
-                    .header("Authorization", "Bearer ${t.accessToken}")
-                    .build()
-                val body = http.newCall(req).execute().use { resp ->
-                    require(resp.isSuccessful) {
-                        "Home Assistant returned HTTP ${resp.code} for /api/history"
+                // Same 401 → refresh → retry path as listAllEntities — sensor charts
+                // fired silently in the background while the user was on the card stack
+                // were a common trigger for "history failed; chart blank" until the user
+                // restarted the app.
+                val body = fetchHistoryBody(url) ?: run {
+                    if (refresher?.forceRefresh() == true) {
+                        R1Log.i("HaRepo.fetchHistory", "401 → refreshed access token; retrying once")
+                        fetchHistoryBody(url)
+                            ?: error("Home Assistant returned HTTP 401 for /api/history even after refresh — sign out & reconnect.")
+                    } else {
+                        error("Home Assistant returned HTTP 401 for /api/history — sign out & reconnect.")
                     }
-                    resp.body!!.string()
                 }
                 // HA returns a JSON array of arrays — outermost level is one entry per
                 // requested entity (we only ask for one). Each inner entry is a state
