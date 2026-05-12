@@ -85,7 +85,16 @@ fun CardStackScreen(
     // some devices) and go straight to View.performHapticFeedback with CLOCK_TICK — the same
     // constant the system uses for picker wheels and reliably produces a tick on the R1.
     val lastHapticMs = remember { longArrayOf(0L) }
-    LaunchedEffect(state.activeState?.id, state.activeState?.percent) {
+    // Coalesce the haptic key into a single "perceived value" so a switch entity doesn't
+    // tick twice per toggle (once on optimistic, then again when the cache catches up and
+    // the optimistic clears — for switch entities the cached percent is always null, so
+    // applying the override and then clearing it flips percent null→100→null and the
+    // earlier key (percent only) double-fired). For scalar entities the value is the
+    // percent itself; for switches it's 0 or 1 keyed on isOn.
+    val hapticKey = state.activeState?.let { active ->
+        if (active.supportsScalar) active.percent else if (active.isOn) 1 else 0
+    }
+    LaunchedEffect(state.activeState?.id, hapticKey) {
         if (state.activeState == null || !appSettings.behavior.haptics) return@LaunchedEffect
         val now = System.currentTimeMillis()
         if (now - lastHapticMs[0] < 50L) return@LaunchedEffect
@@ -100,7 +109,11 @@ fun CardStackScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(R1.Bg)) {
-        val cards = state.cards
+        // displayedCards = cards with optimistic overrides applied per entity. Binding the
+        // UI to this list (rather than to the raw HA-confirmed cards) is what makes the
+        // brightness/value track the wheel *instantly* instead of waiting for the HA
+        // round-trip to echo a state_changed event back.
+        val cards = state.displayedCards
         if (cards.isNotEmpty()) {
             VerticalCardPager(
                 cards = cards,

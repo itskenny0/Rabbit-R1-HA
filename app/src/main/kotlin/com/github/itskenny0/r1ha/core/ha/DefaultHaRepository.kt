@@ -11,9 +11,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -53,6 +57,13 @@ class DefaultHaRepository(
 ) : HaRepository {
 
     override val connection: StateFlow<ConnectionState> = ws.state
+
+    /** Failures broadcast to the ViewModel so it can roll back optimistic overrides. */
+    private val _callFailures = MutableSharedFlow<EntityId>(
+        extraBufferCapacity = 32,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    override val callFailures: SharedFlow<EntityId> = _callFailures.asSharedFlow()
 
     private val cache = MutableStateFlow<Map<EntityId, EntityState>>(emptyMap())
     private val pendingCalls = ConcurrentHashMap<Int, CompletableDeferred<Result<Unit>>>()
@@ -96,6 +107,10 @@ class DefaultHaRepository(
             com.github.itskenny0.r1ha.core.util.Toaster.show(
                 "Couldn't update ${call.target.objectId}: ${t.message ?: "unknown error"}",
             )
+            // Tell the ViewModel so it can roll back the optimistic override — the slider
+            // bounces back to HA's last-known value instead of sitting stuck on the user's
+            // intent. tryEmit is fine: the buffer is bounded with DROP_OLDEST.
+            _callFailures.tryEmit(call.target)
         }
     }
 

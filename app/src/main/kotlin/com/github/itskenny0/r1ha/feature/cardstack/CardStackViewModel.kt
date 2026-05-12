@@ -26,7 +26,11 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 data class CardStackUiState(
-    /** Ordered by the user's favorites list (NOT by entity_id). */
+    /** Ordered by the user's favorites list (NOT by entity_id). The HA cache snapshot —
+     *  what the server has confirmed. The UI should bind to [displayedCards] instead so
+     *  optimistic wheel/tap updates are visible *immediately* rather than after the round-
+     *  trip; this raw view is kept so the activeState getter and the optimistic-filter in
+     *  `observeFavorites` can still see "what HA actually thinks" separately. */
     val cards: List<EntityState> = emptyList(),
     val currentIndex: Int = 0,
     /** Optimistic percent overrides per entity, applied while waiting for HA state_changed. */
@@ -38,21 +42,43 @@ data class CardStackUiState(
      */
     val favouritesCount: Int = 0,
 ) {
+    /**
+     * Apply optimistic overrides on top of [cards] so the UI sees the user's intent
+     * immediately — without this, the brightness bar only "updates" when HA echoes the
+     * state_changed event back, which is the round-trip latency the user perceived as
+     * sluggishness. The optimistic clears automatically once HA confirms (see
+     * `observeFavorites`'s filter) — at that point the cached value matches the override
+     * and the result of [applyOptimistic] is identical to the cached value, so the UI
+     * doesn't bounce.
+     */
+    val displayedCards: List<EntityState>
+        get() = cards.map { state -> state.applyOptimistic(optimisticPercents[state.id]) }
+
     val activeState: EntityState?
-        get() = cards.getOrNull(currentIndex)?.let { state ->
-            val override = optimisticPercents[state.id]
-            if (override == null) {
-                state
-            } else if (state.supportsScalar) {
-                // Scalar entity: optimistic just overrides the percent.
-                state.copy(percent = override)
-            } else {
-                // Switch entity: encode desired ON in optimistic >= 1, OFF in 0. Flip isOn
-                // immediately so the switch card snaps to the chosen position rather than
-                // waiting for HA's state broadcast.
-                state.copy(percent = override, isOn = override > 0)
-            }
-        }
+        get() = cards.getOrNull(currentIndex)?.applyOptimistic(
+            optimisticPercents[cards.getOrNull(currentIndex)?.id],
+        )
+
+    /**
+     * Convenience for the UI: the currently-displayed (post-optimistic) card. Same as
+     * [activeState] but expressed as a `displayedCards[currentIndex]` lookup for symmetry.
+     */
+    val displayedActiveState: EntityState?
+        get() = displayedCards.getOrNull(currentIndex)
+}
+
+/** Layer the optimistic override onto a cached state. */
+private fun EntityState.applyOptimistic(override: Int?): EntityState {
+    if (override == null) return this
+    return if (supportsScalar) {
+        // Scalar entity: optimistic just overrides the percent.
+        copy(percent = override)
+    } else {
+        // Switch entity: encode desired ON in optimistic >= 1, OFF in 0. Flip isOn
+        // immediately so the switch card snaps to the chosen position rather than
+        // waiting for HA's state broadcast.
+        copy(percent = override, isOn = override > 0)
+    }
 }
 
 class CardStackViewModel(
@@ -93,9 +119,14 @@ class CardStackViewModel(
             R1Log.i("CardStack.debounced", "sending setPercent($entityId, $pct)")
             ServiceCall.setPercent(entityId, pct)
         }
+        // haRepository.call() returns success immediately (the actual HA round-trip lives
+        // inside the repo's own debouncer); failures arrive asynchronously via the
+        // [callFailures] SharedFlow, which we observe in `init` and translate into an
+        // optimistic rollback. On success we do NOTHING — the optimistic is cleared by
+        // observeFavorites when HA echoes back the matching state_changed event. That
+        // ordering is critical: clearing here would briefly show HA's *old* cached state
+        // before the event arrives, which reads as a flicker.
         haRepository.call(call)
-        // NOTE: do NOT clear the optimistic value here. It's cleared automatically when
-        // observe emits an EntityState whose percent matches (see ordering logic below).
     }
 
     init {
@@ -106,6 +137,17 @@ class CardStackViewModel(
             .map { it.wheel }
             .distinctUntilChanged()
             .onEach { cachedWheel = it }
+            .launchIn(viewModelScope)
+        // Roll back the optimistic override whenever HA tells us a service call failed —
+        // the UI bounces back to the last-known cached value so the user can see their
+        // input didn't take, rather than the slider sitting stuck on their intent.
+        haRepository.callFailures
+            .onEach { id ->
+                R1Log.w("CardStack.failure", "$id rejected by HA — reverting optimistic")
+                _state.value = _state.value.copy(
+                    optimisticPercents = _state.value.optimisticPercents - id,
+                )
+            }
             .launchIn(viewModelScope)
         // Wheel events are NOT collected here. They're collected by CardStackScreen only
         // while it is in composition, so spinning the wheel from any other screen does not

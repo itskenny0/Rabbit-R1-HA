@@ -1,12 +1,19 @@
 package com.github.itskenny0.r1ha.core.ha
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 interface HaRepository {
     val connection: StateFlow<ConnectionState>
     /** Hot map of currently-known entity states for the subscribed set. */
     fun observe(entities: Set<EntityId>): Flow<Map<EntityId, EntityState>>
+    /**
+     * Fires once per service call the repository couldn't deliver — timeout, WS dropped,
+     * HA returned an error, etc. The ViewModel watches this so it can roll back its
+     * optimistic UI override; the repository already surfaces a user-visible toast.
+     */
+    val callFailures: SharedFlow<EntityId>
     /** Fire a service call. Coalesces back-to-back calls per entity via internal debounce. */
     suspend fun call(call: ServiceCall): Result<Unit>
     /** One-shot REST GET /api/states equivalent, used by FavoritesPicker. */
