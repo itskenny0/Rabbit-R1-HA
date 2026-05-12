@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.ThemeId
 
 object MinimalDarkTheme : R1Theme {
@@ -32,14 +33,19 @@ object MinimalDarkTheme : R1Theme {
         modifier: Modifier,
         onTapToggle: () -> Unit,
     ) {
+        val ui = LocalUiOptions.current
         Box(modifier = modifier.fillMaxSize().background(Color.Black).padding(14.dp)) {
-            Text(model.area?.uppercase() ?: "", color = Color.White.copy(alpha = 0.55f), fontSize = 9.sp)
+            if (ui.showAreaLabel) {
+                Text(model.area?.uppercase() ?: "", color = Color.White.copy(alpha = 0.55f), fontSize = 9.sp)
+            }
             Text(model.friendlyName, color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp,
-                modifier = Modifier.padding(top = 16.dp))
+                modifier = Modifier.padding(top = if (ui.showAreaLabel) 16.dp else 0.dp))
             Box(modifier = Modifier.align(Alignment.CenterStart).padding(top = 56.dp)) {
                 Text("${model.percent}", color = Color.White, fontSize = 64.sp, fontWeight = FontWeight.Light)
-                Text("%", color = Color.White.copy(alpha = 0.5f), fontSize = 18.sp,
-                    modifier = Modifier.padding(start = 80.dp, top = 6.dp))
+                if (ui.displayMode == DisplayMode.PERCENT) {
+                    Text("%", color = Color.White.copy(alpha = 0.5f), fontSize = 18.sp,
+                        modifier = Modifier.padding(start = 80.dp, top = 6.dp))
+                }
             }
             // vertical slider, right edge — spring-animated fill for bouncy wheel feedback
             val fraction = rememberSliderFraction(model.percent)

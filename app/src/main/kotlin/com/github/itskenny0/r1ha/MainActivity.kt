@@ -7,12 +7,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import com.github.itskenny0.r1ha.core.input.WheelEvent
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
+import com.github.itskenny0.r1ha.core.theme.LocalUiOptions
 import com.github.itskenny0.r1ha.core.theme.R1ThemeHost
 import com.github.itskenny0.r1ha.core.util.R1Log
 import com.github.itskenny0.r1ha.core.util.Toaster
@@ -46,14 +48,16 @@ class MainActivity : ComponentActivity() {
             R1Log.d("MainActivity.setContent", "startDestination=$startDestination server=${settings.server?.url ?: "null"}")
 
             R1ThemeHost(themeId = settings.theme) {
-                AppNavGraph(
-                    navController = navController,
-                    startDestination = startDestination,
-                    haRepository = graph.haRepository,
-                    settings = graph.settings,
-                    tokens = graph.tokens,
-                    wheelInput = graph.wheelInput,
-                )
+                CompositionLocalProvider(LocalUiOptions provides settings.ui) {
+                    AppNavGraph(
+                        navController = navController,
+                        startDestination = startDestination,
+                        haRepository = graph.haRepository,
+                        settings = graph.settings,
+                        tokens = graph.tokens,
+                        wheelInput = graph.wheelInput,
+                    )
+                }
             }
         }
     }

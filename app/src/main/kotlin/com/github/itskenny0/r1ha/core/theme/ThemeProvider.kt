@@ -8,8 +8,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import com.github.itskenny0.r1ha.core.prefs.ThemeId
+import com.github.itskenny0.r1ha.core.prefs.UiOptions
 
 val LocalR1Theme = staticCompositionLocalOf<R1Theme> { PragmaticHybridTheme }
+
+/** UI options surfaced to themes so they can honour user toggles without taking extra params. */
+val LocalUiOptions = staticCompositionLocalOf { UiOptions() }
 
 @Composable
 fun R1ThemeHost(themeId: ThemeId, content: @Composable () -> Unit) {

@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.ThemeId
 
 object ColorfulCardsTheme : R1Theme {
@@ -35,26 +36,34 @@ object ColorfulCardsTheme : R1Theme {
 
     @Composable
     override fun Card(model: CardRenderModel, modifier: Modifier, onTapToggle: () -> Unit) {
+        val ui = LocalUiOptions.current
         val pal = paletteFor(model.entityIdText)
         Box(modifier = modifier.fillMaxSize()
             .background(Brush.linearGradient(pal))
             .padding(16.dp)) {
-            Text(model.area?.uppercase() ?: "", color = Color.White.copy(alpha = 0.85f),
-                fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            if (ui.showAreaLabel) {
+                Text(model.area?.uppercase() ?: "", color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            }
             Text(model.friendlyName, color = Color.White, fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = if (ui.showAreaLabel) 2.dp else 0.dp))
             Box(Modifier.align(Alignment.CenterStart).padding(top = 70.dp)) {
                 Text("${model.percent}", color = Color.White, fontSize = 72.sp, fontWeight = FontWeight.Bold)
-                Text("%", color = Color.White.copy(alpha = 0.85f), fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(start = 96.dp, top = 8.dp))
+                if (ui.displayMode == DisplayMode.PERCENT) {
+                    Text("%", color = Color.White.copy(alpha = 0.85f), fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 96.dp, top = 8.dp))
+                }
             }
             // chunky pill
-            Box(Modifier.align(Alignment.BottomStart).padding(bottom = 28.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(Color.Black.copy(alpha = 0.22f))
-                .padding(horizontal = 12.dp, vertical = 6.dp)) {
-                Text(if (model.isOn) "● ON" else "○ OFF",
-                    color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            if (ui.showOnOffPill) {
+                Box(Modifier.align(Alignment.BottomStart).padding(bottom = 28.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.Black.copy(alpha = 0.22f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Text(if (model.isOn) "● ON" else "○ OFF",
+                        color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
             // chunky slider — spring-animated bouncy feedback
             val fraction = rememberSliderFraction(model.percent)

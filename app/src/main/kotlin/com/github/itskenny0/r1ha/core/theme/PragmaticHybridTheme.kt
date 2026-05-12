@@ -35,6 +35,7 @@ object PragmaticHybridTheme : R1Theme {
     @Composable
     override fun Card(model: CardRenderModel, modifier: Modifier, onTapToggle: () -> Unit) {
         val accent = accentColor(model.accent)
+        val ui = LocalUiOptions.current
         Box(modifier = modifier.fillMaxSize().background(Color(0xFF0A0A0A)).padding(14.dp)) {
             // glow
             Box(Modifier.fillMaxSize().background(
@@ -43,23 +44,29 @@ object PragmaticHybridTheme : R1Theme {
                     radius = 320f, center = androidx.compose.ui.geometry.Offset(220f, 80f),
                 )
             ))
-            Text(buildString {
-                append(model.domainGlyph.name)
-                model.area?.let { append(" · "); append(it.uppercase()) }
-            }, color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
+            if (ui.showAreaLabel) {
+                Text(buildString {
+                    append(model.domainGlyph.name)
+                    model.area?.let { append(" · "); append(it.uppercase()) }
+                }, color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
+            }
             Text(model.friendlyName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(top = 18.dp))
+                modifier = Modifier.padding(top = if (ui.showAreaLabel) 18.dp else 0.dp))
             Box(Modifier.align(Alignment.CenterStart).padding(top = 60.dp)) {
                 Text("${model.percent}", color = Color.White, fontSize = 64.sp, fontWeight = FontWeight.Medium)
-                Text("%", color = Color.White.copy(alpha = 0.55f), fontSize = 18.sp,
-                    modifier = Modifier.padding(start = 80.dp, top = 6.dp))
+                if (ui.displayMode == com.github.itskenny0.r1ha.core.prefs.DisplayMode.PERCENT) {
+                    Text("%", color = Color.White.copy(alpha = 0.55f), fontSize = 18.sp,
+                        modifier = Modifier.padding(start = 80.dp, top = 6.dp))
+                }
             }
             // chip
-            Box(Modifier.align(Alignment.BottomStart).padding(bottom = 38.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(accent.copy(alpha = 0.15f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                Text(if (model.isOn) "● ON" else "○ OFF",
-                    color = accent, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            if (ui.showOnOffPill) {
+                Box(Modifier.align(Alignment.BottomStart).padding(bottom = 38.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(accent.copy(alpha = 0.15f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                    Text(if (model.isOn) "● ON" else "○ OFF",
+                        color = accent, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
             // vertical slider, right edge with visible thumb — spring-animated bouncy feedback
             val fraction = rememberSliderFraction(model.percent)
