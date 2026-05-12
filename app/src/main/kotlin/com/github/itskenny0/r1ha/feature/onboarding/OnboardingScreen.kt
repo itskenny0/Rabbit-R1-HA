@@ -18,7 +18,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -190,42 +189,21 @@ private fun UrlEntryForm(
             color = com.github.itskenny0.r1ha.core.theme.R1.InkMuted,
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
+        com.github.itskenny0.r1ha.ui.components.R1TextField(
             value = urlText,
             onValueChange = {
                 if (error != null) onErrorDismiss()
                 urlText = it
             },
-            placeholder = {
-                Text(
-                    "http://homeassistant.local:8123",
-                    style = com.github.itskenny0.r1ha.core.theme.R1.body.copy(
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                    ),
-                    color = com.github.itskenny0.r1ha.core.theme.R1.InkMuted,
-                )
-            },
-            textStyle = com.github.itskenny0.r1ha.core.theme.R1.body.copy(
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                color = com.github.itskenny0.r1ha.core.theme.R1.Ink,
-            ),
+            placeholder = "http://homeassistant.local:8123",
             isError = error != null,
-            shape = com.github.itskenny0.r1ha.core.theme.R1.ShapeS,
-            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
-                unfocusedBorderColor = com.github.itskenny0.r1ha.core.theme.R1.Hairline,
-                cursorColor = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
-                errorBorderColor = com.github.itskenny0.r1ha.core.theme.R1.StatusRed,
-                errorCursorColor = com.github.itskenny0.r1ha.core.theme.R1.StatusRed,
-            ),
-            singleLine = true,
+            enabled = !isProbing,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Go,
             ),
             keyboardActions = KeyboardActions(onGo = { onProbe(urlText) }),
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isProbing,
         )
 
         if (error != null) {

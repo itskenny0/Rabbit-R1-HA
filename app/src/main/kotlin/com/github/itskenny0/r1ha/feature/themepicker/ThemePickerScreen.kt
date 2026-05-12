@@ -31,7 +31,7 @@ import com.github.itskenny0.r1ha.core.theme.PragmaticHybridTheme
 import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.core.theme.R1Theme
 import com.github.itskenny0.r1ha.core.theme.R1ThemeHost
-import com.github.itskenny0.r1ha.ui.components.ChevronBack
+import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
 import kotlinx.coroutines.launch
 
@@ -67,7 +67,7 @@ fun ThemePickerScreen(
             .background(R1.Bg)
             .systemBarsPadding(),
     ) {
-        TopBar(title = "THEME", onBack = onBack)
+        R1TopBar(title = "THEME", onBack = onBack)
 
         Column(modifier = Modifier.fillMaxSize().padding(top = 6.dp)) {
             ALL_THEMES.forEach { theme ->
@@ -82,28 +82,6 @@ fun ThemePickerScreen(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun TopBar(title: String, onBack: () -> Unit) {
-    Column {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 22.dp, top = 6.dp, bottom = 6.dp),
-        ) {
-            ChevronBack(onClick = onBack)
-            Spacer(Modifier.width(4.dp))
-            Text(title, style = R1.screenTitle, color = R1.Ink)
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(R1.Hairline),
-        )
     }
 }
 

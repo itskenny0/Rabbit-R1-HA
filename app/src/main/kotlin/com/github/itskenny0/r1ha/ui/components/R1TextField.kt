@@ -1,0 +1,99 @@
+package com.github.itskenny0.r1ha.ui.components
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
+import com.github.itskenny0.r1ha.core.theme.R1
+
+/**
+ * Single-line text input in the R1 idiom. Built on [BasicTextField] (not Material's
+ * `OutlinedTextField`) so we can drive every visual atom from the design tokens:
+ *
+ *  * Sharp 4dp slot — no Material 12dp+ rounding.
+ *  * Hairline 1dp border in [R1.Hairline] at rest, [R1.AccentWarm] when focused,
+ *    [R1.StatusRed] when [isError] — animated so the focus transition reads as deliberate
+ *    rather than a Material binary flip.
+ *  * Monospace text by default (the field is almost always pointed at a URL or a token, so
+ *    fixed-width digits help legibility on the R1's tiny display).
+ *  * Cursor in the accent colour, not Material's primary.
+ *
+ * No floating label — the screen's section header serves that role; a Material label on top
+ * would duplicate it. A static [placeholder] is shown when [value] is empty.
+ */
+@Composable
+fun R1TextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    isError: Boolean = false,
+    enabled: Boolean = true,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    monospace: Boolean = true,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+
+    val borderTarget = when {
+        isError -> R1.StatusRed
+        focused -> R1.AccentWarm
+        !enabled -> R1.Hairline
+        else -> R1.Hairline
+    }
+    val borderColor by animateColorAsState(targetValue = borderTarget, label = "r1-tf-border")
+
+    val baseStyle = R1.body.copy(
+        color = if (enabled) R1.Ink else R1.InkMuted,
+        fontFamily = if (monospace) FontFamily.Monospace else R1.body.fontFamily,
+    )
+    val placeholderStyle: TextStyle = baseStyle.copy(color = R1.InkMuted)
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.Bg)
+            .border(1.dp, borderColor, R1.ShapeS)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            singleLine = true,
+            textStyle = baseStyle,
+            cursorBrush = SolidColor(R1.AccentWarm),
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
+            interactionSource = interactionSource,
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { innerTextField ->
+                if (value.isEmpty() && placeholder != null) {
+                    Text(text = placeholder, style = placeholderStyle)
+                }
+                innerTextField()
+            },
+        )
+    }
+}

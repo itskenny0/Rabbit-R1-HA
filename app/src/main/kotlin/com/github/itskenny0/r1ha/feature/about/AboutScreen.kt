@@ -34,7 +34,7 @@ import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
-import com.github.itskenny0.r1ha.ui.components.ChevronBack
+import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
 
@@ -57,7 +57,7 @@ fun AboutScreen(
             .background(R1.Bg)
             .systemBarsPadding(),
     ) {
-        TopBar(title = "ABOUT", onBack = onBack)
+        R1TopBar(title = "ABOUT", onBack = onBack)
 
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
 
@@ -116,28 +116,6 @@ fun AboutScreen(
             }
             item { Spacer(Modifier.height(48.dp)) }
         }
-    }
-}
-
-@Composable
-private fun TopBar(title: String, onBack: () -> Unit) {
-    Column {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 22.dp, top = 6.dp, bottom = 6.dp),
-        ) {
-            ChevronBack(onClick = onBack)
-            Spacer(Modifier.width(4.dp))
-            Text(title, style = R1.screenTitle, color = R1.Ink)
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(R1.Hairline),
-        )
     }
 }
 

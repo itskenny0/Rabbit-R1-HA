@@ -31,8 +31,8 @@ import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.prefs.TokenStore
 import com.github.itskenny0.r1ha.core.prefs.WheelKeySource
 import com.github.itskenny0.r1ha.core.theme.R1
-import com.github.itskenny0.r1ha.ui.components.ChevronBack
 import com.github.itskenny0.r1ha.ui.components.R1Switch
+import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
 
@@ -59,7 +59,7 @@ fun SettingsScreen(
             .background(R1.Bg)
             .systemBarsPadding(),
     ) {
-        TopBar(title = "SETTINGS", onBack = onBack)
+        R1TopBar(title = "SETTINGS", onBack = onBack)
 
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
 
@@ -230,28 +230,6 @@ fun SettingsScreen(
 }
 
 // ── Building blocks ──────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun TopBar(title: String, onBack: () -> Unit) {
-    Column {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 22.dp, top = 6.dp, bottom = 6.dp),
-        ) {
-            ChevronBack(onClick = onBack)
-            Spacer(Modifier.width(4.dp))
-            Text(title, style = R1.screenTitle, color = R1.Ink)
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(R1.Hairline),
-        )
-    }
-}
 
 @Composable
 private fun Section(title: String) {
