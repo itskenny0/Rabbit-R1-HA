@@ -123,21 +123,26 @@ class MainActivity : ComponentActivity() {
         val src = graph.latestKeySource
         val acceptsDpad = src == WheelKeySource.AUTO || src == WheelKeySource.DPAD
         val acceptsVolume = src == WheelKeySource.AUTO || src == WheelKeySource.VOLUME
+        // Only emit on the *first* ACTION_DOWN of a press (repeatCount == 0). Holding a
+        // physical volume button would otherwise auto-repeat at ~30 Hz and runaway the
+        // optimistic percent; wheel detents always come through as repeatCount=0 events so
+        // this filter doesn't drop legitimate wheel input.
+        val fresh = event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0
         return when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> if (acceptsDpad) {
-                if (event.action == KeyEvent.ACTION_DOWN) graph.wheelInput.emit(WheelEvent.Direction.UP)
+                if (fresh) graph.wheelInput.emit(WheelEvent.Direction.UP)
                 true
             } else super.dispatchKeyEvent(event)
             KeyEvent.KEYCODE_VOLUME_UP -> if (acceptsVolume) {
-                if (event.action == KeyEvent.ACTION_DOWN) graph.wheelInput.emit(WheelEvent.Direction.UP)
+                if (fresh) graph.wheelInput.emit(WheelEvent.Direction.UP)
                 true
             } else super.dispatchKeyEvent(event)
             KeyEvent.KEYCODE_DPAD_DOWN -> if (acceptsDpad) {
-                if (event.action == KeyEvent.ACTION_DOWN) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
+                if (fresh) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
                 true
             } else super.dispatchKeyEvent(event)
             KeyEvent.KEYCODE_VOLUME_DOWN -> if (acceptsVolume) {
-                if (event.action == KeyEvent.ACTION_DOWN) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
+                if (fresh) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
                 true
             } else super.dispatchKeyEvent(event)
             else -> super.dispatchKeyEvent(event)
