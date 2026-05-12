@@ -84,6 +84,14 @@ class TokenStore(
         const val refreshCipher = "refresh.cipher"
         const val refreshIv = "refresh.iv"
         const val expiresAt = "expires_at"
+
+        /**
+         * Marker set the first time any write reaches the shadow; once set, the shadow is the
+         * authoritative source on load() — including reporting "no tokens" after a sign-out,
+         * which is critical to avoid leaking the previous session's tokens if the DataStore
+         * clear silently failed.
+         */
+        const val initialized = "_initialized"
     }
 
     suspend fun save(tokens: Tokens): Unit = withContext(Dispatchers.IO) {
@@ -99,6 +107,7 @@ class TokenStore(
             .putString(S.refreshCipher, rCipher)
             .putString(S.refreshIv, rIv)
             .putLong(S.expiresAt, tokens.expiresAtMillis)
+            .putBoolean(S.initialized, true)
             .commit()
         R1Log.i("TokenStore.save", "shadow commit=$shadowOk")
         if (!shadowOk) {
@@ -122,12 +131,29 @@ class TokenStore(
 
     suspend fun load(): Tokens? = withContext(Dispatchers.IO) {
         val p = store.data.first()
-        // Try DataStore first; if any field is missing, look in the shadow.
-        val aCipher = p[K.accessCipher] ?: shadow.getString(S.accessCipher, null)
-        val aIv = p[K.accessIv] ?: shadow.getString(S.accessIv, null)
-        val rCipher = p[K.refreshCipher] ?: shadow.getString(S.refreshCipher, null)
-        val rIv = p[K.refreshIv] ?: shadow.getString(S.refreshIv, null)
-        val expiresAt = p[K.expiresAt] ?: shadow.getLong(S.expiresAt, -1L).takeIf { it >= 0L }
+        // Once the shadow has been written even once it becomes the authoritative store — the
+        // shadow's absence-of-tokens then correctly represents "signed out" instead of falling
+        // back to a stale DataStore copy that the clear() might have silently failed to wipe.
+        val shadowInit = shadow.getBoolean(S.initialized, false)
+        val aCipher: String?
+        val aIv: String?
+        val rCipher: String?
+        val rIv: String?
+        val expiresAt: Long?
+        if (shadowInit) {
+            aCipher = shadow.getString(S.accessCipher, null)
+            aIv = shadow.getString(S.accessIv, null)
+            rCipher = shadow.getString(S.refreshCipher, null)
+            rIv = shadow.getString(S.refreshIv, null)
+            expiresAt = shadow.getLong(S.expiresAt, -1L).takeIf { it >= 0L }
+        } else {
+            // Pre-marker / migration path — fall back to DataStore, then shadow.
+            aCipher = p[K.accessCipher] ?: shadow.getString(S.accessCipher, null)
+            aIv = p[K.accessIv] ?: shadow.getString(S.accessIv, null)
+            rCipher = p[K.refreshCipher] ?: shadow.getString(S.refreshCipher, null)
+            rIv = p[K.refreshIv] ?: shadow.getString(S.refreshIv, null)
+            expiresAt = p[K.expiresAt] ?: shadow.getLong(S.expiresAt, -1L).takeIf { it >= 0L }
+        }
         R1Log.i(
             "TokenStore.load",
             "from store: accessCipher=${p[K.accessCipher] != null} from shadow fallback used=${p[K.accessCipher] == null && aCipher != null}"
@@ -153,7 +179,10 @@ class TokenStore(
     suspend fun clear(): Unit = withContext(Dispatchers.IO) {
         // commit() blocks on disk I/O; run on the IO dispatcher to avoid jank when sign-out is
         // triggered from a Compose handler on the main thread.
-        shadow.edit().clear().commit()
+        // Clear shadow but keep the initialized marker set — load() must then return null even
+        // if the DataStore clear() below silently fails (in which case stale tokens would still
+        // be present in the DataStore copy).
+        shadow.edit().clear().putBoolean(S.initialized, true).commit()
         store.edit { it.clear() }
     }
 
