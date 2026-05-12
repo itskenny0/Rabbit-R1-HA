@@ -189,7 +189,19 @@ class DefaultHaRepository(
         refresher?.ensureFresh()
         val s = settings.settings.first()
         val server = s.server ?: return
-        val t = tokens.load() ?: return
+        val t = tokens.load()
+        if (t == null) {
+            // Server is configured but we have no usable tokens — most often the Keystore key
+            // got wiped (factory reset of secure storage), leaving encrypted tokens that can no
+            // longer be decrypted. Without this signal the UI would sit on "Idle" forever; tell
+            // the user explicitly to re-auth from Settings.
+            R1Log.w("HaRepo.connect", "tokens.load() returned null even though server is set; user needs to re-auth")
+            com.github.itskenny0.r1ha.core.util.Toaster.show(
+                "Authentication tokens missing — open Settings → Sign out & reconnect",
+                long = true,
+            )
+            return
+        }
         val base = server.url.trimEnd('/')
         val wsUrl = when {
             base.startsWith("https://") -> base.replaceFirst("https://", "wss://")
