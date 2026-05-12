@@ -2,6 +2,7 @@ package com.github.itskenny0.r1ha.core.theme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -40,11 +41,12 @@ object MinimalDarkTheme : R1Theme {
             }
             Text(model.friendlyName, color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp,
                 modifier = Modifier.padding(top = if (ui.showAreaLabel) 16.dp else 0.dp))
-            Box(modifier = Modifier.align(Alignment.CenterStart).padding(top = 56.dp)) {
+            Row(verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.align(Alignment.CenterStart).padding(top = 56.dp)) {
                 Text("${model.percent}", color = Color.White, fontSize = 64.sp, fontWeight = FontWeight.Light)
                 if (ui.displayMode == DisplayMode.PERCENT) {
                     Text("%", color = Color.White.copy(alpha = 0.5f), fontSize = 18.sp,
-                        modifier = Modifier.padding(start = 80.dp, top = 6.dp))
+                        modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
                 }
             }
             // vertical slider, right edge — spring-animated fill for bouncy wheel feedback

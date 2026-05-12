@@ -2,6 +2,7 @@ package com.github.itskenny0.r1ha.core.theme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -52,11 +53,14 @@ object PragmaticHybridTheme : R1Theme {
             }
             Text(model.friendlyName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(top = if (ui.showAreaLabel) 18.dp else 0.dp))
-            Box(Modifier.align(Alignment.CenterStart).padding(top = 60.dp)) {
+            // Row so the "%" naturally flows after the number — using absolute padding here
+            // would clip behind the "100" case.
+            Row(verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.align(Alignment.CenterStart).padding(top = 60.dp)) {
                 Text("${model.percent}", color = Color.White, fontSize = 64.sp, fontWeight = FontWeight.Medium)
                 if (ui.displayMode == com.github.itskenny0.r1ha.core.prefs.DisplayMode.PERCENT) {
                     Text("%", color = Color.White.copy(alpha = 0.55f), fontSize = 18.sp,
-                        modifier = Modifier.padding(start = 80.dp, top = 6.dp))
+                        modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
                 }
             }
             // chip

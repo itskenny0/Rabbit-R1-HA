@@ -2,6 +2,7 @@ package com.github.itskenny0.r1ha.core.theme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -48,11 +49,12 @@ object ColorfulCardsTheme : R1Theme {
             Text(model.friendlyName, color = Color.White, fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(top = if (ui.showAreaLabel) 2.dp else 0.dp))
-            Box(Modifier.align(Alignment.CenterStart).padding(top = 70.dp)) {
+            Row(verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.align(Alignment.CenterStart).padding(top = 70.dp)) {
                 Text("${model.percent}", color = Color.White, fontSize = 72.sp, fontWeight = FontWeight.Bold)
                 if (ui.displayMode == DisplayMode.PERCENT) {
                     Text("%", color = Color.White.copy(alpha = 0.85f), fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 96.dp, top = 8.dp))
+                        modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
                 }
             }
             // chunky pill
