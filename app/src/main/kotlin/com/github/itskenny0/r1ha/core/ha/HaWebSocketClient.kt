@@ -72,6 +72,11 @@ class HaWebSocketClient internal constructor(
                 }
             }
             override fun onMessage(ws: WebSocket, text: String) {
+                // Ignore messages from a WebSocket that has been replaced or torn down — without
+                // this guard, a late AuthOk from a previous connection could bump the state back
+                // to Connected after the user has signed out (or while a new connection is mid-
+                // authenticating).
+                if (this@HaWebSocketClient.webSocket !== ws) return
                 val msg = runCatching { HaJson.decodeFromString<HaInbound>(text) }
                     .getOrElse { HaInbound.Unknown }
                 when (msg) {
