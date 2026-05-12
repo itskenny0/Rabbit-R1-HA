@@ -114,6 +114,7 @@ fun FavoritesPickerScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .animateItem()
                             .padding(vertical = 6.dp),
                     ) {
                         Checkbox(
