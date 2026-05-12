@@ -355,6 +355,13 @@ class DefaultHaRepository(
             val result = listAllEntities()
             result.fold(
                 onSuccess = { all ->
+                    // If the user signed out while this REST call was in flight, drop the
+                    // results on the floor — otherwise we'd repopulate the cache that the
+                    // URL-change observer just cleared, bleeding server-A state into server-B.
+                    if (settings.settings.first().server == null) {
+                        R1Log.w("HaRepo.seed", "server gone mid-seed; discarding ${all.size} entities")
+                        return
+                    }
                     val byId = all.filter { it.id in favIds }.associateBy { it.id }
                     if (byId.isNotEmpty()) {
                         // Only toast on the FIRST successful seed (i.e. when the cache was
