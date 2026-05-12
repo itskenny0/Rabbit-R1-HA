@@ -85,10 +85,11 @@ class OnboardingViewModel(
                     val code = http.newCall(req).execute().use { it.code }
                     R1Log.i("Onboarding.probe", "HEAD returned HTTP $code")
                 }
-                // Persist the URL so the rest of the app can use it.
-                R1Log.i("Onboarding.probe", "calling settings.update(server=$baseUrl)")
-                settings.update { it.copy(server = ServerConfig(url = baseUrl)) }
-                R1Log.i("Onboarding.probe", "settings.update returned")
+                // NB: we deliberately do NOT write settings.server here. Doing so triggered
+                // the URL-change observer in HaRepository which tried to connectFromSettings
+                // immediately — but tokens haven't been exchanged yet, so it toasted
+                // "Authentication tokens missing" before the user even saw the WebView. The
+                // URL gets written by exchangeCode() right after a successful token POST.
                 val authorizeUrl = "$baseUrl/auth/authorize?response_type=code&client_id=https%3A%2F%2Fitskenny0.github.io%2FRabbit-R1-HA%2F&redirect_uri=r1ha%3A%2F%2Fauth-callback"
                 _state.value = State.ReadyToAuth(authorizeUrl = authorizeUrl, baseUrl = baseUrl)
             } catch (e: Exception) {
