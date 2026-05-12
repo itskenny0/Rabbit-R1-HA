@@ -4,6 +4,7 @@ import android.content.Context
 import com.github.itskenny0.r1ha.core.ha.DefaultHaRepository
 import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.ha.HaWebSocketClient
+import com.github.itskenny0.r1ha.core.ha.TokenRefresher
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.prefs.TokenStore
@@ -41,12 +42,17 @@ class AppGraph(context: Context) {
         HaWebSocketClient()
     }
 
+    val tokenRefresher: TokenRefresher by lazy {
+        TokenRefresher(http = okHttp, settings = settings, tokens = tokens)
+    }
+
     val haRepository: HaRepository by lazy {
         DefaultHaRepository(
             ws = wsClient,
             http = okHttp,
             settings = settings,
             tokens = tokens,
+            refresher = tokenRefresher,
         )
     }
 

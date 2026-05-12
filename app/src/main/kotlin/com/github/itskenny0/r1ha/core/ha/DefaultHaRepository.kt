@@ -41,6 +41,11 @@ class DefaultHaRepository(
     private val http: OkHttpClient,
     private val settings: SettingsRepository,
     private val tokens: TokenStore,
+    /**
+     * Optional refresher; production wires in [TokenRefresher], tests can pass null to skip the
+     * network calls entirely and reuse whatever access token the test stubbed into [tokens].
+     */
+    private val refresher: TokenRefresher? = null,
     private val backoff: BackoffPolicy = BackoffPolicy(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : HaRepository {
@@ -90,6 +95,21 @@ class DefaultHaRepository(
                         val attempt = reconnectAttempt
                         reconnectAttempt = (attempt + 1).coerceAtMost(20)
                         reconnectLater(attempt)
+                    }
+                    is ConnectionState.AuthLost -> {
+                        // Access token was rejected — most often because the 30-minute lifetime
+                        // expired. Try one refresh; if it succeeds, reconnect. If the refresh
+                        // itself fails (revoked refresh token, server unreachable, etc.) we stay
+                        // in AuthLost and the user has to manually sign out & reconnect.
+                        R1Log.w("HaRepo.authLost", "reason=${st.reason}; attempting token refresh")
+                        scope.launch {
+                            if (refresher?.forceRefresh() == true) {
+                                R1Log.i("HaRepo.authLost", "refresh succeeded; reconnecting")
+                                connectFromSettings()
+                            } else {
+                                R1Log.w("HaRepo.authLost", "refresh failed; staying AuthLost")
+                            }
+                        }
                     }
                     else -> Unit
                 }
@@ -146,6 +166,10 @@ class DefaultHaRepository(
     }
 
     private suspend fun connectFromSettings() {
+        // Proactively refresh the access token if it's within ~60s of expiry. Cheap when the
+        // token has time left (just an in-memory check), and avoids the AuthLost → refresh →
+        // reconnect round-trip on the common "user opens app after >30min" case.
+        refresher?.ensureFresh()
         val s = settings.settings.first()
         val server = s.server ?: return
         val t = tokens.load() ?: return
