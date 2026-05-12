@@ -2,7 +2,6 @@ package com.github.itskenny0.r1ha.feature.themepicker
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +32,7 @@ import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.core.theme.R1Theme
 import com.github.itskenny0.r1ha.core.theme.R1ThemeHost
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
 import kotlinx.coroutines.launch
 
 private val SAMPLE_CARD = CardRenderModel(
@@ -116,16 +116,22 @@ private fun ThemeRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .r1Pressable(onClick)
             .padding(horizontal = 22.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Selection indicator — bold filled square when selected, hollow when not.
+        // Selection indicator — accent fill when active, otherwise a hairline-outlined hollow
+        // square so the unselected state is *visible* on the near-black background instead of
+        // a hairline-coloured 14dp square that just disappeared into the bg.
         Box(
             modifier = Modifier
                 .size(14.dp)
                 .clip(R1.ShapeS)
-                .background(if (isSelected) R1.AccentWarm else R1.Hairline),
+                .background(if (isSelected) R1.AccentWarm else R1.Bg)
+                .then(
+                    if (isSelected) Modifier
+                    else Modifier.border(1.dp, R1.InkMuted, R1.ShapeS),
+                ),
         )
 
         Spacer(Modifier.width(14.dp))

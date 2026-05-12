@@ -1,7 +1,6 @@
 package com.github.itskenny0.r1ha.feature.cardstack
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,15 +20,9 @@ import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -52,7 +45,12 @@ import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.ui.components.Chevron
+import com.github.itskenny0.r1ha.ui.components.ChevronDirection
 import com.github.itskenny0.r1ha.ui.components.EntityCard
+import com.github.itskenny0.r1ha.ui.components.HamburgerGlyph
+import com.github.itskenny0.r1ha.ui.components.SettingsCogGlyph
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
@@ -116,6 +114,7 @@ fun CardStackScreen(
                 loading = state.favouritesCount > 0,
                 favouritesCount = state.favouritesCount,
                 onOpenFavoritesPicker = onOpenFavoritesPicker,
+                onOpenSettings = onOpenSettings,
             )
         }
 
@@ -203,7 +202,9 @@ private fun VerticalCardPager(
         // ── Chevron hints ─────────────────────────────────────────────────────────────
         // A small ↑ just under the chrome row when there's a previous card, and a small ↓
         // just above the bottom edge when there's a next card. They live ABOVE the pager
-        // visually but don't intercept its gestures (no clickable on either).
+        // visually but don't intercept its gestures (no clickable on either). Drawn with
+        // the same Chevron primitive as the back-button so the whole screen language stays
+        // consistent — no Material `KeyboardArrowUp/Down` glyphs.
         val currentPage = pagerState.currentPage
         if (currentPage > 0) {
             Box(
@@ -211,12 +212,7 @@ private fun VerticalCardPager(
                     .align(Alignment.TopCenter)
                     .padding(top = 60.dp),
             ) {
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowUp,
-                    contentDescription = null,
-                    tint = R1.InkMuted,
-                    modifier = Modifier.size(18.dp),
-                )
+                Chevron(direction = ChevronDirection.Up, size = 14.dp, tint = R1.InkMuted)
             }
         }
         if (currentPage < cards.size - 1) {
@@ -225,12 +221,7 @@ private fun VerticalCardPager(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 8.dp),
             ) {
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = R1.InkMuted,
-                    modifier = Modifier.size(18.dp),
-                )
+                Chevron(direction = ChevronDirection.Down, size = 14.dp, tint = R1.InkMuted)
             }
         }
     }
@@ -241,7 +232,21 @@ private fun EmptyState(
     loading: Boolean,
     favouritesCount: Int,
     onOpenFavoritesPicker: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
+    // After STALLED_AFTER_MS of loading without any cards arriving, surface a "Stuck?"
+    // affordance pointing to Settings. Without it, an unreachable HA leaves the user on a
+    // pure spinner with no idea what to do; the reconnect-backoff in the repo can be 30s
+    // between attempts and the user shouldn't be expected to wait that out blindly.
+    val stalled = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(loading) {
+        stalled.value = false
+        if (loading) {
+            kotlinx.coroutines.delay(STALLED_AFTER_MS)
+            stalled.value = true
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -287,8 +292,25 @@ private fun EmptyState(
                 style = R1.labelMicro,
             )
         }
+        // Stalled-loading affordance.
+        if (loading && stalled.value) {
+            Spacer(Modifier.height(20.dp))
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .r1Pressable(onOpenSettings)
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = "STILL LOADING — TAP TO OPEN SETTINGS",
+                    style = R1.labelMicro,
+                    color = R1.StatusAmber,
+                )
+            }
+        }
     }
 }
+
+private const val STALLED_AFTER_MS = 10_000L
 
 /**
  * Top chrome — hamburger left, vertical position pip + counter centre, settings gear right
@@ -312,12 +334,16 @@ private fun ChromeRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Top-left: favourites hamburger
-        ChromeIconButton(
-            icon = Icons.Default.Menu,
-            description = "Favourites",
-            onClick = onOpenFavoritesPicker,
-        )
+        // Top-left: favourites hamburger (custom 3-stroke glyph, not Material's filled icon).
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .r1Pressable(onOpenFavoritesPicker),
+            contentAlignment = Alignment.Center,
+        ) {
+            HamburgerGlyph(size = 18.dp)
+        }
 
         // Centre: vertical position indicator. Hairline track + a 3dp filled segment at the
         // current page. Visually communicates "vertical stack" — wheel of cards going up
@@ -331,20 +357,17 @@ private fun ChromeRow(
             Spacer(Modifier.size(44.dp))
         }
 
-        // Top-right: settings gear + connection-state dot.
+        // Top-right: settings gear + connection-state dot. The gear is a Canvas-drawn
+        // wireframe (see `SettingsCogGlyph`) so it matches the rest of the chrome's
+        // hairline-stroke language instead of Material's filled gear.
         Box(
             modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .clickable(onClick = onOpenSettings),
+                .r1Pressable(onOpenSettings),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = "Settings",
-                tint = R1.Ink.copy(alpha = 0.85f),
-                modifier = Modifier.size(18.dp),
-            )
+            SettingsCogGlyph(size = 18.dp)
             // Connection dot: only visible when NOT connected (subtle when healthy, screaming
             // when not).
             val statusColor = when (connection) {
@@ -365,28 +388,6 @@ private fun ChromeRow(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun ChromeIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    description: String,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = description,
-            tint = R1.Ink.copy(alpha = 0.85f),
-            modifier = Modifier.size(18.dp),
-        )
     }
 }
 

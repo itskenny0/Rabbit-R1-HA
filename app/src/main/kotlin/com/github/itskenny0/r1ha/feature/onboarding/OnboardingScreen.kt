@@ -83,13 +83,42 @@ fun OnboardingScreen(
         }
 
         is OnboardingViewModel.State.Exchanging -> {
-            Box(
-                Modifier
+            // Labelled progress state — bare CircularProgressIndicator on a black screen
+            // doesn't communicate that the app is doing anything specific; users sometimes
+            // think it's hung. The screen sequence (01 LINK → 02 AUTHORISE → 03 READY) makes
+            // the onboarding feel like a guided flow with a known end.
+            Column(
+                modifier = Modifier
                     .fillMaxSize()
-                    .systemBarsPadding(),
-                contentAlignment = Alignment.Center,
+                    .background(com.github.itskenny0.r1ha.core.theme.R1.Bg)
+                    .systemBarsPadding()
+                    .padding(horizontal = 22.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                horizontalAlignment = Alignment.Start,
             ) {
-                CircularProgressIndicator()
+                Text(
+                    text = "02 · AUTHORISE",
+                    style = com.github.itskenny0.r1ha.core.theme.R1.labelMicro,
+                    color = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Exchanging tokens…",
+                    style = com.github.itskenny0.r1ha.core.theme.R1.screenTitle,
+                    color = com.github.itskenny0.r1ha.core.theme.R1.Ink,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Swapping the authorisation code for an access token. This\nis a one-time round-trip; it usually takes a second.",
+                    style = com.github.itskenny0.r1ha.core.theme.R1.body,
+                    color = com.github.itskenny0.r1ha.core.theme.R1.InkMuted,
+                )
+                Spacer(Modifier.height(28.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier.height(20.dp),
+                    strokeWidth = 2.dp,
+                    color = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
+                )
             }
         }
 

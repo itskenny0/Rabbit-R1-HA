@@ -49,7 +49,21 @@ class HaWebSocketClient internal constructor(
 
     @Volatile private var webSocket: WebSocket? = null
     @Volatile private var receiverJob: Job? = null
-    private val outgoing = Channel<HaOutbound>(capacity = Channel.UNLIMITED)
+    /**
+     * Outgoing-message buffer. Bounded with DROP_OLDEST so a stalled network can't grow the
+     * queue without bound — the wheel can fire 20+ events/sec, and if the WS sender stalls
+     * (network latency spike, OS suspending sockets during a wake-up) those would otherwise
+     * accumulate in memory and replay as a stale flurry once the link resumes. Dropping
+     * oldest is correct: every wheel event already supersedes the previous via the per-key
+     * trailing debouncer, so an older queued message is by construction outdated.
+     *
+     * Capacity 256 is plenty for any realistic burst (a user can't physically generate that
+     * many discrete intents); it just caps the worst case during a network stall.
+     */
+    private val outgoing = Channel<HaOutbound>(
+        capacity = 256,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
 
     fun connect(url: String, accessToken: String) {
         // Allow connect from Idle, Disconnected, AND AuthLost: when the repository succeeds at

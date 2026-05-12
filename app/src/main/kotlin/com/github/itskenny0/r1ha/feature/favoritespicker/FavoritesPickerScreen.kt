@@ -5,7 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,12 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,8 +37,13 @@ import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.ui.components.Chevron
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
+import com.github.itskenny0.r1ha.ui.components.ChevronDirection
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 @Composable
 fun FavoritesPickerScreen(
@@ -208,7 +208,7 @@ private fun ChannelRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
+            .r1Pressable(onToggle)
             .padding(horizontal = 22.dp, vertical = 12.dp),
     ) {
         // ── Left: domain block (coloured tab) + identity ────────────────────────────
@@ -269,16 +269,16 @@ private fun ChannelRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val canMoveUp = row.orderIndex != null && row.orderIndex > 0
                 val canMoveDown = row.orderIndex != null && row.orderIndex < favCount - 1
-                MoveIconButton(
+                MoveChevron(
                     onClick = onMoveUp,
                     enabled = canMoveUp,
-                    icon = Icons.Filled.KeyboardArrowUp,
+                    direction = ChevronDirection.Up,
                     description = "Move up",
                 )
-                MoveIconButton(
+                MoveChevron(
                     onClick = onMoveDown,
                     enabled = canMoveDown,
-                    icon = Icons.Filled.KeyboardArrowDown,
+                    direction = ChevronDirection.Down,
                     description = "Move down",
                 )
             }
@@ -289,30 +289,36 @@ private fun ChannelRow(
 }
 
 @Composable
-private fun MoveIconButton(
+private fun MoveChevron(
     onClick: () -> Unit,
     enabled: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    direction: ChevronDirection,
     description: String,
 ) {
-    IconButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.size(32.dp),
+    // 32dp tap target with the chevron centred. We attach the contentDescription to the
+    // outer Box (Chevron itself is a Canvas with no built-in semantic role) so TalkBack
+    // still reads "Move up" / "Move down" even though we dropped Material's IconButton.
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .semantics { contentDescription = description }
+            .then(if (enabled) Modifier.r1Pressable(onClick) else Modifier),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = description,
+        Chevron(
+            direction = direction,
+            size = 14.dp,
             tint = if (enabled) R1.InkSoft else R1.Hairline,
-            modifier = Modifier.size(20.dp),
         )
     }
 }
 
 /**
  * Bespoke selection box — much more clearly a "patch slot is selected" indicator than
- * Material 3's stock Checkbox. Empty square when unselected, accent-filled square with a
- * tick when selected.
+ * Material 3's stock Checkbox. Empty hairline-bordered square when unselected, accent-filled
+ * square with a tick when selected. Uses a proper [border] modifier (rather than the previous
+ * two-tone background trick) so the unselected state reads as a crisp 1dp outline on the
+ * R1's tiny display rather than a near-invisible darker square.
  */
 @Composable
 private fun SelectBox(selected: Boolean, onClick: () -> Unit, accent: Color) {
@@ -320,29 +326,16 @@ private fun SelectBox(selected: Boolean, onClick: () -> Unit, accent: Color) {
         modifier = Modifier
             .size(22.dp)
             .clip(R1.ShapeS)
-            .background(if (selected) accent else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(2.dp),
+            .background(if (selected) accent else R1.Bg)
+            .then(
+                if (selected) Modifier
+                else Modifier.border(1.dp, R1.InkMuted, R1.ShapeS),
+            )
+            .r1Pressable(onClick),
         contentAlignment = Alignment.Center,
     ) {
         if (selected) {
             Text(text = "✓", style = R1.labelMicro, color = R1.Bg)
-        } else {
-            // Empty box: 1dp inset hairline border drawn via two-tone background.
-            Box(
-                modifier = Modifier
-                    .size(18.dp)
-                    .clip(R1.ShapeS)
-                    .background(R1.Hairline),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .padding(1.dp)
-                        .clip(R1.ShapeS)
-                        .background(R1.Bg),
-                )
-            }
         }
     }
 }

@@ -8,7 +8,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -71,7 +73,28 @@ class DefaultHaRepository(
         val deferred = CompletableDeferred<Result<Unit>>()
         pendingCalls[id] = deferred
         ws.send(HaOutbound.CallService(id, call.haDomain, call.service, call.target.value, call.data))
-        // best-effort: on error, the inbound listener completes the deferred; we don't await here
+        // Wait for HA's Result with a hard ceiling. Without the timeout a slow/dead HA leaves
+        // the deferred in `pendingCalls` forever; without the await we lose visibility into
+        // whether the command actually shipped. CALL_TIMEOUT_MS is generous enough that even
+        // a busy HA on a flaky link finishes inside it; if it doesn't, the user wants to know.
+        val outcome = try {
+            withTimeout(CALL_TIMEOUT_MS) { deferred.await() }
+        } catch (_: TimeoutCancellationException) {
+            // Drain the pending entry so we don't leak the deferred if a late Result eventually
+            // arrives — the .remove() races with the inbound listener but ConcurrentHashMap
+            // guarantees one of them wins cleanly.
+            pendingCalls.remove(id)
+            Result.failure(IllegalStateException("Timed out after ${CALL_TIMEOUT_MS / 1000}s"))
+        }
+        outcome.onFailure { t ->
+            // R1Log so dev builds get the full picture; a short user-visible toast so they
+            // know their action didn't take. Use objectId (e.g. "kitchen_lamp") not entity_id
+            // (e.g. "light.kitchen_lamp") so the toast is readable on a 240-px display.
+            R1Log.w("HaRepo.call", "${call.target.value}/${call.service} failed: ${t.message}")
+            com.github.itskenny0.r1ha.core.util.Toaster.show(
+                "Couldn't update ${call.target.objectId}: ${t.message ?: "unknown error"}",
+            )
+        }
     }
 
     override suspend fun start() {
@@ -441,6 +464,13 @@ class DefaultHaRepository(
 
     private companion object {
         const val MAX_AUTHLOST_RETRIES = 3
+        /**
+         * Hard ceiling on how long the repository will wait for a `result` message after sending
+         * a `call_service`. Set high enough to absorb a busy HA on a slow phone-to-broker link
+         * (cover-set-position, media-volume-set on a Sonos group can take a couple of seconds),
+         * low enough that the user knows within a sensible window if their command was lost.
+         */
+        const val CALL_TIMEOUT_MS = 15_000L
     }
 
     @kotlinx.serialization.Serializable

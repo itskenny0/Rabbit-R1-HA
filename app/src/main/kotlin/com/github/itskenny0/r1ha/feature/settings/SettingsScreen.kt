@@ -1,7 +1,6 @@
 package com.github.itskenny0.r1ha.feature.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,11 +15,6 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,7 +32,9 @@ import com.github.itskenny0.r1ha.core.prefs.TokenStore
 import com.github.itskenny0.r1ha.core.prefs.WheelKeySource
 import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
+import com.github.itskenny0.r1ha.ui.components.R1Switch
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
 
 @Composable
 fun SettingsScreen(
@@ -291,7 +287,10 @@ private fun SwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
+            // r1Pressable instead of bare clickable so the whole row dips on press AND fires
+            // a CLOCK_TICK haptic to match the rest of the app. The inner R1Switch ignores
+            // the synthetic click here — it'll fire its own haptic on the toggle thumb tap.
+            .r1Pressable(onClick = { onCheckedChange(!checked) }, hapticOnClick = false)
             .padding(horizontal = 22.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -302,17 +301,9 @@ private fun SwitchRow(
                 Text(subtitle, style = R1.body, color = R1.InkMuted)
             }
         }
-        Switch(
+        R1Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = R1.Bg,
-                checkedTrackColor = R1.AccentWarm,
-                checkedBorderColor = R1.AccentWarm,
-                uncheckedThumbColor = R1.InkSoft,
-                uncheckedTrackColor = R1.Bg,
-                uncheckedBorderColor = R1.Hairline,
-            ),
             modifier = Modifier.padding(start = 12.dp),
         )
     }
@@ -340,7 +331,7 @@ private fun NavRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .r1Pressable(onClick)
             .padding(horizontal = 22.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -353,11 +344,10 @@ private fun NavRow(
                 modifier = Modifier.padding(end = 8.dp),
             )
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-            contentDescription = null,
+        com.github.itskenny0.r1ha.ui.components.Chevron(
+            direction = com.github.itskenny0.r1ha.ui.components.ChevronDirection.Right,
+            size = 10.dp,
             tint = R1.InkMuted,
-            modifier = Modifier.size(12.dp),
         )
     }
 }
@@ -390,7 +380,9 @@ private fun DangerButton(text: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .clip(R1.ShapeS)
             .background(R1.SurfaceMuted)
-            .clickable(onClick = onClick)
+            // Hairline border in StatusRed so the destructive intent reads at a glance — the
+            // earlier flat `SurfaceMuted` fill didn't signal "danger" from across the screen.
+            .r1Pressable(onClick)
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -437,7 +429,7 @@ private fun <T> Segmented(
                 modifier = Modifier
                     .weight(1f)
                     .background(if (isSelected) R1.AccentWarm else R1.SurfaceMuted)
-                    .clickable { onSelect(option) }
+                    .r1Pressable(onClick = { onSelect(option) })
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {

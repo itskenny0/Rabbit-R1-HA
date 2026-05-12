@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +36,7 @@ import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
 
 @Composable
 fun AboutScreen(
@@ -190,7 +190,7 @@ private fun LinkRow(label: String, url: String, onOpen: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen)
+            .r1Pressable(onOpen)
             .padding(horizontal = 22.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.Start,
     ) {
@@ -198,7 +198,11 @@ private fun LinkRow(label: String, url: String, onOpen: () -> Unit) {
         Spacer(Modifier.height(2.dp))
         Text(
             text = url,
-            style = R1.body.copy(fontFamily = FontFamily.Monospace),
+            // Underline so the URL reads as interactive even without a chevron.
+            style = R1.body.copy(
+                fontFamily = FontFamily.Monospace,
+                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+            ),
             color = R1.AccentWarm,
         )
     }
