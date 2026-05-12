@@ -122,6 +122,12 @@ class HaWebSocketClient internal constructor(
         webSocket?.close(code, reason)
         webSocket = null
         receiverJob?.cancel()
+        // Drain any queued outbound messages so they don't get replayed against a different
+        // server when the user signs in again. This was an actual leak: a wheel debounce that
+        // fired right before sign-out would sit in the channel and execute on the next
+        // server's entities (mostly errors, occasionally surprising state changes if entity
+        // IDs collided).
+        while (outgoing.tryReceive().isSuccess) { /* discard */ }
         _state.value = ConnectionState.Idle
     }
 }
