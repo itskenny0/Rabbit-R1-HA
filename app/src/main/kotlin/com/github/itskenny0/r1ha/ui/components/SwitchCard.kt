@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -122,11 +123,20 @@ private fun SwitchTrack(
     onSetOn: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val frac by animateFloatAsState(
+    // Critically damped spring — a physical toggle snaps to its stop and stays put; no
+    // bounce. (The percent slider on the other card variant does bounce because there are
+    // intermediate positions to telegraph; here there are only two stops.) Critical damping
+    // also keeps the animated value strictly inside [0, 1], which matters because the thumb
+    // is placed by multiplying this fraction into a Dp — a brief overshoot to -0.03 used to
+    // produce a negative Dp and crash `Modifier.padding(top = …)`. We now use `offset`
+    // instead, which accepts any Dp, but the critically-damped spring is the correct shape
+    // for this control regardless.
+    val rawFrac by animateFloatAsState(
         targetValue = if (isOn) 0f else 1f,  // 0 = top (ON), 1 = bottom (OFF)
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium),
         label = "switch-frac",
     )
+    val frac = rawFrac.coerceIn(0f, 1f)
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -175,10 +185,13 @@ private fun SwitchTrack(
             val thumbHeight = 8.dp
             val trackHeight = maxHeight
             val travel = trackHeight - thumbHeight
+            // `offset` rather than `padding` for the Y position — `padding` rejects negative
+            // Dp with IllegalArgumentException, and any non-zero spring bounce would briefly
+            // produce a value just outside [0, 1]. `offset` accepts any Dp.
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = travel * frac)
+                    .offset(y = travel * frac)
                     .width(24.dp)
                     .height(thumbHeight)
                     .clip(RoundedCornerShape(4.dp))

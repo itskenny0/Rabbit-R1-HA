@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -240,10 +241,13 @@ private fun ThumbCapsule(fraction: Float, accent: Color) {
         val thumbH = 6.dp
         val travel = trackH - thumbH
         // fraction = 1.0 → thumb at the top; fraction = 0.0 → thumb at the bottom.
+        // `offset` (not `padding`) because the slider's spring overshoots — a fraction of
+        // 1.05 briefly produces a negative `offsetFromTop`, and `padding` crashes on
+        // negative Dp. `offset` accepts any Dp, so a tiny visible overshoot is fine.
         val offsetFromTop = travel * (1f - fraction)
         Box(
             modifier = Modifier
-                .padding(top = offsetFromTop)
+                .offset(y = offsetFromTop)
                 .width(12.dp)
                 .height(thumbH)
                 .clip(RoundedCornerShape(3.dp))
