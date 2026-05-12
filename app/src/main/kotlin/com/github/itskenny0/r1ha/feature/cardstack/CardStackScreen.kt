@@ -256,13 +256,24 @@ private fun Modifier.cardStackGestures(
 ): Modifier = pointerInput(Unit) {
     val slopPx = 24.dp.toPx()
     val thresholdPx = 64.dp.toPx()
+    // Top chrome (favourites icon, position dots, settings icon) sits in the first ~60dp
+    // under the status bar. Gestures that START in that strip are ignored so the chrome's
+    // own clickables (IconButton) receive the tap without us double-firing onTap.
+    val chromeBandPx = 60.dp.toPx()
 
     awaitEachGesture {
-        // Receive the down event in the Initial pass so child clickables can't pre-empt
-        // us. requireUnconsumed = false because some children (Button, IconButton) consume
-        // the down in their own handlers; we still want the event so we can disambiguate
-        // tap-vs-drag.
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        if (down.position.y < chromeBandPx) {
+            // Inside the top chrome — wait for the up but do nothing, letting the chrome's
+            // own clickable handle the tap.
+            while (true) {
+                val ev = awaitPointerEvent(pass = PointerEventPass.Initial)
+                val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                if (ch.changedToUp()) break
+            }
+            return@awaitEachGesture
+        }
+
         var dx = 0f
         var dy = 0f
         var classified: Char? = null  // 'v' = vertical, 'h' = horizontal, null = undecided
@@ -272,9 +283,7 @@ private fun Modifier.cardStackGestures(
             val change = event.changes.firstOrNull { it.id == down.id } ?: break
 
             if (change.changedToUp()) {
-                // Pointer lifted — decide action
                 if (classified == null) {
-                    // No slop exceeded: treat as tap
                     if (kotlin.math.abs(dx) < slopPx && kotlin.math.abs(dy) < slopPx) {
                         onTap()
                     }
