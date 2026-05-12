@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -70,48 +71,40 @@ object PragmaticHybridTheme : R1Theme {
         val accent = accentColor(model.accent)
         val ui = LocalUiOptions.current
 
-        Column(
+        Row(
             modifier = modifier
                 .fillMaxSize()
                 .background(R1.Bg)
-                .padding(horizontal = 22.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.Top,
+                .padding(start = 22.dp, top = 18.dp, bottom = 18.dp, end = 18.dp),
         ) {
-            // ── Header strip: DOMAIN · AREA ───────────────────────────────────────────
-            DomainHeader(
-                domainLabel = domainLabel(model.domainGlyph),
-                area = model.area,
-                accent = accent,
-                showArea = ui.showAreaLabel,
-            )
-            Spacer(Modifier.height(6.dp))
-
-            // ── Friendly name ────────────────────────────────────────────────────────
-            Text(
-                text = model.friendlyName,
-                style = R1.titleCard,
-                color = R1.Ink,
-                maxLines = 2,
-            )
-            Spacer(Modifier.height(20.dp))
-
-            // ── Big monospace readout with slot-machine digits ───────────────────────
-            BigReadout(
-                percent = model.percent,
-                showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
-                accent = accent,
-            )
-            Spacer(Modifier.height(14.dp))
-
-            // ── Horizontal tape meter — the slider ───────────────────────────────────
-            TapeMeter(percent = model.percent, accent = accent)
-
-            // ── Pushes the on/off pill to the bottom of the card ─────────────────────
-            Spacer(Modifier.weight(1f))
-
-            if (ui.showOnOffPill) {
-                OnOffPill(isOn = model.isOn, accent = accent)
+            // ── Main content column ─────────────────────────────────────────────────
+            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                DomainHeader(
+                    domainLabel = domainLabel(model.domainGlyph),
+                    area = model.area,
+                    accent = accent,
+                    showArea = ui.showAreaLabel,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = model.friendlyName,
+                    style = R1.titleCard,
+                    color = R1.Ink,
+                    maxLines = 2,
+                )
+                Spacer(Modifier.height(20.dp))
+                BigReadout(
+                    percent = model.percent,
+                    showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
+                    accent = accent,
+                )
+                Spacer(Modifier.weight(1f))
+                if (ui.showOnOffPill) OnOffPill(isOn = model.isOn, accent = accent)
             }
+
+            // ── Vertical tape meter — inset from the right edge, ~200 dp tall ───────
+            Spacer(Modifier.width(20.dp))
+            VerticalTapeMeter(percent = model.percent, accent = accent)
         }
     }
 }
@@ -250,47 +243,86 @@ internal fun BigReadout(
 }
 
 /**
- * A horizontal tape-meter slider that lives directly under the readout. Far wider than tall;
- * tick marks every 25% so the user can read absolute position at a glance. The accent-coloured
- * fill is spring-animated via [rememberSliderFraction] — when the wheel turns, the bar
- * visibly bounces toward the new value rather than just snapping.
+ * Vertical tape meter, inset from the right edge of the card. Track is a 2 dp hairline; fill
+ * grows from the bottom and ends in a 4 dp accent-coloured thumb at the current value.
+ * [rememberSliderFraction] gives the fill a snappy bouncy spring — each detent visibly
+ * "jumps" past the target and settles, which reads as mechanical feedback per click.
  */
 @Composable
-internal fun TapeMeter(percent: Int, accent: Color) {
-    val fraction = rememberSliderFraction(percent)
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Track + fill
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(R1.SurfaceMuted),
+internal fun VerticalTapeMeter(percent: Int, accent: Color) {
+    val fraction = rememberSliderFraction(percent).coerceIn(0f, 1f)
+    // Tick row labels — at fixed Y positions, monospace tiny text on the inside edge.
+    Row(
+        modifier = Modifier.fillMaxHeight(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // 0/25/50/75/100 labels — vertically distributed alongside the track.
+        Column(
+            modifier = Modifier.fillMaxHeight(),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.End,
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(accent),
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        // Tick row: 0 · 25 · 50 · 75 · 100, monospace, very small
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            listOf("0", "25", "50", "75", "100").forEach { mark ->
-                Text(
-                    text = mark,
-                    style = R1.numeralS,
-                    color = R1.InkMuted,
-                    modifier = Modifier.width(28.dp),
-                    textAlign = TextAlign.Center,
-                )
+            listOf("100", "75", "50", "25", "0").forEach { tick ->
+                Text(text = tick, style = R1.numeralS, color = R1.InkMuted)
             }
         }
+        Spacer(Modifier.width(6.dp))
+        // Track + fill + thumb. Anchor to BottomCenter so the fill grows upward.
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(12.dp),
+        ) {
+            // Hairline track.
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(2.dp)
+                    .align(Alignment.Center)
+                    .background(R1.SurfaceMuted),
+            )
+            // Fill — grows from the bottom up to `fraction` of available height.
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight(fraction)
+                    .width(4.dp)
+                    .align(Alignment.BottomCenter)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(accent),
+            )
+            // Thumb — a 12 dp wide capsule sitting at the top of the fill.
+            Box(
+                modifier = Modifier.fillMaxHeight(),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                Spacer(Modifier.fillMaxHeight(fraction))
+            }
+            // Thumb capsule — positioned by chaining a Spacer that pushes it up by `fraction`.
+            ThumbCapsule(fraction = fraction, accent = accent)
+        }
+    }
+}
+
+@Composable
+private fun ThumbCapsule(fraction: Float, accent: Color) {
+    // BoxWithConstraints lets us compute the absolute thumb Y from `fraction` cheaply —
+    // recomposes only when `fraction` does (post-spring settle).
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        modifier = Modifier.fillMaxHeight(),
+    ) {
+        val trackH = maxHeight
+        val thumbH = 6.dp
+        val travel = trackH - thumbH
+        // fraction = 1.0 → thumb at the top; fraction = 0.0 → thumb at the bottom.
+        val offsetFromTop = travel * (1f - fraction)
+        Box(
+            modifier = Modifier
+                .padding(top = offsetFromTop)
+                .width(12.dp)
+                .height(thumbH)
+                .clip(RoundedCornerShape(3.dp))
+                .background(accent),
+        )
     }
 }
 

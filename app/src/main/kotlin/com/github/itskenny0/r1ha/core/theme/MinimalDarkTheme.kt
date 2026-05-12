@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,76 +47,87 @@ object MinimalDarkTheme : R1Theme {
     @Composable
     override fun Card(model: CardRenderModel, modifier: Modifier, onTapToggle: () -> Unit) {
         val ui = LocalUiOptions.current
-        Column(
+        Row(
             modifier = modifier
                 .fillMaxSize()
                 .background(Color.Black)
-                .padding(horizontal = 22.dp, vertical = 18.dp),
+                .padding(start = 22.dp, top = 18.dp, bottom = 18.dp, end = 18.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(width = 14.dp, height = 2.dp)
-                        .background(R1.InkSoft),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = domainLabel(model.domainGlyph),
-                    style = R1.labelMicro,
-                    color = R1.InkSoft,
-                )
-                if (ui.showAreaLabel && !model.area.isNullOrBlank()) {
-                    Spacer(Modifier.width(8.dp))
-                    Text("·", style = R1.labelMicro, color = R1.InkMuted)
+            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 14.dp, height = 2.dp)
+                            .background(R1.InkSoft),
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = model.area.replace('_', ' ').uppercase(),
+                        text = domainLabel(model.domainGlyph),
                         style = R1.labelMicro,
-                        color = R1.InkMuted,
+                        color = R1.InkSoft,
+                    )
+                    if (ui.showAreaLabel && !model.area.isNullOrBlank()) {
+                        Spacer(Modifier.width(8.dp))
+                        Text("·", style = R1.labelMicro, color = R1.InkMuted)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = model.area.replace('_', ' ').uppercase(),
+                            style = R1.labelMicro,
+                            color = R1.InkMuted,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = model.friendlyName,
+                    style = R1.titleCard,
+                    color = R1.Ink,
+                    maxLines = 2,
+                )
+                Spacer(Modifier.height(20.dp))
+                BigReadout(
+                    percent = model.percent,
+                    showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
+                    accent = accent,
+                )
+                Spacer(Modifier.weight(1f))
+                if (ui.showOnOffPill) {
+                    Text(
+                        text = if (model.isOn) "● ON" else "○ OFF",
+                        style = R1.labelMicro,
+                        color = if (model.isOn) accent else R1.InkMuted,
                     )
                 }
             }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = model.friendlyName,
-                style = R1.titleCard,
-                color = R1.Ink,
-                maxLines = 2,
-            )
-            Spacer(Modifier.height(20.dp))
-            BigReadout(
-                percent = model.percent,
-                showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
-                accent = accent,
-            )
-            Spacer(Modifier.height(14.dp))
-
-            // Stripped tape meter: just track + fill, no tick labels.
-            val fraction = rememberSliderFraction(model.percent)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(R1.SurfaceMuted),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(accent),
-                )
-            }
-
-            Spacer(Modifier.weight(1f))
-            if (ui.showOnOffPill) {
-                Text(
-                    text = if (model.isOn) "● ON" else "○ OFF",
-                    style = R1.labelMicro,
-                    color = if (model.isOn) accent else R1.InkMuted,
-                )
-            }
+            Spacer(Modifier.width(20.dp))
+            // Stripped vertical slider — no tick labels, thin fill + thumb, accent orange.
+            MinimalVerticalSlider(percent = model.percent, accent = accent)
         }
+    }
+}
+
+@Composable
+private fun MinimalVerticalSlider(percent: Int, accent: Color) {
+    val fraction = rememberSliderFraction(percent).coerceIn(0f, 1f)
+    Box(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(1.dp)
+                .align(Alignment.Center)
+                .background(R1.SurfaceMuted),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxHeight(fraction)
+                .width(3.dp)
+                .align(Alignment.BottomCenter)
+                .clip(RoundedCornerShape(2.dp))
+                .background(accent),
+        )
     }
 }

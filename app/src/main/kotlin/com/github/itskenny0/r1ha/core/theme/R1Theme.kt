@@ -48,10 +48,9 @@ internal val sharedDarkBaseline: ColorScheme = darkColorScheme(
 )
 
 /**
- * Spring-animated 0..1 fraction for the slider. Tuned for SNAPPY response — high stiffness with
- * almost no bounce — because the previous setting (medium stiffness, low bounce) made the bar
- * visibly lag behind the wheel by hundreds of ms when the user was spinning quickly. A tiny bit
- * of bounce is preserved so the bar still has a mechanical "ping" feel on big jumps.
+ * Spring-animated 0..1 fraction for the slider. Tuned for SNAPPY response with a visible
+ * overshoot — high stiffness so the fill keeps up with the wheel, low damping so each detent
+ * lands with a small bounce that reads as "physical knob clicked".
  */
 @Composable
 internal fun rememberSliderFraction(percent: Int): Float {
@@ -59,7 +58,7 @@ internal fun rememberSliderFraction(percent: Int): Float {
     val animated by androidx.compose.animation.core.animateFloatAsState(
         targetValue = target,
         animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = 0.85f,
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
             stiffness = androidx.compose.animation.core.Spring.StiffnessHigh,
             visibilityThreshold = 0.001f,
         ),

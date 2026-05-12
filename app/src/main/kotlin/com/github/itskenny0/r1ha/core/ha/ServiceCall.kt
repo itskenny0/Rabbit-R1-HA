@@ -44,5 +44,29 @@ data class ServiceCall(
             Domain.COVER -> ServiceCall(target, if (isOn) "close_cover" else "open_cover", JsonObject(emptyMap()))
             Domain.MEDIA_PLAYER -> ServiceCall(target, "media_play_pause", JsonObject(emptyMap()))
         }
+
+        /**
+         * Explicit on/off (not toggle) for switch-card entities — the wheel needs to set an
+         * absolute state, not flip it. For media players we use `media_play`/`media_pause`
+         * because HA's `media_play_pause` is the toggle equivalent; the explicit variants
+         * give us deterministic behaviour from the wheel.
+         */
+        fun setSwitch(target: EntityId, on: Boolean): ServiceCall = when (target.domain) {
+            Domain.LIGHT, Domain.FAN -> ServiceCall(
+                target,
+                if (on) "turn_on" else "turn_off",
+                JsonObject(emptyMap()),
+            )
+            Domain.COVER -> ServiceCall(
+                target,
+                if (on) "open_cover" else "close_cover",
+                JsonObject(emptyMap()),
+            )
+            Domain.MEDIA_PLAYER -> ServiceCall(
+                target,
+                if (on) "media_play" else "media_pause",
+                JsonObject(emptyMap()),
+            )
+        }
     }
 }

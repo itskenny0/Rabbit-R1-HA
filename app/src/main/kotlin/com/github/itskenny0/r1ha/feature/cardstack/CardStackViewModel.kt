@@ -41,7 +41,17 @@ data class CardStackUiState(
     val activeState: EntityState?
         get() = cards.getOrNull(currentIndex)?.let { state ->
             val override = optimisticPercents[state.id]
-            if (override != null) state.copy(percent = override) else state
+            if (override == null) {
+                state
+            } else if (state.supportsScalar) {
+                // Scalar entity: optimistic just overrides the percent.
+                state.copy(percent = override)
+            } else {
+                // Switch entity: encode desired ON in optimistic >= 1, OFF in 0. Flip isOn
+                // immediately so the switch card snaps to the chosen position rather than
+                // waiting for HA's state broadcast.
+                state.copy(percent = override, isOn = override > 0)
+            }
         }
 }
 
@@ -62,8 +72,21 @@ class CardStackViewModel(
         scope = viewModelScope,
         debounceMillis = 250L,
     ) { entityId, pct ->
-        R1Log.i("CardStack.debounced", "sending setPercent($entityId, $pct)")
-        haRepository.call(ServiceCall.setPercent(entityId, pct))
+        // Look up the entity's current state to pick the right service shape: scalar entities
+        // get setPercent (turn_on with brightness_pct, set_percentage, set_cover_position,
+        // volume_set), switch entities get the discrete setSwitch (turn_on/turn_off, open/
+        // close_cover, media_play/media_pause). Reading the state at fire-time means the
+        // wheel-up→ON and wheel-down→OFF intent stays accurate even if HA's state has shifted
+        // during the 250 ms debounce.
+        val entityState = _state.value.cards.firstOrNull { it.id == entityId }
+        val call = if (entityState?.supportsScalar == false) {
+            R1Log.i("CardStack.debounced", "sending setSwitch($entityId, on=${pct > 0})")
+            ServiceCall.setSwitch(entityId, on = pct > 0)
+        } else {
+            R1Log.i("CardStack.debounced", "sending setPercent($entityId, $pct)")
+            ServiceCall.setPercent(entityId, pct)
+        }
+        haRepository.call(call)
         // NOTE: do NOT clear the optimistic value here. It's cleared automatically when
         // observe emits an EntityState whose percent matches (see ordering logic below).
     }
@@ -128,6 +151,21 @@ class CardStackViewModel(
         // override that never reconciles because HA never responds with a state change.
         if (!activeState.isAvailable) return
 
+        val sign = WheelInput.applyDirection(event.direction, wheel.invertDirection)
+
+        // ── Switch (on/off only) entities: wheel sets absolute state ──────────────────
+        // UP → ON (100), DOWN → OFF (0). The optimistic value plays double-duty as the
+        // switch-card's slider position too — 0 = bottom (off), 100 = top (on).
+        if (!activeState.supportsScalar) {
+            val newPct = if (sign > 0) 100 else 0
+            _state.value = _state.value.copy(
+                optimisticPercents = _state.value.optimisticPercents + (activeState.id to newPct)
+            )
+            debounced.submit(activeState.id, newPct)
+            return
+        }
+
+        // ── Scalar entities: wheel adjusts percent with optional acceleration ─────────
         // Sliding-window rate computation: count events in the last [rateWindowMillis] ms,
         // multiply by (1000 / window) to scale to events/sec.
         val now = event.timestampMillis
@@ -138,7 +176,6 @@ class CardStackViewModel(
         val ratePerSec = wheelTimestamps.size * (1000.0 / rateWindowMillis)
 
         val step = WheelInput.effectiveStep(wheel.stepPercent, ratePerSec, wheel.acceleration)
-        val sign = WheelInput.applyDirection(event.direction, wheel.invertDirection)
         val currentPct = _state.value.optimisticPercents[activeState.id] ?: activeState.percent ?: 0
         val newPct = (currentPct + sign * step).coerceIn(0, 100)
         R1Log.d("CardStack.onWheel", "dir=${event.direction} step=$step (rate=$ratePerSec) -> $currentPct→$newPct")
@@ -168,6 +205,21 @@ class CardStackViewModel(
             R1Log.i("CardStack.tap", "toggle ${activeState.id} isOn=${activeState.isOn}")
             haRepository.call(ServiceCall.tapAction(activeState.id, activeState.isOn))
         }
+    }
+
+    /**
+     * Set the active switch-card entity to an explicit [on] state — wired to the ON/OFF
+     * labels on [SwitchCard]. Re-uses the same optimistic + debouncer pipeline as the wheel
+     * so a rapid tap-ON tap-OFF still resolves to the last intent.
+     */
+    fun setSwitchOn(on: Boolean) {
+        val activeState = _state.value.activeState ?: return
+        if (!activeState.isAvailable) return
+        val newPct = if (on) 100 else 0
+        _state.value = _state.value.copy(
+            optimisticPercents = _state.value.optimisticPercents + (activeState.id to newPct)
+        )
+        viewModelScope.launch { debounced.submit(activeState.id, newPct) }
     }
 
     companion object {

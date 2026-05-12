@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,84 +58,95 @@ object ColorfulCardsTheme : R1Theme {
         val pal = paletteFor(model.entityIdText)
         val ui = LocalUiOptions.current
 
-        Column(
+        Row(
             modifier = modifier
                 .fillMaxSize()
                 .background(Brush.linearGradient(pal))
-                .padding(horizontal = 22.dp, vertical = 18.dp),
+                .padding(start = 22.dp, top = 18.dp, bottom = 18.dp, end = 18.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(width = 14.dp, height = 4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White.copy(alpha = 0.9f)),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = domainLabel(model.domainGlyph),
-                    style = R1.labelMicro,
-                    color = Color.White,
-                )
-                if (ui.showAreaLabel && !model.area.isNullOrBlank()) {
-                    Spacer(Modifier.width(8.dp))
-                    Text("·", style = R1.labelMicro, color = Color.White.copy(alpha = 0.7f))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = model.area.replace('_', ' ').uppercase(),
-                        style = R1.labelMicro,
-                        color = Color.White.copy(alpha = 0.85f),
+            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 14.dp, height = 4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color.White.copy(alpha = 0.9f)),
                     )
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = model.friendlyName,
-                style = R1.titleCard,
-                color = Color.White,
-                maxLines = 2,
-            )
-            Spacer(Modifier.height(20.dp))
-            BigReadout(
-                percent = model.percent,
-                showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
-                accent = Color.White,
-            )
-            Spacer(Modifier.height(14.dp))
-
-            // Chunky white-on-translucent tape meter — distinct from the other themes.
-            val fraction = rememberSliderFraction(model.percent)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color.Black.copy(alpha = 0.22f)),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color.White),
-                )
-            }
-
-            Spacer(Modifier.weight(1f))
-            if (ui.showOnOffPill) {
-                Box(
-                    modifier = Modifier
-                        .clip(R1.ShapeRound)
-                        .background(Color.Black.copy(alpha = 0.22f))
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                ) {
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (model.isOn) "● ON" else "○ OFF",
+                        text = domainLabel(model.domainGlyph),
                         style = R1.labelMicro,
                         color = Color.White,
                     )
+                    if (ui.showAreaLabel && !model.area.isNullOrBlank()) {
+                        Spacer(Modifier.width(8.dp))
+                        Text("·", style = R1.labelMicro, color = Color.White.copy(alpha = 0.7f))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = model.area.replace('_', ' ').uppercase(),
+                            style = R1.labelMicro,
+                            color = Color.White.copy(alpha = 0.85f),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = model.friendlyName,
+                    style = R1.titleCard,
+                    color = Color.White,
+                    maxLines = 2,
+                )
+                Spacer(Modifier.height(20.dp))
+                BigReadout(
+                    percent = model.percent,
+                    showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
+                    accent = Color.White,
+                )
+                Spacer(Modifier.weight(1f))
+                if (ui.showOnOffPill) {
+                    Box(
+                        modifier = Modifier
+                            .clip(R1.ShapeRound)
+                            .background(Color.Black.copy(alpha = 0.22f))
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = if (model.isOn) "● ON" else "○ OFF",
+                            style = R1.labelMicro,
+                            color = Color.White,
+                        )
+                    }
                 }
             }
+            Spacer(Modifier.width(20.dp))
+            // Chunky white vertical slider, distinct from the other themes.
+            ColorfulVerticalSlider(percent = model.percent)
         }
+    }
+}
+
+@Composable
+private fun ColorfulVerticalSlider(percent: Int) {
+    val fraction = rememberSliderFraction(percent).coerceIn(0f, 1f)
+    Box(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(14.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Color.Black.copy(alpha = 0.22f)),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxHeight(fraction)
+                .width(14.dp)
+                .align(Alignment.BottomCenter)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Color.White),
+        )
     }
 }

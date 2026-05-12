@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -46,6 +47,7 @@ fun SwitchCard(
     domainLabel: String,
     showArea: Boolean,
     onTapToggle: () -> Unit,
+    onSetOn: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -96,8 +98,12 @@ fun SwitchCard(
         Spacer(Modifier.height(14.dp))
 
         // ── The two-position switch ────────────────────────────────────────────────
-        // Vertical track, ON marker at top, OFF marker at bottom, thumb that snaps between.
-        SwitchTrack(isOn = state.isOn, accent = accent, modifier = Modifier.fillMaxWidth())
+        SwitchTrack(
+            isOn = state.isOn,
+            accent = accent,
+            onSetOn = onSetOn,
+            modifier = Modifier.fillMaxWidth(),
+        )
 
         Spacer(Modifier.weight(1f))
     }
@@ -105,13 +111,15 @@ fun SwitchCard(
 
 /**
  * Vertical track 12dp wide × ~120dp tall, with two end-stop labels and a thumb that animates
- * between the top (ON) and bottom (OFF). Sits centred horizontally inside its [modifier]
- * width. The visual is deliberately big — this is the primary affordance on the switch card.
+ * between the top (ON) and bottom (OFF). The ON / OFF labels are clickable: tap ON to set
+ * the entity on regardless of current state, tap OFF to set off. The track itself isn't a
+ * drag-handle — driving the switch is wheel-or-tap-on-labels only.
  */
 @Composable
 private fun SwitchTrack(
     isOn: Boolean,
     accent: Color,
+    onSetOn: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val frac by animateFloatAsState(
@@ -123,20 +131,28 @@ private fun SwitchTrack(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Left labels — ON top, OFF bottom.
+        // Left labels — ON top, OFF bottom. Both are clickable explicit setters.
         Column(
             modifier = Modifier.height(120.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
                 text = "ON",
-                style = R1.labelMicro,
+                style = R1.numeralM,
                 color = if (isOn) accent else R1.InkMuted,
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .clickable { onSetOn(true) }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             )
             Text(
                 text = "OFF",
-                style = R1.labelMicro,
+                style = R1.numeralM,
                 color = if (!isOn) R1.InkSoft else R1.InkMuted,
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .clickable { onSetOn(false) }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
         Spacer(Modifier.width(16.dp))

@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
@@ -147,18 +148,43 @@ private fun VerticalCardPager(
     Box(modifier = Modifier.fillMaxSize()) {
         VerticalPager(
             state = pagerState,
-            // No peek — off-screen cards are hidden entirely; their existence is hinted at
-            // with the chevrons rendered below. Top padding still pushes the active card
-            // below the chrome row.
+            // No peek — off-screen cards are hidden entirely until the user starts dragging.
+            // During the drag, each page's graphicsLayer (below) gives the deck an overlap
+            // with a big drop shadow.
             contentPadding = PaddingValues(top = 72.dp, bottom = 24.dp),
             pageSize = PageSize.Fill,
             pageSpacing = 0.dp,
             modifier = Modifier.fillMaxSize(),
         ) { page ->
+            // Compute this page's offset from the currently-settled page. During a drag this
+            // is fractional; the deeper magnitude is, the more we offset/dim the page so it
+            // visually slides BEHIND the active card with a chunky shadow rather than just
+            // scrolling past it.
+            val pageOffset = (
+                (pagerState.currentPage - page) +
+                    pagerState.currentPageOffsetFraction
+            )
             EntityCard(
                 state = cards[page],
                 onTapToggle = { if (appSettings.behavior.tapToToggle) vm.tapToggle() },
-                modifier = Modifier.fillMaxSize(),
+                onSetOn = { on -> vm.setSwitchOn(on) },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val abs = kotlin.math.abs(pageOffset)
+                        // The active page is z=1, neighbours are z=0 — so the active card
+                        // casts a shadow ONTO the incoming card during the drag.
+                        shadowElevation = if (abs < 0.5f) 24.dp.toPx() else 0f
+                        // Slight scale-down on the incoming card so the active one feels
+                        // forward in the stack.
+                        val scale = 1f - (abs * 0.04f).coerceIn(0f, 0.04f)
+                        scaleX = scale
+                        scaleY = scale
+                        // The shadow needs a non-zero shape clip; otherwise Compose draws no
+                        // shadow at all. A small corner radius does it.
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)
+                        clip = false
+                    },
             )
         }
 

@@ -17,7 +17,12 @@ import com.github.itskenny0.r1ha.core.theme.CardRenderModel
 import com.github.itskenny0.r1ha.core.theme.LocalR1Theme
 
 @Composable
-fun EntityCard(state: EntityState, onTapToggle: () -> Unit, modifier: Modifier = Modifier.fillMaxSize()) {
+fun EntityCard(
+    state: EntityState,
+    onTapToggle: () -> Unit,
+    modifier: Modifier = Modifier.fillMaxSize(),
+    onSetOn: ((Boolean) -> Unit)? = null,
+) {
     val theme = LocalR1Theme.current
     val glyph = when (state.id.domain) {
         Domain.LIGHT -> CardRenderModel.Glyph.LIGHT
@@ -46,6 +51,7 @@ fun EntityCard(state: EntityState, onTapToggle: () -> Unit, modifier: Modifier =
                 domainLabel = domainLabel(glyph),
                 showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
                 onTapToggle = onTapToggle,
+                onSetOn = onSetOn ?: { _ -> onTapToggle() },
                 modifier = Modifier.fillMaxSize().alpha(themeAlpha),
             )
         } else {
