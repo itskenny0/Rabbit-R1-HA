@@ -17,18 +17,28 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.itskenny0.r1ha.BuildConfig
+import com.github.itskenny0.r1ha.core.ha.ConnectionState
+import com.github.itskenny0.r1ha.core.ha.HaRepository
+import com.github.itskenny0.r1ha.core.prefs.AppSettings
+import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
 
 @Composable
 fun AboutScreen(
+    haRepository: HaRepository,
+    settings: SettingsRepository,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val connection by haRepository.connection.collectAsStateWithLifecycle()
+    val appSettings by settings.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
 
     Column(
         modifier = Modifier
@@ -124,6 +134,42 @@ fun AboutScreen(
             item { InfoRow(label = "Manufacturer", value = Build.MANUFACTURER) }
             item { InfoRow(label = "Model", value = Build.MODEL) }
             item { InfoRow(label = "Android", value = "API ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})") }
+
+            item {
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                )
+            }
+
+            // ── Home Assistant connection state ──────────────────────────────
+            item {
+                Text(
+                    text = "CONNECTION".uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+                )
+            }
+            item { InfoRow(label = "Server", value = appSettings.server?.url ?: "(not configured)") }
+            item {
+                InfoRow(
+                    label = "WebSocket",
+                    value = when (val st = connection) {
+                        ConnectionState.Idle -> "Idle"
+                        ConnectionState.Connecting -> "Connecting…"
+                        ConnectionState.Authenticating -> "Authenticating…"
+                        is ConnectionState.Connected -> "Connected${st.haVersion?.let { " (HA $it)" } ?: ""}"
+                        is ConnectionState.Disconnected -> when (val c = st.cause) {
+                            ConnectionState.Cause.Network -> "Disconnected (network)"
+                            ConnectionState.Cause.ServerClosed -> "Disconnected (server closed)"
+                            is ConnectionState.Cause.Error -> "Disconnected (${c.throwable.message ?: "error"})"
+                        }
+                        is ConnectionState.AuthLost -> "Auth lost: ${st.reason ?: "tokens invalid"}"
+                    },
+                )
+            }
+            item { InfoRow(label = "Favourites", value = appSettings.favorites.size.toString()) }
 
             item { Spacer(Modifier.height(32.dp)) }
         }

@@ -76,6 +76,8 @@ fun AppNavGraph(
         }
         composable(Routes.ABOUT) {
             AboutScreen(
+                haRepository = haRepository,
+                settings = settings,
                 onBack = { navController.popBackStack() },
             )
         }
