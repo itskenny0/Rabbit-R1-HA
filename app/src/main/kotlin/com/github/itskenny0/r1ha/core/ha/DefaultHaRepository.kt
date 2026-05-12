@@ -94,7 +94,12 @@ class DefaultHaRepository(
                         reconnectAttempt = 0
                         authLostRefreshAttempt = 0
                         resubscribe()
-                        seedCacheFromHa()
+                        // Don't block the state observer on the REST seed (can take a few
+                        // seconds with retries) — if a Disconnect happens mid-seed, the
+                        // observer needs to be free to react to it, otherwise the conflated
+                        // StateFlow would collapse a brief Connected → Disconnected → Connected
+                        // bounce into a single observed Connected.
+                        scope.launch { seedCacheFromHa() }
                     }
                     is ConnectionState.Disconnected -> {
                         // The WS client always reports st.attempt=0 (it has no notion of
@@ -153,7 +158,7 @@ class DefaultHaRepository(
                     R1Log.i("HaRepo.favsChange", "favorites changed to ${it.size} entries")
                     if (ws.state.value is ConnectionState.Connected) {
                         resubscribe()
-                        seedCacheFromHa()
+                        scope.launch { seedCacheFromHa() }
                     }
                 }
                 .launchIn(this)
