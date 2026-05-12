@@ -20,8 +20,6 @@ import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +47,7 @@ import com.github.itskenny0.r1ha.ui.components.Chevron
 import com.github.itskenny0.r1ha.ui.components.ChevronDirection
 import com.github.itskenny0.r1ha.ui.components.EntityCard
 import com.github.itskenny0.r1ha.ui.components.HamburgerGlyph
+import com.github.itskenny0.r1ha.ui.components.R1Button
 import com.github.itskenny0.r1ha.ui.components.SettingsCogGlyph
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -279,19 +278,10 @@ private fun EmptyState(
             color = R1.InkMuted,
         )
         Spacer(Modifier.height(28.dp))
-        Button(
+        R1Button(
+            text = if (loading) "EDIT FAVOURITES" else "ADD FAVOURITES",
             onClick = onOpenFavoritesPicker,
-            shape = R1.ShapeM,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = R1.AccentWarm,
-                contentColor = R1.Bg,
-            ),
-        ) {
-            Text(
-                text = if (loading) "EDIT FAVOURITES" else "ADD FAVOURITES",
-                style = R1.labelMicro,
-            )
-        }
+        )
         // Stalled-loading affordance.
         if (loading && stalled.value) {
             Spacer(Modifier.height(20.dp))

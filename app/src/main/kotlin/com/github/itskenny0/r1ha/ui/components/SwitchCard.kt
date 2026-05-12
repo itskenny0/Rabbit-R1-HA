@@ -4,7 +4,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -152,7 +151,7 @@ private fun SwitchTrack(
                 color = if (isOn) accent else R1.InkMuted,
                 modifier = Modifier
                     .clip(R1.ShapeS)
-                    .clickable { onSetOn(true) }
+                    .r1Pressable(onClick = { onSetOn(true) })
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             )
             Text(
@@ -161,7 +160,7 @@ private fun SwitchTrack(
                 color = if (!isOn) R1.InkSoft else R1.InkMuted,
                 modifier = Modifier
                     .clip(R1.ShapeS)
-                    .clickable { onSetOn(false) }
+                    .r1Pressable(onClick = { onSetOn(false) })
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }

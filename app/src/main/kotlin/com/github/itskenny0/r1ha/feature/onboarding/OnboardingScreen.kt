@@ -17,12 +17,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -242,36 +239,22 @@ private fun UrlEntryForm(
 
         Spacer(Modifier.height(28.dp))
 
-        Button(
+        com.github.itskenny0.r1ha.ui.components.R1Button(
+            text = if (isProbing) "PROBING…" else "CONNECT",
             onClick = { onProbe(urlText) },
             enabled = !isProbing,
-            shape = com.github.itskenny0.r1ha.core.theme.R1.ShapeM,
-            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                containerColor = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
-                contentColor = com.github.itskenny0.r1ha.core.theme.R1.Bg,
-                disabledContainerColor = com.github.itskenny0.r1ha.core.theme.R1.SurfaceMuted,
-                disabledContentColor = com.github.itskenny0.r1ha.core.theme.R1.InkMuted,
-            ),
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (isProbing) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .height(16.dp)
-                        .padding(end = 8.dp),
-                    strokeWidth = 2.dp,
-                    color = com.github.itskenny0.r1ha.core.theme.R1.Bg,
-                )
-                Text(
-                    text = "PROBING…",
-                    style = com.github.itskenny0.r1ha.core.theme.R1.labelMicro,
-                )
-            } else {
-                Text(
-                    text = "CONNECT",
-                    style = com.github.itskenny0.r1ha.core.theme.R1.labelMicro,
-                )
-            }
-        }
+            leadingContent = if (isProbing) {
+                {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .height(14.dp)
+                            .padding(end = 8.dp),
+                        strokeWidth = 2.dp,
+                        color = com.github.itskenny0.r1ha.core.theme.R1.Bg,
+                    )
+                }
+            } else null,
+        )
     }
 }
