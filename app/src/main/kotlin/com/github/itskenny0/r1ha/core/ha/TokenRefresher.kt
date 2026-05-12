@@ -32,6 +32,9 @@ class TokenRefresher(
     @Serializable
     private data class RefreshResponse(
         @SerialName("access_token") val access_token: String,
+        // HA's IndieAuth refresh spec says the refresh_token stays constant — but be defensive
+        // in case a future HA version rotates them, so we don't end up holding a stale value.
+        @SerialName("refresh_token") val refresh_token: String? = null,
         @SerialName("expires_in") val expires_in: Long,
         @SerialName("token_type") val token_type: String,
     )
@@ -77,6 +80,8 @@ class TokenRefresher(
             tokens.save(
                 current.copy(
                     accessToken = resp.access_token,
+                    // Adopt a rotated refresh_token if HA sent one, otherwise keep the original.
+                    refreshToken = resp.refresh_token ?: current.refreshToken,
                     expiresAtMillis = expiresAt,
                 )
             )
