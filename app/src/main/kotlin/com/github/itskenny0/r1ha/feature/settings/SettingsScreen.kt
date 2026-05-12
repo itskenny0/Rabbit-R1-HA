@@ -349,14 +349,16 @@ private fun InfoRow(label: String, value: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
+        androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 12.dp))
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+            modifier = Modifier.weight(1f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
         )
     }
 }
