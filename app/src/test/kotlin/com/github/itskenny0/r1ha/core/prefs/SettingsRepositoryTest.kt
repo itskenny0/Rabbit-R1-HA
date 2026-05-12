@@ -21,7 +21,7 @@ class SettingsRepositoryTest {
         repo.settings.test {
             val s = awaitItem()
             assertThat(s.theme).isEqualTo(ThemeId.PRAGMATIC_HYBRID)
-            assertThat(s.wheel.stepPercent).isEqualTo(5)
+            assertThat(s.wheel.stepPercent).isEqualTo(2)
             assertThat(s.favorites).isEmpty()
             cancelAndConsumeRemainingEvents()
         }

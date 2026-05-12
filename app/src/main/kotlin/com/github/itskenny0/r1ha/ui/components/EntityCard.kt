@@ -2,12 +2,15 @@ package com.github.itskenny0.r1ha.ui.components
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.unit.dp
 import com.github.itskenny0.r1ha.core.ha.Domain
 import com.github.itskenny0.r1ha.core.ha.EntityState
 import com.github.itskenny0.r1ha.core.theme.CardRenderModel
@@ -44,7 +47,13 @@ fun EntityCard(state: EntityState, onTapToggle: () -> Unit, modifier: Modifier =
                 accent = accent,
                 isAvailable = state.isAvailable,
             ),
-            modifier = Modifier.fillMaxSize().alpha(themeAlpha),
+            // Push the card content past the chrome row (status bar + 44dp icon button + 16dp
+            // padding) so the friendlyName and hamburger don't overlap.
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(top = 56.dp)
+                .alpha(themeAlpha),
             onTapToggle = onTapToggle,
         )
         if (!state.isAvailable) {

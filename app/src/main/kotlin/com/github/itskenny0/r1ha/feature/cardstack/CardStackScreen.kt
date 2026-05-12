@@ -114,7 +114,9 @@ fun CardStackScreen(
                         onTap = { if (appSettings.behavior.tapToToggle) vm.tapToggle() },
                         onSwipeUp = { vm.next() },
                         onSwipeDown = { vm.previous() },
-                        onSwipeLeft = { onOpenSettings() },
+                        // Swipe-left to Settings removed — was triggering accidentally during
+                        // wheel use. The gear icon top-right is the only entry to Settings now.
+                        onSwipeLeft = {},
                         onSwipeRight = { onOpenFavoritesPicker() },
                     )
             ) {
@@ -135,7 +137,7 @@ fun CardStackScreen(
                     .fillMaxSize()
                     .systemBarsPadding()
                     .swipeOnlyGestures(
-                        onSwipeLeft = { onOpenSettings() },
+                        onSwipeLeft = {},  // settings gesture removed; use the gear icon
                         onSwipeRight = { onOpenFavoritesPicker() },
                     )
                     .padding(horizontal = 24.dp),

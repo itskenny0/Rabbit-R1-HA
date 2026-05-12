@@ -8,7 +8,7 @@ enum class DisplayMode { PERCENT, RAW }
 enum class WheelKeySource { AUTO, DPAD, VOLUME }
 
 data class WheelSettings(
-    val stepPercent: Int = 5,           // 1, 2, 5, or 10
+    val stepPercent: Int = 2,           // 1, 2, 5, or 10
     val acceleration: Boolean = true,
     val invertDirection: Boolean = false,
     val keySource: WheelKeySource = WheelKeySource.AUTO,

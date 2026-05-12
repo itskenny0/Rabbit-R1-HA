@@ -162,7 +162,7 @@ class SettingsRepository private constructor(
                 server = server,
                 favorites = favorites,
                 wheel = WheelSettings(
-                    stepPercent = (p[K.wheelStep] ?: 5).coerceIn(1, 10),
+                    stepPercent = (p[K.wheelStep] ?: 2).coerceIn(1, 10),
                     acceleration = p[K.wheelAccel] ?: true,
                     invertDirection = p[K.wheelInvert] ?: false,
                     keySource = p[K.wheelKeySource]?.let { runCatching { WheelKeySource.valueOf(it) }.getOrNull() } ?: WheelKeySource.AUTO,
