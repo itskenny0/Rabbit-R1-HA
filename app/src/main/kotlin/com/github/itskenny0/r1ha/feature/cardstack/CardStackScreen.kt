@@ -41,10 +41,9 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.runtime.DisposableEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle as collectStateAsLife
 import com.github.itskenny0.r1ha.core.ha.ConnectionState
 import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.input.WheelInput
@@ -68,7 +67,7 @@ fun CardStackScreen(
         )
     )
     val state by vm.state.collectAsStateWithLifecycle()
-    val appSettings by settings.settings.collectStateAsLife(initialValue = AppSettings())
+    val appSettings by settings.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
     val connection by haRepository.connection.collectAsStateWithLifecycle()
 
     // Wheel events are processed ONLY while CardStackScreen is composed. Navigating away
