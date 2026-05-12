@@ -45,6 +45,14 @@ private const val SHADOW_SERVER_URL = "server.url"
 private const val SHADOW_HA_VERSION = "server.ha_version"
 private const val SHADOW_FAVORITES = "favorites" // newline-separated, same format as DataStore
 
+/**
+ * Marker set on every successful shadow write so reads can distinguish "shadow never written
+ * yet — fall back to DataStore" from "shadow explicitly says no server URL" (which must take
+ * priority over a stale DataStore value, otherwise sign-out doesn't stick when the DataStore
+ * delete silently fails).
+ */
+private const val SHADOW_INITIALIZED = "_initialized"
+
 class SettingsRepository private constructor(
     private val store: DataStore<Preferences>,
     private val shadow: SharedPreferences,
@@ -126,26 +134,30 @@ class SettingsRepository private constructor(
         shadowChanges,
     ) { p, _ -> p }
         .map { p ->
-            // Server URL: prefer SHADOW over DataStore. update() writes the shadow synchronously
-            // first, then DataStore asynchronously — so the shadow is always at-least-as-fresh
-            // as DataStore. If the DataStore write silently fails on this device, DataStore can
-            // hold a stale value while shadow holds the new one; preferring shadow lets the new
-            // value win regardless.
-            val urlFromShadow = shadow.getString(SHADOW_SERVER_URL, null)
-            val urlFromStore = p[K.serverUrl]
-            val url = urlFromShadow ?: urlFromStore
-            if (urlFromShadow != null && urlFromStore != null && urlFromShadow != urlFromStore) {
-                R1Log.w(
-                    "SettingsRepo",
-                    "shadow=$urlFromShadow disagrees with store=$urlFromStore; using shadow"
-                )
+            // Once the shadow has been written at least once it becomes the authoritative
+            // source for `server` and `favorites`. update() writes the shadow synchronously
+            // before kicking off the asynchronous DataStore write, so a shadow with the
+            // initialized marker is always at-least-as-fresh as DataStore — and crucially the
+            // shadow ALSO authoritatively reports "no server" / "no favourites" when the user
+            // signed out, even if the DataStore delete silently failed.
+            val shadowInit = shadow.getBoolean(SHADOW_INITIALIZED, false)
+            val url = if (shadowInit) {
+                shadow.getString(SHADOW_SERVER_URL, null)
+            } else {
+                p[K.serverUrl] ?: shadow.getString(SHADOW_SERVER_URL, null)
             }
-            val haVersion = shadow.getString(SHADOW_HA_VERSION, null) ?: p[K.haVersion]
+            val haVersion = if (shadowInit) {
+                shadow.getString(SHADOW_HA_VERSION, null)
+            } else {
+                p[K.haVersion] ?: shadow.getString(SHADOW_HA_VERSION, null)
+            }
             val server = url?.takeIf { it.isNotBlank() }?.let { ServerConfig(url = it, haVersion = haVersion) }
-            // Favorites: same shadow-first pattern as server.url.
-            val favoritesFromShadow = shadow.getString(SHADOW_FAVORITES, null)?.takeIf { it.isNotBlank() }?.split('\n')
-            val favoritesFromStore = p[K.favorites]?.takeIf { it.isNotBlank() }?.split('\n')
-            val favorites = favoritesFromShadow ?: favoritesFromStore.orEmpty()
+            val favorites = if (shadowInit) {
+                shadow.getString(SHADOW_FAVORITES, null)?.takeIf { it.isNotBlank() }?.split('\n').orEmpty()
+            } else {
+                p[K.favorites]?.takeIf { it.isNotBlank() }?.split('\n')
+                    ?: shadow.getString(SHADOW_FAVORITES, null)?.takeIf { it.isNotBlank() }?.split('\n').orEmpty()
+            }
             AppSettings(
                 server = server,
                 favorites = favorites,
@@ -232,6 +244,9 @@ class SettingsRepository private constructor(
         } else {
             editor.remove(SHADOW_FAVORITES)
         }
+        // Mark the shadow as initialized so the read path treats "absence of values" as
+        // intentional (signed out / no favourites) rather than "fall back to DataStore".
+        editor.putBoolean(SHADOW_INITIALIZED, true)
         val ok = editor.commit() // synchronous; we want to know if it actually wrote
         R1Log.i("SettingsRepo.writeShadow", "server=${server?.url ?: "null"} favorites=${favorites.size} commit=$ok")
         if (!ok) {
