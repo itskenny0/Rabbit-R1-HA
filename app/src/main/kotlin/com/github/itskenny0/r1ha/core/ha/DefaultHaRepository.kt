@@ -350,10 +350,14 @@ class DefaultHaRepository(
                     val byId = all.filter { it.id in favIds }.associateBy { it.id }
                     if (byId.isNotEmpty()) {
                         // Only toast on the FIRST successful seed (i.e. when the cache was
-                        // previously empty). Without this, every reconnect after a network
-                        // blip re-toasts "Loaded N entities", which gets old fast.
-                        val wasEmpty = cache.value.isEmpty()
-                        cache.update { it + byId }
+                        // previously empty). Doing the emptiness check INSIDE update {} closes
+                        // the race window where two concurrent seeds would both see "empty"
+                        // and both fire the toast.
+                        var wasEmpty = false
+                        cache.update { current ->
+                            wasEmpty = current.isEmpty()
+                            current + byId
+                        }
                         R1Log.i("HaRepo.seed", "seeded ${byId.size}/${favIds.size} favourites (attempt ${attempt + 1})")
                         if (wasEmpty) {
                             com.github.itskenny0.r1ha.core.util.Toaster.show("Loaded ${byId.size} entities")
