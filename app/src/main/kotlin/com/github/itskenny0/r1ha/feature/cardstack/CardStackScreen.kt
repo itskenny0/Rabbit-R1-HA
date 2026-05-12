@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle as collectStateAsLife
+import com.github.itskenny0.r1ha.core.ha.ConnectionState
 import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
@@ -68,6 +69,7 @@ fun CardStackScreen(
     )
     val state by vm.state.collectAsStateWithLifecycle()
     val appSettings by settings.settings.collectStateAsLife(initialValue = AppSettings())
+    val connection by haRepository.connection.collectAsStateWithLifecycle()
 
     // Wheel events are processed ONLY while CardStackScreen is composed. Navigating away
     // (e.g. into FavoritesPicker or Settings) suspends the collection so spinning the wheel
@@ -215,7 +217,8 @@ fun CardStackScreen(
                 Spacer(Modifier.size(44.dp))
             }
 
-            // Top-right: settings gear
+            // Top-right: settings gear with a small connection-state dot overlay so the user can
+            // tell at a glance when HA is unreachable without opening About.
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -230,6 +233,21 @@ fun CardStackScreen(
                     tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
                     modifier = Modifier.size(20.dp),
                 )
+                val statusColor = when (connection) {
+                    is ConnectionState.Connected -> null  // healthy, no dot
+                    ConnectionState.Connecting,
+                    ConnectionState.Authenticating -> MaterialTheme.colorScheme.tertiary
+                    else -> MaterialTheme.colorScheme.error
+                }
+                if (statusColor != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(statusColor),
+                    )
+                }
             }
         }
     }
