@@ -172,6 +172,11 @@ class DefaultHaRepository(
                         // same entity IDs.
                         cache.update { emptyMap() }
                         subscriptionId = null
+                        // Fail any outstanding service-call awaiters; their WS is going away.
+                        pendingCalls.values.forEach {
+                            it.complete(Result.failure(IllegalStateException("Signed out")))
+                        }
+                        pendingCalls.clear()
                         ws.disconnect()
                         return@onEach
                     }
