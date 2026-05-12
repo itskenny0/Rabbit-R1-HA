@@ -14,7 +14,11 @@ data class WheelEvent(val direction: Direction, val timestampMillis: Long) {
  * combine them with current settings to apply effective steps.
  */
 class WheelInput {
-    private val _events = MutableSharedFlow<WheelEvent>(extraBufferCapacity = 32)
+    // No buffer + no replay: wheel events fired while CardStackScreen isn't in composition
+    // are simply dropped, instead of queueing up and replaying when the user navigates back.
+    // tryEmit() returns false silently in that case — acceptable, the user has already moved
+    // on visually.
+    private val _events = MutableSharedFlow<WheelEvent>(extraBufferCapacity = 0)
     val events: SharedFlow<WheelEvent> = _events.asSharedFlow()
 
     fun emit(direction: WheelEvent.Direction, now: Long = System.currentTimeMillis()) {
