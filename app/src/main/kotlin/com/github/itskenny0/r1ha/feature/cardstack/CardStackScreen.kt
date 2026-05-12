@@ -112,8 +112,10 @@ fun CardStackScreen(
             EmptyState(
                 loading = state.favouritesCount > 0,
                 favouritesCount = state.favouritesCount,
+                connection = connection,
                 onOpenFavoritesPicker = onOpenFavoritesPicker,
                 onOpenSettings = onOpenSettings,
+                onRetry = { haRepository.reconnectNow() },
             )
         }
 
@@ -175,7 +177,8 @@ private fun VerticalCardPager(
             ) {
                 EntityCard(
                     state = cards[page],
-                    onTapToggle = { if (appSettings.behavior.tapToToggle) vm.tapToggle() },
+                    onTapToggle = { vm.tapToggle() },
+                    tapToToggleEnabled = appSettings.behavior.tapToToggle,
                     onSetOn = { on -> vm.setSwitchOn(on) },
                     modifier = Modifier
                         .fillMaxSize()
@@ -230,8 +233,10 @@ private fun VerticalCardPager(
 private fun EmptyState(
     loading: Boolean,
     favouritesCount: Int,
+    connection: ConnectionState,
     onOpenFavoritesPicker: () -> Unit,
     onOpenSettings: () -> Unit,
+    onRetry: () -> Unit,
 ) {
     // After STALLED_AFTER_MS of loading without any cards arriving, surface a "Stuck?"
     // affordance pointing to Settings. Without it, an unreachable HA leaves the user on a
@@ -282,18 +287,39 @@ private fun EmptyState(
             text = if (loading) "EDIT FAVOURITES" else "ADD FAVOURITES",
             onClick = onOpenFavoritesPicker,
         )
-        // Stalled-loading affordance.
+        // Stalled-loading affordance. Two paths once we know the spinner has lingered too
+        // long: a one-tap "retry connection" (cancels the backoff, fires immediately) and a
+        // fallback "open settings" for the case where the auth tokens themselves are the
+        // problem and reconnecting won't help. The status colour follows the connection
+        // state: amber while still optimistically retrying, red once we know auth or the
+        // server actively refused us.
         if (loading && stalled.value) {
+            val color = when (connection) {
+                is ConnectionState.AuthLost -> R1.StatusRed
+                is ConnectionState.Disconnected -> R1.StatusRed
+                else -> R1.StatusAmber
+            }
             Spacer(Modifier.height(20.dp))
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier
-                    .r1Pressable(onOpenSettings)
+                    .r1Pressable(onRetry)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             ) {
                 Text(
-                    text = "STILL LOADING — TAP TO OPEN SETTINGS",
+                    text = "STILL LOADING — TAP TO RETRY",
                     style = R1.labelMicro,
-                    color = R1.StatusAmber,
+                    color = color,
+                )
+            }
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .r1Pressable(onOpenSettings)
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = "OPEN SETTINGS →",
+                    style = R1.labelMicro,
+                    color = R1.InkMuted,
                 )
             }
         }

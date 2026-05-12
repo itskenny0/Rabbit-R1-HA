@@ -58,6 +58,8 @@ class DefaultHaRepository(
     private val pendingCalls = ConcurrentHashMap<Int, CompletableDeferred<Result<Unit>>>()
     private var supervisorJob: Job? = null
     private var subscriptionId: Int? = null
+    /** Tracks the currently-scheduled reconnect-backoff job so [reconnectNow] can cancel it. */
+    @Volatile private var pendingReconnect: Job? = null
 
     /** Tracks consecutive reconnect attempts so BackoffPolicy actually backs off. */
     @Volatile private var reconnectAttempt: Int = 0
@@ -269,10 +271,34 @@ class DefaultHaRepository(
     }
 
     private fun reconnectLater(attempt: Int) {
-        scope.launch {
+        // Track this job so reconnectNow() can cancel it and fire immediately. Cancel any
+        // previously-pending reconnect first so two overlapping backoffs don't both fire
+        // (would cause an immediate-after-delay double-connect from rapid bouncing).
+        pendingReconnect?.cancel()
+        pendingReconnect = scope.launch {
             delay(backoff.delayForAttempt(attempt))
             connectFromSettings()
         }
+    }
+
+    override fun reconnectNow() {
+        val current = ws.state.value
+        // Only honour the request when there's nothing useful in flight already — re-entering
+        // a Connecting state would just thrash the WS client.
+        if (current is ConnectionState.Connecting ||
+            current is ConnectionState.Authenticating ||
+            current is ConnectionState.Connected
+        ) {
+            R1Log.i("HaRepo.reconnectNow", "ignored (state=${current::class.simpleName})")
+            return
+        }
+        pendingReconnect?.cancel()
+        pendingReconnect = null
+        // Reset the consecutive-failure counter so the *next* backoff (if this attempt also
+        // fails) starts from scratch — the user has signalled they want a fresh start.
+        reconnectAttempt = 0
+        R1Log.i("HaRepo.reconnectNow", "forcing immediate reconnect (was $current)")
+        scope.launch { connectFromSettings() }
     }
 
     private fun applyEvent(ev: HaInbound.Event) {

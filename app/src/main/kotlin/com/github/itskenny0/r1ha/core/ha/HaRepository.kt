@@ -13,4 +13,13 @@ interface HaRepository {
     suspend fun listAllEntities(): Result<List<EntityState>>
     suspend fun start()
     suspend fun stop()
+
+    /**
+     * Cancel any pending reconnect-backoff and attempt a connection immediately. No-op if the
+     * connection is already Connecting / Authenticating / Connected — in those states the
+     * existing attempt is the right one to ride out. Used by the stalled-loading affordance
+     * so the user has a one-tap recovery path that doesn't require waiting out the backoff
+     * (which can be 30+ seconds on the 20th consecutive failure).
+     */
+    fun reconnectNow()
 }

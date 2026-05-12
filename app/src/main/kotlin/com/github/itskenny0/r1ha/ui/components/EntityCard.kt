@@ -22,6 +22,15 @@ fun EntityCard(
     onTapToggle: () -> Unit,
     modifier: Modifier = Modifier.fillMaxSize(),
     onSetOn: ((Boolean) -> Unit)? = null,
+    /**
+     * When true the entire card surface is tappable; tapping calls [onTapToggle]. When
+     * false the card is inert (the wheel and the explicit ON/OFF labels on switch cards
+     * still work). Mirrors the "Tap to toggle" setting in Settings, which used to be
+     * silently dead-code because the three theme implementations of `theme.Card` never
+     * wired their `onTapToggle` parameter to a `Modifier.clickable` — fixed here once for
+     * all themes by wrapping the theme card in our own pressable Box.
+     */
+    tapToToggleEnabled: Boolean = true,
 ) {
     val theme = LocalR1Theme.current
     val glyph = when (state.id.domain) {
@@ -38,8 +47,17 @@ fun EntityCard(
     }
     // When the entity is unavailable, dim the whole card and overlay a "UNAVAILABLE" label so
     // the user doesn't think the card is just at 0%. The themes themselves don't honour
-    // isAvailable, so this is enforced uniformly at the wrapper level.
-    Box(modifier = modifier) {
+    // isAvailable, so this is enforced uniformly at the wrapper level. The tap-to-toggle
+    // gesture is also wired here (rather than inside each theme) so all three themes get it
+    // for free; r1Pressable's haptic is disabled because the existing percent-change effect
+    // in CardStackScreen already fires CLOCK_TICK when the state actually flips — double-
+    // haptic on a single tap reads as a stutter rather than a click.
+    val tapModifier = if (tapToToggleEnabled && state.isAvailable) {
+        Modifier.r1Pressable(onClick = onTapToggle, hapticOnClick = false)
+    } else {
+        Modifier
+    }
+    Box(modifier = modifier.then(tapModifier)) {
         val themeAlpha = if (state.isAvailable) 1f else 0.35f
         if (!state.supportsScalar) {
             // On/off-only entity — render the switch variant. We bypass the theme.Card path
