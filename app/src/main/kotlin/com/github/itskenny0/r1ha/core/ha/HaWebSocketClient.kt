@@ -65,7 +65,9 @@ class HaWebSocketClient internal constructor(
             override fun onOpen(ws: WebSocket, resp: Response) {
                 // webSocket was already set from the http.newWebSocket() return value below so
                 // the onFailure/onClosed guards work even if the connection fails before onOpen
-                // is delivered. Nothing to do here beyond advancing the state.
+                // is delivered. Guard against a stale onOpen too — if disconnect() ran or a new
+                // connection has replaced this one, don't bump state to Authenticating.
+                if (this@HaWebSocketClient.webSocket !== ws) return
                 _state.value = ConnectionState.Authenticating
                 receiverJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                     for (msg in outgoing) ws.send(HaJson.encodeToString(msg))
