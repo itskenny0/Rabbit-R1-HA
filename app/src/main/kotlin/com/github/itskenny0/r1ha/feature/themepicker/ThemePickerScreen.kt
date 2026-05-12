@@ -1,5 +1,6 @@
 package com.github.itskenny0.r1ha.feature.themepicker
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -13,11 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,6 +29,7 @@ import com.github.itskenny0.r1ha.core.theme.CardRenderModel
 import com.github.itskenny0.r1ha.core.theme.ColorfulCardsTheme
 import com.github.itskenny0.r1ha.core.theme.MinimalDarkTheme
 import com.github.itskenny0.r1ha.core.theme.PragmaticHybridTheme
+import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.core.theme.R1Theme
 import com.github.itskenny0.r1ha.core.theme.R1ThemeHost
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
@@ -50,8 +47,8 @@ private val SAMPLE_CARD = CardRenderModel(
 )
 
 private val ALL_THEMES: List<R1Theme> = listOf(
-    MinimalDarkTheme,
     PragmaticHybridTheme,
+    MinimalDarkTheme,
     ColorfulCardsTheme,
 )
 
@@ -61,35 +58,22 @@ fun ThemePickerScreen(
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val appSettings by settings.settings.collectAsStateWithLifecycle(
-        initialValue = AppSettings(),
-    )
-    val currentTheme = appSettings.theme
+    val appSettings by settings.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
+    val currentThemeId = appSettings.theme
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(R1.Bg)
             .systemBarsPadding(),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-        ) {
-            ChevronBack(onClick = onBack)
-            Text(
-                text = "Theme",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-        }
+        TopBar(title = "THEME", onBack = onBack)
 
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(ALL_THEMES) { theme ->
+        Column(modifier = Modifier.fillMaxSize().padding(top = 6.dp)) {
+            ALL_THEMES.forEach { theme ->
                 ThemeRow(
                     theme = theme,
-                    isSelected = theme.id == currentTheme,
+                    isSelected = theme.id == currentThemeId,
                     onClick = {
                         scope.launch {
                             settings.update { it.copy(theme = theme.id) }
@@ -97,8 +81,29 @@ fun ThemePickerScreen(
                     },
                 )
             }
-            item { Spacer(Modifier.height(32.dp)) }
         }
+    }
+}
+
+@Composable
+private fun TopBar(title: String, onBack: () -> Unit) {
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 22.dp, top = 6.dp, bottom = 6.dp),
+        ) {
+            ChevronBack(onClick = onBack)
+            Spacer(Modifier.width(4.dp))
+            Text(title, style = R1.screenTitle, color = R1.Ink)
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(R1.Hairline),
+        )
     }
 }
 
@@ -108,36 +113,49 @@ private fun ThemeRow(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 22.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(
-            selected = isSelected,
-            onClick = onClick,
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = theme.displayName,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        // ── Miniature live preview ──────────────────────────────────────────
-        // Clip tightly so the spring-animated slider fill cannot overflow the box.
+        // Selection indicator — bold filled square when selected, hollow when not.
         Box(
             modifier = Modifier
-                .size(width = 80.dp, height = 100.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .size(14.dp)
+                .clip(R1.ShapeS)
+                .background(if (isSelected) R1.AccentWarm else R1.Hairline),
+        )
+
+        Spacer(Modifier.width(14.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = theme.displayName.uppercase(),
+                style = R1.labelMicro,
+                color = if (isSelected) R1.AccentWarm else R1.InkSoft,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = theme.id.name.lowercase().replace('_', ' ')
+                    .replaceFirstChar { it.uppercase() },
+                style = R1.body,
+                color = R1.Ink,
+            )
+        }
+
+        Spacer(Modifier.width(14.dp))
+
+        // Miniature preview — render the actual theme.Card with a sample model.
+        Box(
+            modifier = Modifier
+                .size(width = 92.dp, height = 112.dp)
+                .clip(R1.ShapeS)
                 .border(
-                    width = if (isSelected) 2.dp else 1.dp,
-                    color = borderColor,
-                    shape = RoundedCornerShape(6.dp),
+                    width = if (isSelected) 1.dp else 1.dp,
+                    color = if (isSelected) R1.AccentWarm else R1.Hairline,
+                    shape = R1.ShapeS,
                 ),
         ) {
             R1ThemeHost(themeId = theme.id) {

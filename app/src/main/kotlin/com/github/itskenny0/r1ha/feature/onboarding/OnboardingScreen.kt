@@ -1,5 +1,6 @@
 package com.github.itskenny0.r1ha.feature.onboarding
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -118,9 +119,6 @@ private fun UrlEntryForm(
 ) {
     var urlText by rememberSaveable { mutableStateOf("http://") }
     val scrollState = androidx.compose.foundation.rememberScrollState()
-    // Auto-scroll to the bottom (where the input + button live) when the IME opens so the
-    // focused field is never hidden behind the keyboard. We watch WindowInsets.Companion.ime
-    // for changes; LaunchedEffect re-runs whenever the IME slides in or out.
     val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     LaunchedEffect(imeBottom) {
         if (imeBottom > 0) {
@@ -131,37 +129,69 @@ private fun UrlEntryForm(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(com.github.itskenny0.r1ha.core.theme.R1.Bg)
             .systemBarsPadding()
             .imePadding()
             .verticalScroll(scrollState)
-            .padding(horizontal = 24.dp, vertical = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(horizontal = 22.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.Start,
     ) {
+        // ── Headline ───────────────────────────────────────────────────────────────
+        // Tiny callout above the screen title — "SECTION/01 · LINK".
         Text(
-            text = "Connect to Home Assistant",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onBackground,
+            text = "01 · LINK",
+            style = com.github.itskenny0.r1ha.core.theme.R1.labelMicro,
+            color = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Enter your Home Assistant URL to sign in.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            text = "Point me at\nHome Assistant.",
+            style = com.github.itskenny0.r1ha.core.theme.R1.screenTitle,
+            color = com.github.itskenny0.r1ha.core.theme.R1.Ink,
         )
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Local IP or hostname. Default HA port is 8123.",
+            style = com.github.itskenny0.r1ha.core.theme.R1.body,
+            color = com.github.itskenny0.r1ha.core.theme.R1.InkMuted,
+        )
+        Spacer(Modifier.height(28.dp))
 
+        // ── Field ──────────────────────────────────────────────────────────────────
+        Text(
+            text = "URL",
+            style = com.github.itskenny0.r1ha.core.theme.R1.labelMicro,
+            color = com.github.itskenny0.r1ha.core.theme.R1.InkMuted,
+        )
+        Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = urlText,
             onValueChange = {
                 if (error != null) onErrorDismiss()
                 urlText = it
             },
-            label = { Text("Home Assistant URL") },
-            placeholder = { Text("http://homeassistant.local:8123") },
+            placeholder = {
+                Text(
+                    "http://homeassistant.local:8123",
+                    style = com.github.itskenny0.r1ha.core.theme.R1.body.copy(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    ),
+                    color = com.github.itskenny0.r1ha.core.theme.R1.InkMuted,
+                )
+            },
+            textStyle = com.github.itskenny0.r1ha.core.theme.R1.body.copy(
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                color = com.github.itskenny0.r1ha.core.theme.R1.Ink,
+            ),
             isError = error != null,
-            supportingText = if (error != null) {
-                { Text(error, color = MaterialTheme.colorScheme.error) }
-            } else null,
+            shape = com.github.itskenny0.r1ha.core.theme.R1.ShapeS,
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
+                unfocusedBorderColor = com.github.itskenny0.r1ha.core.theme.R1.Hairline,
+                cursorColor = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
+                errorBorderColor = com.github.itskenny0.r1ha.core.theme.R1.StatusRed,
+                errorCursorColor = com.github.itskenny0.r1ha.core.theme.R1.StatusRed,
+            ),
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
@@ -172,23 +202,46 @@ private fun UrlEntryForm(
             enabled = !isProbing,
         )
 
-        Spacer(Modifier.height(24.dp))
+        if (error != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = error,
+                style = com.github.itskenny0.r1ha.core.theme.R1.body,
+                color = com.github.itskenny0.r1ha.core.theme.R1.StatusRed,
+            )
+        }
+
+        Spacer(Modifier.height(28.dp))
 
         Button(
             onClick = { onProbe(urlText) },
             enabled = !isProbing,
+            shape = com.github.itskenny0.r1ha.core.theme.R1.ShapeM,
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                containerColor = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
+                contentColor = com.github.itskenny0.r1ha.core.theme.R1.Bg,
+                disabledContainerColor = com.github.itskenny0.r1ha.core.theme.R1.SurfaceMuted,
+                disabledContentColor = com.github.itskenny0.r1ha.core.theme.R1.InkMuted,
+            ),
             modifier = Modifier.fillMaxWidth(),
         ) {
             if (isProbing) {
                 CircularProgressIndicator(
                     modifier = Modifier
-                        .height(20.dp)
+                        .height(16.dp)
                         .padding(end = 8.dp),
                     strokeWidth = 2.dp,
+                    color = com.github.itskenny0.r1ha.core.theme.R1.Bg,
                 )
-                Text("Connecting…")
+                Text(
+                    text = "PROBING…",
+                    style = com.github.itskenny0.r1ha.core.theme.R1.labelMicro,
+                )
             } else {
-                Text("Connect")
+                Text(
+                    text = "CONNECT",
+                    style = com.github.itskenny0.r1ha.core.theme.R1.labelMicro,
+                )
             }
         }
     }

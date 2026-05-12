@@ -1,7 +1,9 @@
 package com.github.itskenny0.r1ha.feature.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,23 +11,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -34,10 +36,10 @@ import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.prefs.TokenStore
 import com.github.itskenny0.r1ha.core.prefs.WheelKeySource
+import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     settings: SettingsRepository,
@@ -58,67 +60,48 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(R1.Bg)
             .systemBarsPadding(),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-        ) {
-            ChevronBack(onClick = onBack)
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-        }
+        TopBar(title = "SETTINGS", onBack = onBack)
 
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
 
-            // ── Server ───────────────────────────────────────────────────────
-            item { Section("Server") }
+            // ── Server ─────────────────────────────────────────────────────────────
+            item { Section("SERVER") }
             item {
                 InfoRow(
                     label = "URL",
                     value = s.server?.url ?: "(not connected)",
+                    mono = true,
                 )
             }
             item {
-                s.server?.haVersion?.let { InfoRow(label = "HA version", value = it) }
+                s.server?.haVersion?.let { InfoRow(label = "HA version", value = it, mono = true) }
             }
             item {
-                // Sign out + reconnect: clears tokens and server URL, then routes back to
-                // onboarding so the user can re-enter their HA URL.
-                Row(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.End,
+                        .padding(horizontal = 22.dp, vertical = 10.dp),
                 ) {
-                    TextButton(onClick = { vm.signOut(onSignedOut) }) {
-                        Text("Sign out & reconnect")
-                    }
+                    DangerButton(
+                        text = "SIGN OUT & RECONNECT",
+                        onClick = { vm.signOut(onSignedOut) },
+                    )
                 }
             }
 
             item { SectionDivider() }
 
-            // ── Scroll wheel ─────────────────────────────────────────────────
-            item { Section("Scroll wheel") }
+            // ── Scroll wheel ───────────────────────────────────────────────────────
+            item { Section("SCROLL WHEEL") }
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                ) {
-                    Text("Step size", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    Spacer(Modifier.height(4.dp))
+                LabeledControl(label = "Step size") {
                     SegmentedIntPicker(
                         options = listOf(1, 2, 5, 10),
                         selected = s.wheel.stepPercent,
-                        label = { "$it %" },
+                        label = { "$it%" },
                         onSelect = { vm.setWheelStep(it) },
                     )
                 }
@@ -139,22 +122,15 @@ fun SettingsScreen(
                 )
             }
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                ) {
-                    Text("Key source", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    Spacer(Modifier.height(4.dp))
+                LabeledControl(label = "Key source") {
                     SegmentedEnumPicker(
                         options = WheelKeySource.entries,
                         selected = s.wheel.keySource,
                         label = {
                             when (it) {
-                                WheelKeySource.AUTO -> "Auto"
-                                WheelKeySource.DPAD -> "D-Pad"
-                                WheelKeySource.VOLUME -> "Volume"
+                                WheelKeySource.AUTO -> "AUTO"
+                                WheelKeySource.DPAD -> "D-PAD"
+                                WheelKeySource.VOLUME -> "VOL"
                             }
                         },
                         onSelect = { vm.setWheelKeySource(it) },
@@ -164,24 +140,17 @@ fun SettingsScreen(
 
             item { SectionDivider() }
 
-            // ── Card UI ──────────────────────────────────────────────────────
-            item { Section("Card UI") }
+            // ── Card UI ────────────────────────────────────────────────────────────
+            item { Section("CARD UI") }
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                ) {
-                    Text("Display mode", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    Spacer(Modifier.height(4.dp))
+                LabeledControl(label = "Display mode") {
                     SegmentedEnumPicker(
                         options = DisplayMode.entries,
                         selected = s.ui.displayMode,
                         label = {
                             when (it) {
-                                DisplayMode.PERCENT -> "Percent"
-                                DisplayMode.RAW -> "Raw"
+                                DisplayMode.PERCENT -> "PERCENT"
+                                DisplayMode.RAW -> "RAW"
                             }
                         },
                         onSelect = { vm.setDisplayMode(it) },
@@ -204,7 +173,8 @@ fun SettingsScreen(
             }
             item {
                 SwitchRow(
-                    label = "Show position dots",
+                    label = "Show position pip",
+                    subtitle = "Bar in the chrome that shows current card position",
                     checked = s.ui.showPositionDots,
                     onCheckedChange = { vm.setShowPositionDots(it) },
                 )
@@ -212,8 +182,8 @@ fun SettingsScreen(
 
             item { SectionDivider() }
 
-            // ── Behavior ─────────────────────────────────────────────────────
-            item { Section("Behavior") }
+            // ── Behaviour ──────────────────────────────────────────────────────────
+            item { Section("BEHAVIOUR") }
             item {
                 SwitchRow(
                     label = "Haptic feedback",
@@ -231,7 +201,7 @@ fun SettingsScreen(
             item {
                 SwitchRow(
                     label = "Tap to toggle",
-                    subtitle = "Tap the card to toggle the entity on/off",
+                    subtitle = "Tap the card to flip the entity on/off",
                     checked = s.behavior.tapToToggle,
                     onCheckedChange = { vm.setTapToToggle(it) },
                 )
@@ -239,47 +209,76 @@ fun SettingsScreen(
 
             item { SectionDivider() }
 
-            // ── Appearance ───────────────────────────────────────────────────
-            item { Section("Appearance") }
+            // ── Appearance ─────────────────────────────────────────────────────────
+            item { Section("APPEARANCE") }
             item {
                 NavRow(
                     label = "Theme",
-                    value = s.theme.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
+                    value = s.theme.name
+                        .replace('_', ' ')
+                        .lowercase()
+                        .replaceFirstChar { it.uppercase() },
                     onClick = onOpenThemePicker,
                 )
             }
 
             item { SectionDivider() }
 
-            // ── About ────────────────────────────────────────────────────────
             item {
-                NavRow(
-                    label = "About",
-                    onClick = onOpenAbout,
-                )
+                NavRow(label = "About", onClick = onOpenAbout)
             }
 
-            item { Spacer(Modifier.height(32.dp)) }
+            item { Spacer(Modifier.height(48.dp)) }
         }
+    }
+}
+
+// ── Building blocks ──────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun TopBar(title: String, onBack: () -> Unit) {
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 22.dp, top = 6.dp, bottom = 6.dp),
+        ) {
+            ChevronBack(onClick = onBack)
+            Spacer(Modifier.width(4.dp))
+            Text(title, style = R1.screenTitle, color = R1.Ink)
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(R1.Hairline),
+        )
     }
 }
 
 @Composable
 private fun Section(title: String) {
-    Text(
-        text = title.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 4.dp),
-    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 22.dp, end = 22.dp, top = 22.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = R1.sectionHeader, color = R1.AccentWarm)
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .height(1.dp)
+                .weight(1f)
+                .background(R1.Hairline),
+        )
+    }
 }
 
 @Composable
 private fun SectionDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-    )
+    Spacer(Modifier.height(2.dp))
 }
 
 @Composable
@@ -293,25 +292,42 @@ private fun SwitchRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 22.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyLarge)
+            Text(label, style = R1.bodyEmph, color = R1.Ink)
             if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                )
+                Spacer(Modifier.height(2.dp))
+                Text(subtitle, style = R1.body, color = R1.InkMuted)
             }
         }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = R1.Bg,
+                checkedTrackColor = R1.AccentWarm,
+                checkedBorderColor = R1.AccentWarm,
+                uncheckedThumbColor = R1.InkSoft,
+                uncheckedTrackColor = R1.Bg,
+                uncheckedBorderColor = R1.Hairline,
+            ),
             modifier = Modifier.padding(start = 12.dp),
         )
+    }
+}
+
+@Composable
+private fun LabeledControl(label: String, content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 22.dp, vertical = 10.dp),
+    ) {
+        Text(label, style = R1.bodyEmph, color = R1.Ink)
+        Spacer(Modifier.height(8.dp))
+        content()
     }
 }
 
@@ -325,84 +341,121 @@ private fun NavRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 22.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (value != null) {
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                    modifier = Modifier.padding(end = 4.dp),
-                )
-            }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                modifier = Modifier.padding(start = 2.dp),
+        Text(label, style = R1.bodyEmph, color = R1.Ink, modifier = Modifier.weight(1f))
+        if (value != null) {
+            Text(
+                text = value,
+                style = R1.body,
+                color = R1.InkSoft,
+                modifier = Modifier.padding(end = 8.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge)
-        androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 12.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-            modifier = Modifier.weight(1f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+            contentDescription = null,
+            tint = R1.InkMuted,
+            modifier = Modifier.size(12.dp),
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InfoRow(label: String, value: String, mono: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 22.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(label, style = R1.bodyEmph, color = R1.Ink)
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = value,
+            style = if (mono) R1.body.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                else R1.body,
+            color = R1.InkSoft,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+        )
+    }
+}
+
+@Composable
+private fun DangerButton(text: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = R1.labelMicro, color = R1.StatusRed.copy(alpha = 0.92f))
+    }
+}
+
+/**
+ * Bespoke segmented picker — rectangular cells, hairline borders, selected = orange fill on
+ * black text. Reads like a hardware mode selector instead of Material's pill chips.
+ */
 @Composable
 private fun <T> SegmentedIntPicker(
     options: List<T>,
     selected: T,
     label: (T) -> String,
     onSelect: (T) -> Unit,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        options.forEach { option ->
-            FilterChip(
-                selected = option == selected,
-                onClick = { onSelect(option) },
-                label = { Text(label(option)) },
-            )
-        }
-    }
-}
+) = Segmented(options = options, selected = selected, label = label, onSelect = onSelect)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun <T> SegmentedEnumPicker(
     options: List<T>,
     selected: T,
     label: (T) -> String,
     onSelect: (T) -> Unit,
+) = Segmented(options = options, selected = selected, label = label, onSelect = onSelect)
+
+@Composable
+private fun <T> Segmented(
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        options.forEach { option ->
-            FilterChip(
-                selected = option == selected,
-                onClick = { onSelect(option) },
-                label = { Text(label(option)) },
-            )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted),
+    ) {
+        options.forEachIndexed { index, option ->
+            val isSelected = option == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(if (isSelected) R1.AccentWarm else R1.SurfaceMuted)
+                    .clickable { onSelect(option) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label(option),
+                    style = R1.labelMicro,
+                    color = if (isSelected) R1.Bg else R1.InkSoft,
+                )
+            }
+            // Hairline divider between cells (skip after last).
+            if (index < options.lastIndex) {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(36.dp)
+                        .background(R1.Bg),
+                )
+            }
         }
     }
 }

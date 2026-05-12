@@ -3,7 +3,10 @@ package com.github.itskenny0.r1ha.feature.about
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,16 +15,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.itskenny0.r1ha.BuildConfig
@@ -30,6 +34,7 @@ import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
+import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.ui.components.ChevronBack
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 
@@ -49,35 +54,17 @@ fun AboutScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(R1.Bg)
             .systemBarsPadding(),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-        ) {
-            ChevronBack(onClick = onBack)
-            Text(
-                text = "About",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-        }
+        TopBar(title = "ABOUT", onBack = onBack)
 
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
 
-            // ── App info ─────────────────────────────────────────────────────
-            item {
-                Text(
-                    text = "APP".uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 4.dp),
-                )
-            }
-            item { InfoRow(label = "Version", value = BuildConfig.VERSION_NAME) }
-            item { InfoRow(label = "Build", value = BuildConfig.GIT_SHA) }
+            // ── App ────────────────────────────────────────────────────────────────
+            item { Section("APP") }
+            item { InfoRow("Version", BuildConfig.VERSION_NAME, mono = true) }
+            item { InfoRow("Build", BuildConfig.GIT_SHA, mono = true) }
             item {
                 LinkRow(
                     label = "Source code",
@@ -93,144 +80,140 @@ fun AboutScreen(
                 )
             }
 
-            item {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                )
-            }
+            item { SectionDivider() }
 
-            // ── License ──────────────────────────────────────────────────────
-            item {
-                Text(
-                    text = "LICENSE".uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
-                )
-            }
-            item {
-                Text(
-                    text = "Released into the public domain via The Unlicense. " +
-                            "This is free and unencumbered software released into the public domain. " +
-                            "Anyone is free to copy, modify, publish, use, compile, sell, or distribute this software, " +
-                            "for any purpose, commercial or non-commercial, and by any means.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
-
-            item {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                )
-            }
-
-            // ── Device info ──────────────────────────────────────────────────
-            item {
-                Text(
-                    text = "DEVICE".uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
-                )
-            }
-            item { InfoRow(label = "Manufacturer", value = Build.MANUFACTURER) }
-            item { InfoRow(label = "Model", value = Build.MODEL) }
-            item { InfoRow(label = "Android", value = "API ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})") }
-
-            item {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                )
-            }
-
-            // ── Home Assistant connection state ──────────────────────────────
-            item {
-                Text(
-                    text = "CONNECTION".uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
-                )
-            }
-            item { InfoRow(label = "Server", value = appSettings.server?.url ?: "(not connected)") }
+            // ── Connection ─────────────────────────────────────────────────────────
+            item { Section("CONNECTION") }
+            item { InfoRow("Server", appSettings.server?.url ?: "(not connected)", mono = true) }
             item {
                 InfoRow(
                     label = "WebSocket",
-                    value = when (val st = connection) {
-                        ConnectionState.Idle -> "Idle"
-                        ConnectionState.Connecting -> "Connecting…"
-                        ConnectionState.Authenticating -> "Authenticating…"
-                        is ConnectionState.Connected -> "Connected${st.haVersion?.let { " (HA $it)" } ?: ""}"
-                        is ConnectionState.Disconnected -> when (val c = st.cause) {
-                            ConnectionState.Cause.Network -> "Disconnected (network)"
-                            ConnectionState.Cause.ServerClosed -> "Disconnected (server closed)"
-                            is ConnectionState.Cause.Error -> "Disconnected (${c.throwable.message ?: "error"})"
-                        }
-                        is ConnectionState.AuthLost -> "Auth lost: ${st.reason ?: "tokens invalid"}"
-                    },
+                    value = describeConnection(connection),
                 )
             }
-            item { InfoRow(label = "Favourites", value = appSettings.favorites.size.toString()) }
+            item { InfoRow("Favourites", appSettings.favorites.size.toString(), mono = true) }
 
-            item { Spacer(Modifier.height(32.dp)) }
+            item { SectionDivider() }
+
+            // ── Device ─────────────────────────────────────────────────────────────
+            item { Section("DEVICE") }
+            item { InfoRow("Manufacturer", Build.MANUFACTURER) }
+            item { InfoRow("Model", Build.MODEL) }
+            item { InfoRow("Android", "API ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})") }
+
+            item { SectionDivider() }
+
+            // ── License ────────────────────────────────────────────────────────────
+            item { Section("LICENSE") }
+            item {
+                Text(
+                    text = "Released into the public domain via The Unlicense. " +
+                        "Copy, modify, redistribute — commercial or not, by any means.",
+                    style = R1.body,
+                    color = R1.InkSoft,
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 6.dp),
+                )
+            }
+            item { Spacer(Modifier.height(48.dp)) }
         }
     }
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        // Label takes its intrinsic width (never squished); value takes the rest and wraps as
-        // many lines as needed — long server URLs were previously squishing the label.
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 12.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-            modifier = Modifier.weight(1f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+private fun TopBar(title: String, onBack: () -> Unit) {
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 22.dp, top = 6.dp, bottom = 6.dp),
+        ) {
+            ChevronBack(onClick = onBack)
+            Spacer(Modifier.width(4.dp))
+            Text(title, style = R1.screenTitle, color = R1.Ink)
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(R1.Hairline),
         )
     }
 }
 
 @Composable
-private fun LinkRow(
-    label: String,
-    url: String,
-    onOpen: () -> Unit,
-) {
+private fun Section(title: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 22.dp, end = 22.dp, top = 22.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = R1.sectionHeader, color = R1.AccentWarm)
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .height(1.dp)
+                .weight(1f)
+                .background(R1.Hairline),
+        )
+    }
+}
+
+@Composable
+private fun SectionDivider() {
+    Spacer(Modifier.height(2.dp))
+}
+
+@Composable
+private fun InfoRow(label: String, value: String, mono: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 22.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(label, style = R1.bodyEmph, color = R1.Ink)
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = value,
+            style = if (mono) R1.body.copy(fontFamily = FontFamily.Monospace) else R1.body,
+            color = R1.InkSoft,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+        )
+    }
+}
+
+@Composable
+private fun LinkRow(label: String, url: String, onOpen: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onOpen)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 22.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.Start,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-        )
+        Text(label, style = R1.bodyEmph, color = R1.Ink)
+        Spacer(Modifier.height(2.dp))
         Text(
             text = url,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary,
-            softWrap = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp),
+            style = R1.body.copy(fontFamily = FontFamily.Monospace),
+            color = R1.AccentWarm,
         )
     }
+}
+
+private fun describeConnection(state: ConnectionState): String = when (state) {
+    ConnectionState.Idle -> "Idle"
+    ConnectionState.Connecting -> "Connecting…"
+    ConnectionState.Authenticating -> "Authenticating…"
+    is ConnectionState.Connected ->
+        "Connected${state.haVersion?.let { " · HA $it" } ?: ""}"
+    is ConnectionState.Disconnected -> when (val c = state.cause) {
+        ConnectionState.Cause.Network -> "Disconnected · network"
+        ConnectionState.Cause.ServerClosed -> "Disconnected · server closed"
+        is ConnectionState.Cause.Error -> "Disconnected · ${c.throwable.message ?: "error"}"
+    }
+    is ConnectionState.AuthLost -> "Auth lost · ${state.reason ?: "tokens invalid"}"
 }
