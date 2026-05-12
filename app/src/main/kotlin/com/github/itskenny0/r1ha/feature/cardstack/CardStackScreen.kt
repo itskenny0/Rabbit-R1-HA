@@ -31,7 +31,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -475,6 +474,3 @@ private fun VerticalPagePip(count: Int, current: Int) {
     }
 }
 
-// Suppress unused warning on Color import (some themes use it via R1.Bg etc.).
-@Suppress("unused")
-private val unusedColorRef: Color = R1.Bg

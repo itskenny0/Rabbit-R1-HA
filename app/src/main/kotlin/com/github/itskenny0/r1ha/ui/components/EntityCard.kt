@@ -2,19 +2,16 @@ package com.github.itskenny0.r1ha.ui.components
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.unit.dp
 import com.github.itskenny0.r1ha.core.ha.Domain
 import com.github.itskenny0.r1ha.core.ha.EntityState
 import com.github.itskenny0.r1ha.core.theme.CardRenderModel
 import com.github.itskenny0.r1ha.core.theme.LocalR1Theme
+import com.github.itskenny0.r1ha.core.theme.R1
 
 @Composable
 fun EntityCard(
@@ -95,10 +92,13 @@ fun EntityCard(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
+                // R1.sectionHeader + StatusRed reads consistent with the rest of the chrome
+                // instead of Material's red — the previous `colorScheme.error` was close to
+                // StatusRed but not identical, which broke the palette discipline.
                 Text(
                     text = "UNAVAILABLE",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.error,
+                    style = R1.sectionHeader,
+                    color = R1.StatusRed,
                 )
             }
         }
