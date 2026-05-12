@@ -1,5 +1,6 @@
 package com.github.itskenny0.r1ha.feature.onboarding
 
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -58,6 +59,24 @@ fun OAuthWebView(
                         return true
                     }
                     return false
+                }
+
+                override fun onReceivedError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    error: WebResourceError,
+                ) {
+                    // Only surface errors for the top-level (main-frame) navigation. Sub-resource
+                    // failures (favicon, analytics, etc.) are noise — HA's login page still works
+                    // even when those 404. We also tolerate the error firing for the very last
+                    // hop into r1ha://auth-callback, which the WebView reports as "scheme not
+                    // supported" — that's expected and is handled by shouldOverrideUrlLoading.
+                    if (!request.isForMainFrame) return
+                    val url = request.url
+                    if (url.scheme == "r1ha") return
+                    val desc = runCatching { error.description?.toString() }.getOrNull() ?: "error"
+                    R1Log.w("OAuthWebView", "main-frame load error: $desc ($url)")
+                    Toaster.show("WebView: $desc", long = true)
                 }
             }
             loadUrl(authorizeUrl)
