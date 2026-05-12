@@ -164,7 +164,14 @@ class DefaultHaRepository(
                     // followed by a sign-in starts the backoff schedule fresh instead of
                     // inheriting accumulated failures from the previous server.
                     reconnectAttempt = 0
+                    authLostRefreshAttempt = 0
                     if (url == null) {
+                        // Drop any cached entity states from the previous server so the next
+                        // sign-in starts fresh — otherwise stale data from server A could be
+                        // briefly visible on cards when the user signs into server B with the
+                        // same entity IDs.
+                        cache.update { emptyMap() }
+                        subscriptionId = null
                         ws.disconnect()
                         return@onEach
                     }
