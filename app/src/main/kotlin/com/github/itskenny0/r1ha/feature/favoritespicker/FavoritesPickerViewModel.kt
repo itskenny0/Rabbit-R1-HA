@@ -74,10 +74,16 @@ class FavoritesPickerViewModel(
 
     fun toggle(entityId: String) {
         viewModelScope.launch {
-            val newFavs = settings.settings.first().favorites.toMutableList().apply {
-                if (entityId in this) remove(entityId) else add(entityId)
+            // Read-modify-write must happen INSIDE settings.update so the SettingsRepository
+            // mutex serialises concurrent toggles; otherwise two rapid taps could each capture
+            // the pre-tap favourites and overwrite each other's change.
+            var newFavs: List<String> = emptyList()
+            settings.update { cur ->
+                val l = cur.favorites.toMutableList()
+                if (entityId in l) l.remove(entityId) else l.add(entityId)
+                newFavs = l
+                cur.copy(favorites = l)
             }
-            settings.update { it.copy(favorites = newFavs) }
             // Local re-render without re-fetching the entity list.
             _ui.value = _ui.value.copy(rows = buildRows(entitiesCache, newFavs))
         }
@@ -85,22 +91,28 @@ class FavoritesPickerViewModel(
 
     fun moveUp(entityId: String) {
         viewModelScope.launch {
-            val newFavs = settings.settings.first().favorites.toMutableList().apply {
-                val idx = indexOf(entityId)
-                if (idx > 0) { removeAt(idx); add(idx - 1, entityId) }
+            var newFavs: List<String> = emptyList()
+            settings.update { cur ->
+                val l = cur.favorites.toMutableList()
+                val idx = l.indexOf(entityId)
+                if (idx > 0) { l.removeAt(idx); l.add(idx - 1, entityId) }
+                newFavs = l
+                cur.copy(favorites = l)
             }
-            settings.update { it.copy(favorites = newFavs) }
             _ui.value = _ui.value.copy(rows = buildRows(entitiesCache, newFavs))
         }
     }
 
     fun moveDown(entityId: String) {
         viewModelScope.launch {
-            val newFavs = settings.settings.first().favorites.toMutableList().apply {
-                val idx = indexOf(entityId)
-                if (idx in 0 until size - 1) { removeAt(idx); add(idx + 1, entityId) }
+            var newFavs: List<String> = emptyList()
+            settings.update { cur ->
+                val l = cur.favorites.toMutableList()
+                val idx = l.indexOf(entityId)
+                if (idx in 0 until l.size - 1) { l.removeAt(idx); l.add(idx + 1, entityId) }
+                newFavs = l
+                cur.copy(favorites = l)
             }
-            settings.update { it.copy(favorites = newFavs) }
             _ui.value = _ui.value.copy(rows = buildRows(entitiesCache, newFavs))
         }
     }
