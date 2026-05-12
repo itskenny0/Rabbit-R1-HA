@@ -115,19 +115,19 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val isDown = event.action == KeyEvent.ACTION_DOWN
-        val isUp = event.action == KeyEvent.ACTION_UP
-
+        // Consume the four wheel-related keycodes unconditionally — regardless of action —
+        // so the system volume UI never appears on top of the app. Only ACTION_DOWN feeds
+        // the WheelInput; other actions (UP, MULTIPLE) are swallowed.
         return when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP,
             KeyEvent.KEYCODE_VOLUME_UP -> {
-                if (isDown) graph.wheelInput.emit(WheelEvent.Direction.UP)
-                isDown || isUp
+                if (event.action == KeyEvent.ACTION_DOWN) graph.wheelInput.emit(WheelEvent.Direction.UP)
+                true
             }
             KeyEvent.KEYCODE_DPAD_DOWN,
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                if (isDown) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
-                isDown || isUp
+                if (event.action == KeyEvent.ACTION_DOWN) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
+                true
             }
             else -> super.dispatchKeyEvent(event)
         }
