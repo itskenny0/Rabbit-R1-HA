@@ -1,11 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Bold orange rabbit silhouette — round head + two upright ears — centred inside the adaptive
+  icon's circular safe zone (radius ~36 from centre). Everything fits within an r=22 circle at
+  (54, 64) for the head and 10dp-wide pills at y∈[22, 54] for the ears, so the mark survives
+  any launcher mask (square, rounded square, circle, squircle) without losing its identity.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- HA house body in HA blue -->
-    <path android:fillColor="#41BDF5" android:pathData="M54,36 L23,54 Q20,55.8 20,59 L20,87 Q20,92 25,92 L83,92 Q88,92 88,87 L88,59 Q88,55.8 85,54 L54,36 Z"/>
-    <!-- Left ear in R1 orange -->
-    <path android:fillColor="#F36F21" android:pathData="M42,38 Q38,38 37.2,34 L35,17.5 Q34.8,13 38,11 Q42,9 45,12 Q47,14 47.2,17.5 L48,35 Q47.8,38 44,38.2 Z"/>
-    <!-- Right ear in R1 orange -->
-    <path android:fillColor="#F36F21" android:pathData="M66,38 Q62,38 61.8,35 L62.6,17.5 Q62.8,14 64.8,12 Q67.8,9 71.8,11 Q75,13 74.8,17.5 L72.6,34 Q71.8,38 67.8,38 Z"/>
+
+    <!-- Head: r=22 circle centred at (54, 64). Four cubic bezier segments approximate the
+         circle via the standard 0.5523 control-point offset. -->
+    <path android:fillColor="#F36F21"
+        android:pathData="M54,42 C66.15,42 76,51.85 76,64 C76,76.15 66.15,86 54,86 C41.85,86 32,76.15 32,64 C32,51.85 41.85,42 54,42 Z"/>
+
+    <!-- Left ear: rounded pill from (40,22)…(50,54), tip rounded with cubic beziers, base
+         tucks into the head circle (overlap intentional). -->
+    <path android:fillColor="#F36F21"
+        android:pathData="M40,28 C40,24 42,22 45,22 C48,22 50,24 50,28 L50,54 L40,54 Z"/>
+
+    <!-- Right ear: mirror of the left. -->
+    <path android:fillColor="#F36F21"
+        android:pathData="M58,28 C58,24 60,22 63,22 C66,22 68,24 68,28 L68,54 L58,54 Z"/>
 </vector>
