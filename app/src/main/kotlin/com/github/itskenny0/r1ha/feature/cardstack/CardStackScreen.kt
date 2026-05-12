@@ -235,9 +235,11 @@ fun CardStackScreen(
                 )
                 // Hardcoded amber/red rather than relying on tertiary (default ~pink in M3 dark
                 // schemes, doesn't read as "connecting") and error so the dot is meaningful
-                // across the three themes.
+                // across the three themes. Idle (cold start, before first connect) gets amber
+                // because we're about to connect — red would suggest "broken" which it isn't.
                 val statusColor = when (connection) {
                     is ConnectionState.Connected -> null  // healthy, no dot
+                    ConnectionState.Idle,
                     ConnectionState.Connecting,
                     ConnectionState.Authenticating -> Color(0xFFFFB300)  // amber
                     else -> Color(0xFFE53935)  // red
