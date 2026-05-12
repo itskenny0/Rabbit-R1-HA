@@ -105,6 +105,36 @@ fun RenameDialog(
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
 
+            // ── Live preview — the actual EntityCard with the in-progress edits applied
+            // so the user sees changes before committing. Both the name and the override
+            // map are local CompositionLocals here so the preview reflects the dialog's
+            // state, not whatever's in settings.
+            Spacer(Modifier.height(12.dp))
+            val previewState = remember(entity, name) {
+                val effectiveName = name.trim().ifBlank { entity.friendlyName }
+                entity.copy(friendlyName = effectiveName)
+            }
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides mapOf(
+                    entity.id.value to override,
+                ),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clip(R1.ShapeS)
+                        .border(1.dp, R1.Hairline, R1.ShapeS),
+                ) {
+                    com.github.itskenny0.r1ha.ui.components.EntityCard(
+                        state = previewState,
+                        onTapToggle = { /* preview is non-interactive */ },
+                        tapToToggleEnabled = false,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+
             // ── NAME ─────────────────────────────────────────────────────────────────
             SectionHeader("NAME")
             R1TextField(
