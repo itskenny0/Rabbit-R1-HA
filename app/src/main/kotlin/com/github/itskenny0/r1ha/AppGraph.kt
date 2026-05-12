@@ -27,6 +27,11 @@ class AppGraph(context: Context) {
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(10, TimeUnit.SECONDS)
+            // WebSocket ping frames every 30s: detects half-open connections that the OS or
+            // intermediate routers silently dropped (very common on Wi-Fi after device sleep).
+            // OkHttp surfaces a missing PONG as onFailure, which our state machine treats as
+            // a Disconnected and schedules a backoff reconnect.
+            .pingInterval(30, TimeUnit.SECONDS)
             .build()
     }
 
