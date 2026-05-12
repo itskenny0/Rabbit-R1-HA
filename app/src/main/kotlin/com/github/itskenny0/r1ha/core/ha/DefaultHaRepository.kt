@@ -356,6 +356,7 @@ class DefaultHaRepository(
             lastChanged = runCatching { Instant.parse(raw.lastChanged ?: "") }.getOrDefault(Instant.now()),
             isAvailable = available,
             supportsScalar = supportsScalar(id.domain, raw.attributes),
+            rawState = raw.state,
         )
         cache.update { it + (id to newState) }
     }
@@ -466,14 +467,25 @@ class DefaultHaRepository(
                     id = id,
                     friendlyName = attrs["friendly_name"].asString() ?: row.entity_id.substringAfter('.'),
                     area = attrs["area_id"].asString(),
-                    isOn = row.state.equals("on", ignoreCase = true) ||
-                        row.state.equals("playing", ignoreCase = true) ||
-                        row.state.equals("open", ignoreCase = true),
+                    // Use the same domain-aware logic as `applyEvent` so REST seed matches
+                    // event-driven cache updates. Inline rather than calling out so this
+                    // function stays self-contained for testing.
+                    isOn = when (id.domain) {
+                        Domain.LIGHT, Domain.FAN, Domain.SWITCH, Domain.INPUT_BOOLEAN,
+                        Domain.AUTOMATION, Domain.HUMIDIFIER -> row.state.equals("on", ignoreCase = true)
+                        Domain.COVER -> row.state.equals("open", ignoreCase = true)
+                        Domain.MEDIA_PLAYER -> row.state.equals("playing", ignoreCase = true)
+                        Domain.LOCK -> row.state.equals("unlocked", ignoreCase = true)
+                        Domain.CLIMATE -> !row.state.equals("off", ignoreCase = true) && available
+                        Domain.SCRIPT -> row.state.equals("on", ignoreCase = true)
+                        Domain.SCENE, Domain.BUTTON -> false
+                    },
                     percent = pct,
                     raw = rawNum,
                     lastChanged = runCatching { Instant.parse(row.last_changed ?: "") }.getOrDefault(Instant.now()),
                     isAvailable = available,
                     supportsScalar = supportsScalar(id.domain, attrs),
+                    rawState = row.state,
                 )
             }
         }

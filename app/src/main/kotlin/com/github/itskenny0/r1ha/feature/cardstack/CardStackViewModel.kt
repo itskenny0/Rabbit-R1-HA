@@ -274,8 +274,25 @@ class CardStackViewModel(
         val activeState = _state.value.activeState ?: return
         if (!activeState.isAvailable) return  // can't toggle an unreachable entity
         viewModelScope.launch {
-            R1Log.i("CardStack.tap", "toggle ${activeState.id} isOn=${activeState.isOn}")
-            haRepository.call(ServiceCall.tapAction(activeState.id, activeState.isOn))
+            // Cover-mid-travel special case: if HA reports the cover as actively moving
+            // (state="opening"/"closing"), a tap should STOP it rather than flip its
+            // open/close intent. That's the natural mental model — tap a moving blind to
+            // halt it where it is, tap a stationary one to flip its direction. Falls back
+            // to the standard toggle for every other state and every other domain.
+            val isCoverMoving = activeState.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.COVER &&
+                (activeState.rawState == "opening" || activeState.rawState == "closing")
+            val call = if (isCoverMoving) {
+                R1Log.i("CardStack.tap", "stop ${activeState.id} (state=${activeState.rawState})")
+                ServiceCall(
+                    target = activeState.id,
+                    service = "stop_cover",
+                    data = kotlinx.serialization.json.JsonObject(emptyMap()),
+                )
+            } else {
+                R1Log.i("CardStack.tap", "toggle ${activeState.id} isOn=${activeState.isOn}")
+                ServiceCall.tapAction(activeState.id, activeState.isOn)
+            }
+            haRepository.call(call)
         }
     }
 

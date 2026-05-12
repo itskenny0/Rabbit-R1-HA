@@ -21,6 +21,14 @@ data class EntityState(
      * Favourites picker — there'd be nothing for the wheel to do.
      */
     val supportsScalar: Boolean = true,
+    /**
+     * Raw HA state string, in lower-case, kept verbatim from the wire. Required for any
+     * decision that needs more granularity than the boolean [isOn] — most notably cover
+     * tap-handling, which switches its service from open/close to stop_cover while the
+     * cover is reporting `opening` / `closing`. Stored as-is so future domains that need
+     * the same kind of branching (e.g. climate HVAC-mode display) don't need fresh wiring.
+     */
+    val rawState: String? = null,
 ) {
     companion object {
         fun normaliseLightBrightness(raw: Int): Int = ((raw.coerceIn(0, 255)) * 100.0 / 255.0).roundToInt()
