@@ -124,6 +124,9 @@ class CardStackViewModel(
         val appSettings = settings.settings.first()
         val wheel = appSettings.wheel
         val activeState = _state.value.activeState ?: return
+        // Ignore wheel on unavailable entities: spinning would create a runaway optimistic
+        // override that never reconciles because HA never responds with a state change.
+        if (!activeState.isAvailable) return
 
         // Sliding-window rate computation: count events in the last [rateWindowMillis] ms,
         // multiply by (1000 / window) to scale to events/sec.
@@ -167,6 +170,7 @@ class CardStackViewModel(
 
     fun tapToggle() {
         val activeState = _state.value.activeState ?: return
+        if (!activeState.isAvailable) return  // can't toggle an unreachable entity
         viewModelScope.launch {
             R1Log.i("CardStack.tap", "toggle ${activeState.id} isOn=${activeState.isOn}")
             haRepository.call(ServiceCall.tapAction(activeState.id, activeState.isOn))
