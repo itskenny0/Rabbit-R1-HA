@@ -25,7 +25,7 @@ fun EntityCard(state: EntityState, onTapToggle: () -> Unit, modifier: Modifier =
         Domain.COVER -> CardRenderModel.Glyph.COVER
         Domain.MEDIA_PLAYER -> CardRenderModel.Glyph.MEDIA_PLAYER
     }
-    val accent = when (state.id.domain) {
+    val accentRole = when (state.id.domain) {
         Domain.LIGHT -> CardRenderModel.AccentRole.WARM
         Domain.FAN -> CardRenderModel.AccentRole.GREEN
         Domain.COVER -> CardRenderModel.AccentRole.NEUTRAL
@@ -36,24 +36,36 @@ fun EntityCard(state: EntityState, onTapToggle: () -> Unit, modifier: Modifier =
     // isAvailable, so this is enforced uniformly at the wrapper level.
     Box(modifier = modifier) {
         val themeAlpha = if (state.isAvailable) 1f else 0.35f
-        theme.Card(
-            model = CardRenderModel(
-                entityIdText = state.id.value,
-                friendlyName = state.friendlyName,
-                area = state.area,
-                percent = state.percent ?: 0,
-                isOn = state.isOn,
-                domainGlyph = glyph,
-                accent = accent,
-                isAvailable = state.isAvailable,
-            ),
-            // Chrome overlap is now handled by VerticalPager's contentPadding (it pushes the
-            // active card below the chrome row); the card itself fills its allotted slot.
-            modifier = Modifier
-                .fillMaxSize()
-                .alpha(themeAlpha),
-            onTapToggle = onTapToggle,
-        )
+        if (!state.supportsScalar) {
+            // On/off-only entity — render the switch variant. We bypass the theme.Card path
+            // because the percent slider doesn't make sense here; the switch card uses the
+            // same R1 design tokens so it looks consistent across themes.
+            SwitchCard(
+                state = state,
+                accent = resolveAccentColor(accentRole),
+                domainLabel = domainLabel(glyph),
+                showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
+                onTapToggle = onTapToggle,
+                modifier = Modifier.fillMaxSize().alpha(themeAlpha),
+            )
+        } else {
+            theme.Card(
+                model = CardRenderModel(
+                    entityIdText = state.id.value,
+                    friendlyName = state.friendlyName,
+                    area = state.area,
+                    percent = state.percent ?: 0,
+                    isOn = state.isOn,
+                    domainGlyph = glyph,
+                    accent = accentRole,
+                    isAvailable = state.isAvailable,
+                ),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(themeAlpha),
+                onTapToggle = onTapToggle,
+            )
+        }
         if (!state.isAvailable) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -67,4 +79,18 @@ fun EntityCard(state: EntityState, onTapToggle: () -> Unit, modifier: Modifier =
             }
         }
     }
+}
+
+private fun resolveAccentColor(role: CardRenderModel.AccentRole) = when (role) {
+    CardRenderModel.AccentRole.WARM -> com.github.itskenny0.r1ha.core.theme.R1.AccentWarm
+    CardRenderModel.AccentRole.COOL -> com.github.itskenny0.r1ha.core.theme.R1.AccentCool
+    CardRenderModel.AccentRole.GREEN -> com.github.itskenny0.r1ha.core.theme.R1.AccentGreen
+    CardRenderModel.AccentRole.NEUTRAL -> com.github.itskenny0.r1ha.core.theme.R1.AccentNeutral
+}
+
+private fun domainLabel(glyph: CardRenderModel.Glyph): String = when (glyph) {
+    CardRenderModel.Glyph.LIGHT -> "LIGHT"
+    CardRenderModel.Glyph.FAN -> "FAN"
+    CardRenderModel.Glyph.COVER -> "COVER"
+    CardRenderModel.Glyph.MEDIA_PLAYER -> "MEDIA"
 }

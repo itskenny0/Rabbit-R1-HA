@@ -22,6 +22,8 @@ import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -136,32 +138,63 @@ private fun VerticalCardPager(
         initialPage = vm.state.value.currentIndex.coerceAtMost(cards.size - 1).coerceAtLeast(0),
         pageCount = { cards.size },
     )
-    // Sync pager → VM: when the pager settles on a new page, update the VM so wheel events
-    // address the correct active card. snapshotFlow + distinctUntilChanged so we only fire
-    // once per actual settled change (not on every transient drag).
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
             .collect { vm.setCurrentIndex(it) }
     }
 
-    VerticalPager(
-        state = pagerState,
-        // Peek strip: 72dp top (under the chrome) and 56dp bottom shows a slice of the next
-        // card. The deliberate asymmetry leaves the chrome row clear at the top and a
-        // generous peek at the bottom — that's where the "next card" visually waits.
-        contentPadding = PaddingValues(top = 72.dp, bottom = 56.dp),
-        pageSize = PageSize.Fill,
-        pageSpacing = 10.dp,
-        // Hard 1.0 stiffness — the snap should feel mechanical, not bouncy. The slider's
-        // bouncy spring lives at the value indicator level instead.
-        modifier = Modifier.fillMaxSize(),
-    ) { page ->
-        EntityCard(
-            state = cards[page],
-            onTapToggle = { if (appSettings.behavior.tapToToggle) vm.tapToggle() },
+    Box(modifier = Modifier.fillMaxSize()) {
+        VerticalPager(
+            state = pagerState,
+            // No peek — off-screen cards are hidden entirely; their existence is hinted at
+            // with the chevrons rendered below. Top padding still pushes the active card
+            // below the chrome row.
+            contentPadding = PaddingValues(top = 72.dp, bottom = 24.dp),
+            pageSize = PageSize.Fill,
+            pageSpacing = 0.dp,
             modifier = Modifier.fillMaxSize(),
-        )
+        ) { page ->
+            EntityCard(
+                state = cards[page],
+                onTapToggle = { if (appSettings.behavior.tapToToggle) vm.tapToggle() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        // ── Chevron hints ─────────────────────────────────────────────────────────────
+        // A small ↑ just under the chrome row when there's a previous card, and a small ↓
+        // just above the bottom edge when there's a next card. They live ABOVE the pager
+        // visually but don't intercept its gestures (no clickable on either).
+        val currentPage = pagerState.currentPage
+        if (currentPage > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 60.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowUp,
+                    contentDescription = null,
+                    tint = R1.InkMuted,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        if (currentPage < cards.size - 1) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = R1.InkMuted,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
     }
 }
 
@@ -320,52 +353,52 @@ private fun ChromeIconButton(
 }
 
 /**
- * "Mission-control" vertical position pip: a 28dp-tall track with a 3dp filled bar whose
- * position maps to the current page. For more than ~8 cards it'd be hard to read individual
- * dots, so this works for any list size and reads instantly as "you are HERE in the stack".
+ * "Mission-control" vertical position pip: hairline track + accent-coloured thumb whose
+ * position maps to the current page, with a small "N/M" counter on the right. Whole thing
+ * sits inside a dark pill so it stays legible against the Colourful Cards gradient.
  */
 @Composable
 private fun VerticalPagePip(count: Int, current: Int) {
-    val trackHeight = 28.dp
-    val trackWidth = 2.dp
-    val thumbHeight = 8.dp
+    val trackHeight = 22.dp
+    val thumbHeight = 6.dp
     val frac = if (count <= 1) 0f else current.toFloat() / (count - 1).toFloat()
-    Box(
+    Row(
         modifier = Modifier
-            .height(44.dp)
-            .width(36.dp),
-        contentAlignment = Alignment.Center,
+            .clip(R1.ShapeRound)
+            .background(R1.Bg.copy(alpha = 0.75f))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .height(trackHeight)
-                .width(trackWidth)
-                .background(R1.Hairline),
-        )
-        // Thumb — offset by frac of the available track height.
+        // Vertical track + thumb.
         Box(
             modifier = Modifier
                 .height(trackHeight)
                 .width(8.dp),
-            contentAlignment = Alignment.TopCenter,
         ) {
-            val travel = trackHeight - thumbHeight
-            Spacer(Modifier.height(travel * frac))
+            // Track (dim hairline).
             Box(
                 modifier = Modifier
+                    .align(Alignment.Center)
+                    .height(trackHeight)
+                    .width(2.dp)
+                    .background(R1.Hairline),
+            )
+            // Thumb — offset down by frac of available travel.
+            val travel = trackHeight - thumbHeight
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = travel * frac)
                     .height(thumbHeight)
                     .width(4.dp)
                     .background(R1.AccentWarm),
             )
         }
-        // Small counter — "3/5" — appears next to the pip but kept very small.
+        Spacer(Modifier.width(8.dp))
         Text(
             text = "${current + 1}/$count",
             style = R1.numeralS,
-            color = R1.InkMuted,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 0.dp),
+            color = R1.Ink,
         )
     }
 }

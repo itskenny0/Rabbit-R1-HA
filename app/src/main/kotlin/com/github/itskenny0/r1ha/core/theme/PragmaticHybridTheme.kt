@@ -1,6 +1,5 @@
 package com.github.itskenny0.r1ha.core.theme
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -8,9 +7,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -157,10 +153,11 @@ private fun DomainHeader(
 }
 
 /**
- * The percent number, animated digit-by-digit when it changes. Each digit slides in from
- * above and the old digit slides out below — slot-machine feel — and while the wheel is
- * actively churning the digits get a tiny phase-staggered Y-jitter that reads as "glitching"
- * without being discordant. Jitter settles once the percent stops changing for ~250ms.
+ * The percent readout — single Text with the live value, plus a brief glitch treatment while
+ * the wheel is actively churning. No per-digit AnimatedContent (the 180 ms slot-machine slide
+ * stacked badly under fast wheel input, making the value visibly lag the wheel by hundreds of
+ * ms). The glitch comes from (a) a small Y wobble on the whole readout, and (b) two ghost
+ * copies in red and cyan offset left/right — both fade in only while changing.
  */
 @Composable
 internal fun BigReadout(
@@ -168,9 +165,7 @@ internal fun BigReadout(
     showPercentSuffix: Boolean,
     accent: Color,
 ) {
-    // Track "is the wheel actively churning". Each percent change resets a 250ms timer; if
-    // another change arrives before the timer fires, the timer is cancelled and restarted.
-    // When the timer eventually does fire (no change for 250ms), `isWheelActive` flips off.
+    // Track "is the wheel actively churning". Each percent change resets a 250 ms timer.
     var isWheelActive by remember { mutableStateOf(false) }
     LaunchedEffect(percent) {
         isWheelActive = true
@@ -178,68 +173,69 @@ internal fun BigReadout(
         isWheelActive = false
     }
 
-    // A short, fast oscillation. Phased per-digit (below) so the three digits don't all
-    // jitter in lock-step, giving a more "noisy" feel.
+    val jitterAmp by animateFloatAsState(
+        targetValue = if (isWheelActive) 1.2f else 0f,
+        animationSpec = tween(120),
+        label = "jitter-amp",
+    )
+    val aberrationAmp by animateFloatAsState(
+        targetValue = if (isWheelActive) 1.6f else 0f,
+        animationSpec = tween(140),
+        label = "aberration-amp",
+    )
+
+    // Phase oscillator only when needed — InfiniteTransition is suspended while jitterAmp is
+    // ~0 to avoid the per-frame recomposition cost when the wheel is idle.
     val infTrans = rememberInfiniteTransition(label = "jitter")
     val phase by infTrans.animateFloat(
         initialValue = -1f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 90, easing = LinearEasing),
+            animation = tween(durationMillis = 100, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "jitter-phase",
     )
-    // Glitch amplitude in px (~1dp at mdpi). animateFloatAsState lets the jitter fade in/out
-    // smoothly so the digits don't snap to a halt the moment the wheel stops.
-    val jitterAmp by animateFloatAsState(
-        targetValue = if (isWheelActive) 1.4f else 0f,
-        animationSpec = tween(150),
-        label = "jitter-amp",
-    )
-    // Chromatic-aberration amplitude in px. We render a red copy offset left and a cyan copy
-    // offset right behind each digit; when this is 0 the duplicates collapse onto the white
-    // glyph and visually disappear.
-    val aberrationAmp by animateFloatAsState(
-        targetValue = if (isWheelActive) 1.8f else 0f,
-        animationSpec = tween(160),
-        label = "aberration-amp",
-    )
+    val yOffsetPx = phase * jitterAmp
+
+    val text = percent.coerceIn(0, 100).toString()
 
     Row(
         verticalAlignment = Alignment.Bottom,
         modifier = Modifier.wrapContentSize(),
     ) {
-        // The 0..100 value as up to 3 digits — leading "0"s get rendered as space-coloured
-        // (effectively invisible) so the layout doesn't twitch as the number changes width.
-        val text = percent.coerceIn(0, 100).toString().padStart(3, '0')
-        text.forEachIndexed { idx, ch ->
-            val isLeadingZero = idx < text.length - percent.toString().length
-            val color = if (isLeadingZero) Color.Transparent else R1.Ink
-            // Phase offsets so each digit jitters out of step with its neighbours.
-            val digitMult = when (idx % 3) { 0 -> 1f; 1 -> -0.7f; else -> 0.55f }
-            val digitOffsetPx = phase * jitterAmp * digitMult
-            AnimatedContent(
-                targetState = ch,
-                transitionSpec = {
-                    val dur = 180
-                    if (targetState > initialState) {
-                        slideInVertically(tween(dur)) { -it } togetherWith
-                            slideOutVertically(tween(dur)) { it }
-                    } else {
-                        slideInVertically(tween(dur)) { it } togetherWith
-                            slideOutVertically(tween(dur)) { -it }
-                    }
-                },
-                label = "digit-$idx",
-            ) { digit ->
-                GlitchedDigit(
-                    digit = digit,
-                    color = color,
-                    yOffsetPx = digitOffsetPx,
-                    aberrationPx = aberrationAmp,
+        Box {
+            // Ghost layers only when aberration is non-trivial — saves the double Text draw
+            // cost when the wheel is idle.
+            if (aberrationAmp > 0.25f) {
+                val ghostAlpha = (aberrationAmp / 1.6f).coerceIn(0f, 1f) * 0.55f
+                Text(
+                    text = text,
+                    style = R1.numeralXl,
+                    color = Color(0xFFFF3333),
+                    modifier = Modifier.graphicsLayer {
+                        translationX = -aberrationAmp
+                        translationY = yOffsetPx
+                        alpha = ghostAlpha
+                    },
+                )
+                Text(
+                    text = text,
+                    style = R1.numeralXl,
+                    color = Color(0xFF33FFFF),
+                    modifier = Modifier.graphicsLayer {
+                        translationX = aberrationAmp
+                        translationY = yOffsetPx
+                        alpha = ghostAlpha
+                    },
                 )
             }
+            Text(
+                text = text,
+                style = R1.numeralXl,
+                color = R1.Ink,
+                modifier = Modifier.graphicsLayer { translationY = yOffsetPx },
+            )
         }
         if (showPercentSuffix) {
             Spacer(Modifier.width(6.dp))
@@ -250,53 +246,6 @@ internal fun BigReadout(
                 modifier = Modifier.padding(bottom = 14.dp),
             )
         }
-    }
-}
-
-/**
- * One digit with the glitch treatment: a desaturated red ghost behind it offset left, a
- * desaturated cyan ghost offset right, the real glyph on top. When [aberrationPx] is 0 the
- * ghosts collapse onto the glyph and become invisible — so there's no rendering cost when
- * the wheel is idle.
- */
-@Composable
-private fun GlitchedDigit(
-    digit: Char,
-    color: Color,
-    yOffsetPx: Float,
-    aberrationPx: Float,
-) {
-    val ghostAlpha = (aberrationPx / 1.8f).coerceIn(0f, 1f) * 0.55f
-    androidx.compose.foundation.layout.Box {
-        // Red channel — offset left.
-        Text(
-            text = digit.toString(),
-            style = R1.numeralXl,
-            color = Color(0xFFFF3333),
-            modifier = Modifier.graphicsLayer {
-                translationX = -aberrationPx
-                translationY = yOffsetPx
-                alpha = ghostAlpha
-            },
-        )
-        // Cyan channel — offset right.
-        Text(
-            text = digit.toString(),
-            style = R1.numeralXl,
-            color = Color(0xFF33FFFF),
-            modifier = Modifier.graphicsLayer {
-                translationX = aberrationPx
-                translationY = yOffsetPx
-                alpha = ghostAlpha
-            },
-        )
-        // Real glyph — on top, no X offset.
-        Text(
-            text = digit.toString(),
-            style = R1.numeralXl,
-            color = color,
-            modifier = Modifier.graphicsLayer { translationY = yOffsetPx },
-        )
     }
 }
 

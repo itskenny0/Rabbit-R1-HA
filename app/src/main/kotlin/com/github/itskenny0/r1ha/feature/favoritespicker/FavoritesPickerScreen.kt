@@ -222,6 +222,14 @@ private fun ChannelRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(domainCode, style = R1.labelMicro, color = domainAccent)
+                if (!row.state.supportsScalar) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "· ON/OFF",
+                        style = R1.labelMicro,
+                        color = R1.InkMuted,
+                    )
+                }
                 if (row.isFavorite && row.orderIndex != null) {
                     Spacer(Modifier.width(8.dp))
                     Text(
