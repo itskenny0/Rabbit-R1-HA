@@ -250,26 +250,39 @@ class DefaultHaRepository(
      * Seeds the in-memory cache from a one-shot REST `GET /api/states` so the user sees current
      * values immediately after adding a favourite (subscribe_trigger only fires on the *next*
      * transition, so without this seed the card would sit at 0% until the user actually changes
-     * the entity from elsewhere).
+     * the entity from elsewhere). Retries 3× with a short delay because the call right after
+     * WS Connected sometimes races HA's REST stack on slow servers.
      */
     private suspend fun seedCacheFromHa() {
         val favIds = settings.settings.first().favorites
             .mapNotNull { runCatching { EntityId(it) }.getOrNull() }
             .toSet()
         if (favIds.isEmpty()) return
-        val result = listAllEntities()
-        result.fold(
-            onSuccess = { all ->
-                val byId = all.filter { it.id in favIds }.associateBy { it.id }
-                if (byId.isNotEmpty()) {
-                    cache.value = cache.value + byId
-                    R1Log.i("HaRepo.seed", "seeded ${byId.size} favourite entities from /api/states")
-                }
-            },
-            onFailure = {
-                R1Log.w("HaRepo.seed", "failed to seed cache: ${it.message}")
-            },
-        )
+        var lastError: Throwable? = null
+        repeat(3) { attempt ->
+            val result = listAllEntities()
+            result.fold(
+                onSuccess = { all ->
+                    val byId = all.filter { it.id in favIds }.associateBy { it.id }
+                    if (byId.isNotEmpty()) {
+                        cache.value = cache.value + byId
+                        R1Log.i("HaRepo.seed", "seeded ${byId.size}/${favIds.size} favourites (attempt ${attempt + 1})")
+                        com.github.itskenny0.r1ha.core.util.Toaster.show("Loaded ${byId.size} entities")
+                    } else {
+                        R1Log.w("HaRepo.seed", "REST returned ${all.size} entities but none matched favourites")
+                    }
+                    return
+                },
+                onFailure = { t ->
+                    lastError = t
+                    R1Log.w("HaRepo.seed", "attempt ${attempt + 1} failed: ${t.message}")
+                    delay(500L * (attempt + 1)) // 500ms, 1s, 1.5s
+                },
+            )
+        }
+        val msg = lastError?.message ?: "unknown error"
+        R1Log.e("HaRepo.seed", "all retries failed: $msg", lastError)
+        com.github.itskenny0.r1ha.core.util.Toaster.show("Couldn't load entities: $msg", long = true)
     }
 
     /** Single Json instance for /api/states deserialisation to avoid the per-call allocation lint. */
