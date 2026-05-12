@@ -456,20 +456,38 @@ private fun TextScaleRow(
     selected: Float,
     onSelect: (Float) -> Unit,
 ) {
-    Row(modifier = Modifier.fillMaxWidth().clip(R1.ShapeS).background(R1.SurfaceMuted)) {
-        EntityOverride.TEXT_SCALES.forEachIndexed { idx, scale ->
-            // Label uses the multiplier rounded to nearest 0.05 so users see "0.7x" not
-            // "0.7f"; matches our shorthand for visual scale.
-            val label = when (scale) {
-                1.0f -> "1×"
-                else -> "%.2fx".format(scale)
+    // Nine chips don't fit across the R1's 240px width as a segmented row, so this is
+    // a horizontal-scroll variant. Each chip is its own clickable card with the scale
+    // label; selected one fills accent. Matches the COLOUR row's swatch styling for
+    // visual consistency across customize sections.
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        EntityOverride.TEXT_SCALES.forEach { scale ->
+            val isSelected = kotlin.math.abs(selected - scale) < 0.005f
+            // Label format: "1×" for 1.0, "0.7×" / "0.1×" otherwise. The × is full-width
+            // U+00D7 — reads better than the lowercase x and matches a multiplier symbol.
+            val label = if (scale == 1.0f) "1×" else "%.2g×".format(scale)
+            Box(
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .clip(R1.ShapeS)
+                    .background(if (isSelected) R1.AccentWarm else R1.Bg)
+                    .let { m ->
+                        if (isSelected) m
+                        else m.border(1.dp, R1.Hairline, R1.ShapeS)
+                    }
+                    .r1Pressable({ onSelect(scale) })
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = R1.labelMicro,
+                    color = if (isSelected) R1.Bg else R1.InkSoft,
+                )
             }
-            TristateCell(
-                text = label,
-                selected = kotlin.math.abs(selected - scale) < 0.01f,
-                onClick = { onSelect(scale) },
-            )
-            if (idx < EntityOverride.TEXT_SCALES.lastIndex) CellDivider()
         }
     }
 }

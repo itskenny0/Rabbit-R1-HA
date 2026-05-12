@@ -390,6 +390,11 @@ class DefaultHaRepository(
                 Domain.NUMBER, Domain.INPUT_NUMBER -> raw.attributes["max"].asDouble() ?: 100.0
                 else -> null
             },
+            supportedColorModes = if (id.domain == Domain.LIGHT) extractColorModes(raw.attributes) else emptyList(),
+            colorTempK = if (id.domain == Domain.LIGHT) raw.attributes["color_temp_kelvin"].asInt() else null,
+            minColorTempK = if (id.domain == Domain.LIGHT) raw.attributes["min_color_temp_kelvin"].asInt() else null,
+            maxColorTempK = if (id.domain == Domain.LIGHT) raw.attributes["max_color_temp_kelvin"].asInt() else null,
+            hue = if (id.domain == Domain.LIGHT) extractHue(raw.attributes) else null,
         )
         cache.update { it + (id to newState) }
     }
@@ -445,6 +450,28 @@ class DefaultHaRepository(
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
         Domain.SENSOR, Domain.BINARY_SENSOR -> null
+    }
+
+    /**
+     * Read the supported_color_modes attribute as a list of mode-name strings. HA emits
+     * this as a JSON array; an absent attribute (non-coloured bulb) returns empty so
+     * downstream code can default the wheel-mode chips to brightness-only.
+     */
+    private fun extractColorModes(attrs: kotlinx.serialization.json.JsonObject): List<String> {
+        val arr = attrs["supported_color_modes"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+        return arr.mapNotNull { (it as? JsonPrimitive)?.content }
+    }
+
+    /**
+     * Extract the current hue from `hs_color` if the bulb is reporting in colour mode.
+     * HA exposes hs_color as [hue 0..360, saturation 0..100]. We only care about hue here
+     * — saturation pinning is handled when we WRITE back at full saturation. Null when
+     * the bulb isn't in a colour-aware mode.
+     */
+    private fun extractHue(attrs: kotlinx.serialization.json.JsonObject): Double? {
+        val arr = attrs["hs_color"] as? kotlinx.serialization.json.JsonArray ?: return null
+        val h = arr.firstOrNull() as? JsonPrimitive ?: return null
+        return h.content.toDoubleOrNull()
     }
 
     /**
@@ -663,6 +690,11 @@ class DefaultHaRepository(
                         Domain.NUMBER, Domain.INPUT_NUMBER -> attrs["max"].asDouble() ?: 100.0
                         else -> null
                     },
+                    supportedColorModes = if (id.domain == Domain.LIGHT) extractColorModes(attrs) else emptyList(),
+                    colorTempK = if (id.domain == Domain.LIGHT) attrs["color_temp_kelvin"].asInt() else null,
+                    minColorTempK = if (id.domain == Domain.LIGHT) attrs["min_color_temp_kelvin"].asInt() else null,
+                    maxColorTempK = if (id.domain == Domain.LIGHT) attrs["max_color_temp_kelvin"].asInt() else null,
+                    hue = if (id.domain == Domain.LIGHT) extractHue(attrs) else null,
                 )
             }
         }

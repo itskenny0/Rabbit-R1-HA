@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.github.itskenny0.r1ha.core.ha.DebouncedCaller
+import com.github.itskenny0.r1ha.core.ha.Domain
 import com.github.itskenny0.r1ha.core.ha.EntityId
 import com.github.itskenny0.r1ha.core.ha.EntityState
 import com.github.itskenny0.r1ha.core.ha.HaRepository
@@ -42,6 +43,13 @@ data class CardStackUiState(
      * set but waiting on HA" (non-zero with empty `cards`).
      */
     val favouritesCount: Int = 0,
+    /**
+     * Per-light transient wheel-mode override. Defaults to BRIGHTNESS for any light
+     * the user hasn't toggled. Not persisted — the user re-picks each session, which
+     * matches the "tap the readout to cycle" UX (a one-shot adjustment rather than a
+     * permanent preference).
+     */
+    val lightWheelMode: Map<EntityId, com.github.itskenny0.r1ha.core.ha.LightWheelMode> = emptyMap(),
 ) {
     /**
      * Apply optimistic overrides on top of [cards] so the UI sees the user's intent
@@ -145,6 +153,30 @@ class CardStackViewModel(
                 val value = entityState.minRaw + (pct / 100.0) * (entityState.maxRaw - entityState.minRaw)
                 R1Log.i("CardStack.debounced", "sending setNumberValue($entityId, ${"%.2f".format(value)})")
                 ServiceCall.setNumberValue(entityId, value)
+            }
+            // Light wheel-mode dispatch — when the user has cycled into CT or HUE mode
+            // for a light, the wheel's 0..100 is reinterpreted into kelvin or degrees
+            // and sent on the appropriate service-call shape. Keeps brightness at its
+            // current value so changing CT doesn't accidentally also change brightness.
+            entityId.domain == com.github.itskenny0.r1ha.core.ha.Domain.LIGHT &&
+                _state.value.lightWheelMode[entityId] == com.github.itskenny0.r1ha.core.ha.LightWheelMode.COLOR_TEMP -> {
+                val minK = entityState?.minColorTempK ?: 2000
+                val maxK = entityState?.maxColorTempK ?: 6500
+                val k = (minK + (pct / 100.0) * (maxK - minK)).roundToInt().coerceIn(minK, maxK)
+                // Carry over current brightness so the bulb stays at its existing level
+                // while we tint it. If the bulb is currently off (percent=0/null) we omit
+                // brightness — HA's set_color_temp doesn't turn the bulb on on its own,
+                // but at least the call doesn't accidentally turn it OFF either.
+                val carryBright = entityState?.percent?.takeIf { it > 0 }
+                R1Log.i("CardStack.debounced", "sending setLightColorTemp($entityId, ${k}K, bright=$carryBright)")
+                ServiceCall.setLightColorTemp(entityId, k, brightnessPct = carryBright)
+            }
+            entityId.domain == com.github.itskenny0.r1ha.core.ha.Domain.LIGHT &&
+                _state.value.lightWheelMode[entityId] == com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> {
+                val hue = (pct / 100.0) * 360.0
+                val carryBright = entityState?.percent?.takeIf { it > 0 }
+                R1Log.i("CardStack.debounced", "sending setLightHue($entityId, ${"%.0f".format(hue)}°, bright=$carryBright)")
+                ServiceCall.setLightHue(entityId, hue, brightnessPct = carryBright)
             }
             else -> {
                 // Standard scalar dispatch. If this is a light AND the user has set a
@@ -331,7 +363,12 @@ class CardStackViewModel(
                 ((50.0 / range).roundToInt()).coerceAtLeast(1)
             } else 1
         } else {
-            WheelInput.effectiveStep(wheel.stepPercent, ratePerSec, wheel.acceleration)
+            WheelInput.effectiveStep(
+                base = wheel.stepPercent,
+                ratePerSec = ratePerSec,
+                accelerate = wheel.acceleration,
+                curve = wheel.accelerationCurve,
+            )
         }
         val currentPct = _state.value.optimisticPercents[activeState.id] ?: activeState.percent ?: 0
         val newPct = (currentPct + sign * step).coerceIn(0, 100)
@@ -362,6 +399,48 @@ class CardStackViewModel(
      * own card would, which means scenes/scripts fire turn_on, buttons fire press,
      * switches toggle, etc. Invalid or unsupported targets toast and noop.
      */
+    /**
+     * Cycle the light wheel-mode for [entityId] through its available modes (derived
+     * from supportedColorModes). Wraps at the end; one-mode entities (non-coloured
+     * dimmable bulbs) become a no-op. Called from the BigReadout-suffix tap on light
+     * cards.
+     */
+    fun cycleLightWheelMode(entityId: EntityId) {
+        val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
+        if (entity.id.domain != Domain.LIGHT) return
+        val available = com.github.itskenny0.r1ha.core.ha.LightWheelMode.availableFor(entity.supportedColorModes)
+        if (available.size <= 1) return
+        val current = _state.value.lightWheelMode[entityId] ?: com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS
+        val nextIdx = (available.indexOf(current) + 1) % available.size
+        val next = available[nextIdx]
+
+        // Seed the optimistic percent so the wheel starts at the bulb's current value
+        // in the new mode — switching from BRIGHTNESS 60% into CT mode shouldn't land
+        // the wheel at 60% of the CT range; it should land at whatever CT the bulb is
+        // currently showing.
+        val seedPercent = when (next) {
+            com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS -> entity.percent ?: 0
+            com.github.itskenny0.r1ha.core.ha.LightWheelMode.COLOR_TEMP -> {
+                val minK = entity.minColorTempK ?: 2000
+                val maxK = entity.maxColorTempK ?: 6500
+                val k = entity.colorTempK ?: ((minK + maxK) / 2)
+                if (maxK > minK) {
+                    ((k - minK).toDouble() / (maxK - minK) * 100.0).roundToInt().coerceIn(0, 100)
+                } else 50
+            }
+            com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> {
+                val h = entity.hue ?: 0.0
+                (h / 360.0 * 100.0).roundToInt().coerceIn(0, 100)
+            }
+        }
+
+        _state.value = _state.value.copy(
+            lightWheelMode = _state.value.lightWheelMode + (entityId to next),
+            optimisticPercents = _state.value.optimisticPercents + (entityId to seedPercent),
+        )
+        R1Log.i("CardStack.cycleMode", "$entityId: $current → $next (seed=$seedPercent%)")
+    }
+
     /** Persist a customize-dialog edit straight from the card-stack. Same write path as
      *  the favourites picker's saveCustomize — name override + entity override map.
      *  Empty new name removes the name override; defaults-only entity override removes

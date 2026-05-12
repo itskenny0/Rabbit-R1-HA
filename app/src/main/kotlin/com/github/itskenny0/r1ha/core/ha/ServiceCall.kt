@@ -102,6 +102,48 @@ data class ServiceCall(
          * this helper with the resolved value. Rounded to the nearest step where
          * possible at the call site; here we just emit whatever Double the VM gave us.
          */
+        /**
+         * Light colour-temp setter — `light.turn_on` with `color_temp_kelvin`. The VM
+         * passes the kelvin value computed from the wheel's percent + the entity's
+         * min/max range. Optionally includes a brightness so the bulb is guaranteed to
+         * be on while it's being tinted; pass null to leave brightness untouched.
+         */
+        fun setLightColorTemp(target: EntityId, kelvin: Int, brightnessPct: Int? = null): ServiceCall =
+            ServiceCall(
+                target,
+                "turn_on",
+                buildJsonObject {
+                    put("color_temp_kelvin", JsonPrimitive(kelvin.coerceAtLeast(1)))
+                    if (brightnessPct != null) put("brightness_pct", JsonPrimitive(brightnessPct.coerceIn(0, 100)))
+                },
+            )
+
+        /**
+         * Light hue setter — `light.turn_on` with `hs_color: [hue, saturation]`. We pin
+         * saturation at 100% so the wheel's hue scan goes through fully-saturated
+         * colours; the user can de-saturate from HA if they want pastels. Bundles
+         * brightness when supplied for the same reason as [setLightColorTemp].
+         */
+        fun setLightHue(target: EntityId, hueDegrees: Double, brightnessPct: Int? = null): ServiceCall {
+            // Normalise hue into 0..360. The wheel can swing past those edges over time
+            // so a defensive modular clamp keeps us inside HA's accepted range.
+            val h = ((hueDegrees % 360.0) + 360.0) % 360.0
+            return ServiceCall(
+                target,
+                "turn_on",
+                buildJsonObject {
+                    put(
+                        "hs_color",
+                        kotlinx.serialization.json.buildJsonArray {
+                            add(JsonPrimitive(h))
+                            add(JsonPrimitive(100))
+                        },
+                    )
+                    if (brightnessPct != null) put("brightness_pct", JsonPrimitive(brightnessPct.coerceIn(0, 100)))
+                },
+            )
+        }
+
         fun setNumberValue(target: EntityId, value: Double): ServiceCall {
             val rounded = (Math.round(value * 100.0) / 100.0)
             return ServiceCall(

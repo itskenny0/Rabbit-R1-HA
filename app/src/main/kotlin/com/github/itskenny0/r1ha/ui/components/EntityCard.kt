@@ -34,6 +34,19 @@ fun EntityCard(
      * surfaces (like the picker preview) where long-press is meaningless.
      */
     onLongPress: (() -> Unit)? = null,
+    /**
+     * For action cards only: 0..1 progress for the overscroll-to-fire gesture. The
+     * card-stack screen owns this state; ActionCard renders it as a thin top bar so the
+     * user sees their wheel-up push accumulating. 0 hides the bar entirely.
+     */
+    actionOverscrollProgress: Float = 0f,
+    /**
+     * For light cards: current wheel mode (BRIGHTNESS / COLOR_TEMP / HUE). Null means
+     * the parent doesn't surface a wheel mode — falls back to BRIGHTNESS for display.
+     */
+    lightWheelMode: com.github.itskenny0.r1ha.core.ha.LightWheelMode? = null,
+    /** Tap-to-cycle handler. Null disables the cycle gesture (used by previews). */
+    onCycleLightMode: (() -> Unit)? = null,
 ) {
     val theme = LocalR1Theme.current
     val glyph = when (state.id.domain) {
@@ -139,6 +152,7 @@ fun EntityCard(
                 domainLabel = actionDomainLabel(state.id.domain),
                 showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
                 onFire = onTapToggle,
+                overscrollProgress = actionOverscrollProgress,
                 modifier = Modifier.fillMaxSize().alpha(themeAlpha),
             )
         } else if (!state.supportsScalar) {
@@ -179,6 +193,11 @@ fun EntityCard(
                 }
                 else -> null to null
             }
+            // For light cards we also re-compute display from the wheel mode (overrides
+            // the climate/number branches above which produce null displayValue for
+            // light entities anyway). When in CT mode, the readout becomes "3500" + "K";
+            // in HUE mode it becomes "240" + "°". BRIGHTNESS keeps the percent.
+            val (lightDisplay, lightDisplayUnit) = computeLightDisplay(state, lightWheelMode, state.percent ?: 0, mergedUi)
             theme.Card(
                 model = CardRenderModel(
                     entityIdText = state.id.value,
@@ -190,9 +209,10 @@ fun EntityCard(
                     accent = accentRole,
                     isAvailable = state.isAvailable,
                     accentOverride = overrideAccent,
-                    displayValue = displayValue,
-                    displayUnit = displayUnit,
+                    displayValue = lightDisplay ?: displayValue,
+                    displayUnit = lightDisplayUnit ?: displayUnit,
                     textScale = perCardOverride.textScale,
+                    lightWheelMode = lightWheelMode,
                 ),
                 modifier = Modifier
                     .fillMaxSize()
@@ -247,6 +267,35 @@ private fun actionDomainLabel(domain: Domain): String = when (domain) {
     Domain.BUTTON -> "BUTTON"
     // Defensive: action-only path should only ever see action domains.
     else -> domain.prefix.uppercase()
+}
+
+/**
+ * For light cards: compute the body readout + unit suffix from the current wheel mode.
+ * BRIGHTNESS returns (null, null) so the caller falls through to the standard percent
+ * display. CT returns the kelvin value the wheel currently maps to; HUE returns the
+ * hue degrees. Range comes from the entity's min/max colour temp (CT) or a fixed
+ * 0..360 (HUE).
+ */
+private fun computeLightDisplay(
+    state: com.github.itskenny0.r1ha.core.ha.EntityState,
+    mode: com.github.itskenny0.r1ha.core.ha.LightWheelMode?,
+    pct: Int,
+    ui: com.github.itskenny0.r1ha.core.prefs.UiOptions,
+): Pair<String?, String?> {
+    if (state.id.domain != Domain.LIGHT || mode == null) return null to null
+    return when (mode) {
+        com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS -> null to null
+        com.github.itskenny0.r1ha.core.ha.LightWheelMode.COLOR_TEMP -> {
+            val minK = state.minColorTempK ?: 2000
+            val maxK = state.maxColorTempK ?: 6500
+            val k = (minK + (pct / 100.0) * (maxK - minK)).toInt().coerceIn(minK, maxK)
+            k.toString() to "K"
+        }
+        com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> {
+            val hue = pct * 3.6  // 0..360
+            "%.0f".format(hue) to "°"
+        }
+    }
 }
 
 /** Sensor-card label — sensor and binary_sensor get distinct labels so the user can tell

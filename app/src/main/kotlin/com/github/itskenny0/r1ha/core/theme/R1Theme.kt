@@ -38,6 +38,12 @@ data class CardRenderModel(
      *  Themes apply this to their big-readout TextStyle (numeralXl) so the user can shrink
      *  busy cards or enlarge sparse ones without affecting siblings in the deck. */
     val textScale: Float = 1.0f,
+    /**
+     * Light-card-only: which wheel mode is currently active. Null means default
+     * (BRIGHTNESS). Themes use this to render the right suffix (% / K / °) and the
+     * tap-to-cycle affordance on the readout. Non-light cards ignore.
+     */
+    val lightWheelMode: com.github.itskenny0.r1ha.core.ha.LightWheelMode? = null,
 ) {
     enum class Glyph {
         LIGHT, FAN, COVER, MEDIA_PLAYER,

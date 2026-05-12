@@ -50,6 +50,29 @@ data class EntityState(
     val minRaw: Double? = null,
     /** Upper bound of [minRaw]'s range; same semantics. */
     val maxRaw: Double? = null,
+    /**
+     * Light-specific: HA `supported_color_modes` list (e.g. ["onoff"], ["brightness"],
+     * ["brightness", "color_temp"], ["brightness", "color_temp", "hs"]). Used to decide
+     * which wheel-mode chips the card surface — a non-CCT bulb shouldn't offer a CT
+     * mode toggle. Empty for non-light entities.
+     */
+    val supportedColorModes: List<String> = emptyList(),
+    /**
+     * Light-specific: current colour temperature in kelvin, if the bulb is in
+     * color_temp mode. Used as the starting position when the user switches the wheel
+     * into CT mode and as the displayed value.
+     */
+    val colorTempK: Int? = null,
+    /** Light-specific: HA min_color_temp_kelvin attribute. */
+    val minColorTempK: Int? = null,
+    /** Light-specific: HA max_color_temp_kelvin attribute. */
+    val maxColorTempK: Int? = null,
+    /**
+     * Light-specific: current hue in degrees (0..360), if the bulb is in colour mode.
+     * Read from `hs_color` attribute's first element. Null if the bulb isn't currently
+     * in a colour mode, even though it might support one.
+     */
+    val hue: Double? = null,
 ) {
     companion object {
         fun normaliseLightBrightness(raw: Int): Int = ((raw.coerceIn(0, 255)) * 100.0 / 255.0).roundToInt()

@@ -112,6 +112,7 @@ class SettingsRepository private constructor(
         val wheelAccel = booleanPreferencesKey("wheel.accel")
         val wheelInvert = booleanPreferencesKey("wheel.invert")
         val wheelKeySource = stringPreferencesKey("wheel.key_source")
+        val wheelAccelCurve = stringPreferencesKey("wheel.accel_curve")
 
         val uiDisplayMode = stringPreferencesKey("ui.display_mode")
         val uiShowPill = booleanPreferencesKey("ui.show_pill")
@@ -126,6 +127,7 @@ class SettingsRepository private constructor(
         val uiHideCardTail = booleanPreferencesKey("ui.hide_card_tail")
         val uiMaxDecimals = intPreferencesKey("ui.max_decimals")
         val uiTempUnit = stringPreferencesKey("ui.temp_unit")
+        val uiInfiniteScroll = booleanPreferencesKey("ui.infinite_scroll")
 
         val theme = stringPreferencesKey("theme")
         /**
@@ -185,6 +187,7 @@ class SettingsRepository private constructor(
                     acceleration = p[K.wheelAccel] ?: true,
                     invertDirection = p[K.wheelInvert] ?: false,
                     keySource = p[K.wheelKeySource]?.let { runCatching { WheelKeySource.valueOf(it) }.getOrNull() } ?: WheelKeySource.AUTO,
+                    accelerationCurve = p[K.wheelAccelCurve]?.let { runCatching { AccelerationCurve.valueOf(it) }.getOrNull() } ?: AccelerationCurve.MEDIUM,
                 ),
                 ui = UiOptions(
                     displayMode = p[K.uiDisplayMode]?.let { runCatching { DisplayMode.valueOf(it) }.getOrNull() } ?: DisplayMode.PERCENT,
@@ -195,6 +198,7 @@ class SettingsRepository private constructor(
                     hideCardTailAbove = p[K.uiHideCardTail] ?: true,
                     maxDecimalPlaces = (p[K.uiMaxDecimals] ?: 2).coerceIn(0, 6),
                     tempUnit = p[K.uiTempUnit]?.let { runCatching { TemperatureUnit.valueOf(it) }.getOrNull() } ?: TemperatureUnit.CELSIUS,
+                    infiniteScroll = p[K.uiInfiniteScroll] ?: false,
                 ),
                 behavior = Behavior(
                     haptics = p[K.behaviorHaptics] ?: true,
@@ -235,6 +239,7 @@ class SettingsRepository private constructor(
                 p[K.wheelAccel] = next.wheel.acceleration
                 p[K.wheelInvert] = next.wheel.invertDirection
                 p[K.wheelKeySource] = next.wheel.keySource.name
+                p[K.wheelAccelCurve] = next.wheel.accelerationCurve.name
                 p[K.uiDisplayMode] = next.ui.displayMode.name
                 p[K.uiShowPill] = next.ui.showOnOffPill
                 p[K.uiShowArea] = next.ui.showAreaLabel
@@ -247,6 +252,7 @@ class SettingsRepository private constructor(
                 p[K.uiHideCardTail] = next.ui.hideCardTailAbove
                 p[K.uiMaxDecimals] = next.ui.maxDecimalPlaces
                 p[K.uiTempUnit] = next.ui.tempUnit.name
+                p[K.uiInfiniteScroll] = next.ui.infiniteScroll
                 p[K.theme] = next.theme.name
                 p[K.nameOverrides] = encodeNameOverrides(next.nameOverrides)
                 p[K.entityOverrides] = encodeEntityOverrides(next.entityOverrides)
@@ -359,7 +365,7 @@ private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
             val id = java.net.URLDecoder.decode(line.substring(0, eq), "UTF-8")
             if (id.isBlank()) return@runCatching null
             val parts = line.substring(eq + 1).split('|')
-            val scale = parts.getOrNull(0)?.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: 1.0f
+            val scale = parts.getOrNull(0)?.toFloatOrNull()?.coerceIn(0.1f, 2.0f) ?: 1.0f
             val pill = when (parts.getOrNull(1)) { "1" -> true; "0" -> false; else -> null }
             val area = when (parts.getOrNull(2)) { "1" -> true; "0" -> false; else -> null }
             val lpRaw = parts.getOrNull(3)?.takeIf { it.isNotBlank() }

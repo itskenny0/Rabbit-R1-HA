@@ -14,11 +14,22 @@ enum class TemperatureUnit { AUTO, CELSIUS, FAHRENHEIT }
 /** What the wheel keycodes actually arrive as on this device. */
 enum class WheelKeySource { AUTO, DPAD, VOLUME }
 
+/**
+ * Shape of the acceleration curve when `wheel.acceleration` is on. The wheel rate (in
+ * events/sec) gets folded through the matching slope to produce a step multiplier;
+ * SUBTLE keeps the boost small for precise dimming, AGGRESSIVE goes hard so a fast
+ * spin can cross the full 0..100 range in a couple of detents. MEDIUM is the previous
+ * behaviour (1 + excess*0.5 above 4 ev/s).
+ */
+enum class AccelerationCurve { SUBTLE, MEDIUM, AGGRESSIVE }
+
 data class WheelSettings(
     val stepPercent: Int = 2,           // 1, 2, 5, or 10
     val acceleration: Boolean = true,
     val invertDirection: Boolean = false,
     val keySource: WheelKeySource = WheelKeySource.AUTO,
+    /** Slope of the acceleration curve when [acceleration] is on. */
+    val accelerationCurve: AccelerationCurve = AccelerationCurve.MEDIUM,
 )
 
 data class UiOptions(
@@ -40,6 +51,13 @@ data class UiOptions(
     val maxDecimalPlaces: Int = 2,
     /** Force-display temperature unit; AUTO follows HA's native unit. Default Celsius. */
     val tempUnit: TemperatureUnit = TemperatureUnit.CELSIUS,
+    /**
+     * When on, the card stack wraps — wheeling/swiping past the last card lands on the
+     * first, and vice versa. Off by default so a user can tell when they've reached the
+     * end of their list. The action-card overscroll-to-fire gesture still wins at the
+     * top boundary regardless of this setting.
+     */
+    val infiniteScroll: Boolean = false,
 )
 
 data class Behavior(

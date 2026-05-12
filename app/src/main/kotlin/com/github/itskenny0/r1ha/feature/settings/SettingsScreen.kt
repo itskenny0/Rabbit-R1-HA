@@ -110,6 +110,24 @@ fun SettingsScreen(
                     onCheckedChange = { vm.setWheelAcceleration(it) },
                 )
             }
+            if (s.wheel.acceleration) {
+                item {
+                    LabeledControl(label = "Acceleration curve") {
+                        SegmentedEnumPicker(
+                            options = com.github.itskenny0.r1ha.core.prefs.AccelerationCurve.entries,
+                            selected = s.wheel.accelerationCurve,
+                            label = {
+                                when (it) {
+                                    com.github.itskenny0.r1ha.core.prefs.AccelerationCurve.SUBTLE -> "SUBTLE"
+                                    com.github.itskenny0.r1ha.core.prefs.AccelerationCurve.MEDIUM -> "MEDIUM"
+                                    com.github.itskenny0.r1ha.core.prefs.AccelerationCurve.AGGRESSIVE -> "AGGRESSIVE"
+                                }
+                            },
+                            onSelect = { vm.setAccelerationCurve(it) },
+                        )
+                    }
+                }
+            }
             item {
                 SwitchRow(
                     label = "Invert direction",
@@ -181,6 +199,14 @@ fun SettingsScreen(
                     subtitle = "Solid chrome backdrop covers the previous card's tail",
                     checked = s.ui.hideCardTailAbove,
                     onCheckedChange = { vm.setHideCardTailAbove(it) },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Infinite scroll",
+                    subtitle = "Wheel past the last card wraps to the first",
+                    checked = s.ui.infiniteScroll,
+                    onCheckedChange = { vm.setInfiniteScroll(it) },
                 )
             }
             item {

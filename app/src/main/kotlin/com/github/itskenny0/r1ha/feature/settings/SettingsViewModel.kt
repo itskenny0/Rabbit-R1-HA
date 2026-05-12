@@ -34,6 +34,8 @@ class SettingsViewModel(
     fun setWheelAcceleration(enabled: Boolean) = update { it.copy(wheel = it.wheel.copy(acceleration = enabled)) }
     fun setWheelInvert(inverted: Boolean) = update { it.copy(wheel = it.wheel.copy(invertDirection = inverted)) }
     fun setWheelKeySource(source: WheelKeySource) = update { it.copy(wheel = it.wheel.copy(keySource = source)) }
+    fun setAccelerationCurve(curve: com.github.itskenny0.r1ha.core.prefs.AccelerationCurve) =
+        update { it.copy(wheel = it.wheel.copy(accelerationCurve = curve)) }
 
     // ── Card UI ─────────────────────────────────────────────────────────────
 
@@ -45,6 +47,7 @@ class SettingsViewModel(
     fun setMaxDecimalPlaces(n: Int) = update { it.copy(ui = it.ui.copy(maxDecimalPlaces = n)) }
     fun setTempUnit(u: com.github.itskenny0.r1ha.core.prefs.TemperatureUnit) =
         update { it.copy(ui = it.ui.copy(tempUnit = u)) }
+    fun setInfiniteScroll(enabled: Boolean) = update { it.copy(ui = it.ui.copy(infiniteScroll = enabled)) }
 
     // ── Behavior ────────────────────────────────────────────────────────────
 

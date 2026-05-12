@@ -33,6 +33,13 @@ val LocalHaRepository = staticCompositionLocalOf<com.github.itskenny0.r1ha.core.
  */
 val LocalEntityOverrides = staticCompositionLocalOf<Map<String, com.github.itskenny0.r1ha.core.prefs.EntityOverride>> { emptyMap() }
 
+/**
+ * Callback for the BigReadout's tap-to-cycle gesture on light cards. Themes' BigReadout
+ * composables consult this; null disables the gesture (used by previews / non-light
+ * paths). Wired by CardStackScreen from CardStackViewModel.cycleLightWheelMode.
+ */
+val LocalOnCycleLightMode = staticCompositionLocalOf<((com.github.itskenny0.r1ha.core.ha.EntityId) -> Unit)?> { null }
+
 @Composable
 fun R1ThemeHost(themeId: ThemeId, content: @Composable () -> Unit) {
     val theme = when (themeId) {

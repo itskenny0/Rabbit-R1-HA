@@ -62,8 +62,14 @@ data class EntityOverride(
             "DAY" to 6500,
         )
 
-        /** Allowed text-scale steps. Picker offers a chip per step. */
-        val TEXT_SCALES = listOf(0.7f, 0.85f, 1.0f, 1.15f, 1.3f)
+        /**
+         * Allowed text-scale steps. Picker offers a chip per step. Range extends down
+         * to 0.1x to let users tame extreme-length entity names — useful when an MQTT
+         * integration auto-names entities to "Living Room Floor Lamp Bulb Brightness".
+         * The chips below 0.5x get progressively less practical but stay available so
+         * users can still pick them out of a long-tail content edge case.
+         */
+        val TEXT_SCALES = listOf(0.1f, 0.2f, 0.3f, 0.5f, 0.7f, 0.85f, 1.0f, 1.15f, 1.3f)
 
         /** Curated palette for the per-card accent picker. Hand-picked to feel cohesive
          *  on the near-black background — no neon, no muddy mid-tones. Names track the

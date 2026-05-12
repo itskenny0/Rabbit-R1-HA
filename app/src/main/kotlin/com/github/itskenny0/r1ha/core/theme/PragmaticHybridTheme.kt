@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.ThemeId
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
 
 /**
  * "Mission Control" — the default theme. Heavy orange on near-black, monospace numerals,
@@ -97,6 +98,8 @@ object PragmaticHybridTheme : R1Theme {
                     overrideText = model.displayValue,
                     overrideUnit = model.displayUnit,
                     textScale = model.textScale,
+                    lightEntityId = if (model.lightWheelMode != null) com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText) else null,
+                    lightWheelMode = model.lightWheelMode,
                 )
                 Spacer(Modifier.weight(1f))
                 if (ui.showOnOffPill) OnOffPill(isOn = model.isOn, accent = accent)
@@ -160,6 +163,8 @@ internal fun BigReadout(
     overrideText: String? = null,
     overrideUnit: String? = null,
     textScale: Float = 1.0f,
+    lightEntityId: com.github.itskenny0.r1ha.core.ha.EntityId? = null,
+    lightWheelMode: com.github.itskenny0.r1ha.core.ha.LightWheelMode? = null,
 ) {
     // Plain, snappy readout. Jitter and chromatic aberration were obscuring the live value
     // and chewing recomposition budget; the slider, the spring on the slider, and the
@@ -179,23 +184,55 @@ internal fun BigReadout(
         lineHeight = R1.numeralXl.lineHeight * textScale,
     )
     val suffixStyle = R1.numeralM.copy(fontSize = R1.numeralM.fontSize * textScale)
-    Row(
-        verticalAlignment = Alignment.Bottom,
-        modifier = Modifier.wrapContentSize(),
-    ) {
-        Text(
-            text = bodyText,
-            style = numeralStyle,
-            color = R1.Ink,
-        )
-        if (suffixText != null) {
-            Spacer(Modifier.width(6.dp))
+    // Wrap the readout in a column so we can stack the optional "MODE: CT" chip below
+    // for light cards. Tap on the readout cycles the wheel mode when one is offered;
+    // non-light cards (or single-mode lights) don't get the gesture.
+    val onCycle = com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightMode.current
+    val cycleClickable: Modifier = if (lightEntityId != null && lightWheelMode != null && onCycle != null) {
+        Modifier.r1Pressable(onClick = { onCycle(lightEntityId) })
+    } else Modifier
+    Column(modifier = Modifier.wrapContentSize()) {
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            modifier = cycleClickable,
+        ) {
             Text(
-                text = suffixText,
-                style = suffixStyle,
-                color = accent,
-                modifier = Modifier.padding(bottom = 14.dp),
+                text = bodyText,
+                style = numeralStyle,
+                color = R1.Ink,
             )
+            if (suffixText != null) {
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = suffixText,
+                    style = suffixStyle,
+                    color = accent,
+                    modifier = Modifier.padding(bottom = 14.dp),
+                )
+            }
+        }
+        // Mode chip — only shown when there's a non-default mode OR a tap-to-cycle is
+        // available. Helps the user discover the cycle gesture (subtle text "TAP TO
+        // CYCLE" hint) and confirms what the wheel will drive.
+        if (lightWheelMode != null && onCycle != null && lightEntityId != null) {
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = when (lightWheelMode) {
+                        com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS -> "BRIGHTNESS"
+                        com.github.itskenny0.r1ha.core.ha.LightWheelMode.COLOR_TEMP -> "COLOUR TEMP"
+                        com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE -> "HUE"
+                    },
+                    style = R1.labelMicro,
+                    color = accent,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "· TAP READOUT TO CYCLE",
+                    style = R1.labelMicro,
+                    color = R1.InkMuted,
+                )
+            }
         }
     }
 }

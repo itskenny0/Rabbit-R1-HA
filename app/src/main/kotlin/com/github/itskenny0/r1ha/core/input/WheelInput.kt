@@ -39,11 +39,31 @@ class WheelInput {
          *  base: base step (1, 2, 5, or 10)
          *  ratePerSec: measured event rate in the last sliding window
          *  accelerate: whether to apply acceleration
+         *  curve: shape of the acceleration response (SUBTLE / MEDIUM / AGGRESSIVE)
+         *
+         * Curves share the same "kicks in above 4 ev/s" threshold but differ in slope
+         * and cap. SUBTLE peaks at ~3× base (precise dimming for cinema lights);
+         * MEDIUM peaks at ~7× base (the previous behaviour, comfortable for most
+         * brightness sweeps); AGGRESSIVE peaks at ~13× base so a fast spin clears
+         * the 0..100 range in 2-3 detents. The threshold is fixed because the
+         * "discrete tap vs continuous spin" boundary is a property of the hardware,
+         * not user preference.
          */
-        fun effectiveStep(base: Int, ratePerSec: Double, accelerate: Boolean): Int {
+        fun effectiveStep(
+            base: Int,
+            ratePerSec: Double,
+            accelerate: Boolean,
+            curve: com.github.itskenny0.r1ha.core.prefs.AccelerationCurve =
+                com.github.itskenny0.r1ha.core.prefs.AccelerationCurve.MEDIUM,
+        ): Int {
             if (!accelerate) return base
             val excess = (ratePerSec - 4.0).coerceIn(0.0, 12.0)
-            val multiplier = 1.0 + (excess * 0.5)
+            val slope = when (curve) {
+                com.github.itskenny0.r1ha.core.prefs.AccelerationCurve.SUBTLE -> 0.2
+                com.github.itskenny0.r1ha.core.prefs.AccelerationCurve.MEDIUM -> 0.5
+                com.github.itskenny0.r1ha.core.prefs.AccelerationCurve.AGGRESSIVE -> 1.0
+            }
+            val multiplier = 1.0 + (excess * slope)
             return (base * multiplier).roundToInt()
         }
 
