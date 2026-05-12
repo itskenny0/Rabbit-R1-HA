@@ -63,6 +63,10 @@ data class ServiceCall(
                     if (clamped == 0) "turn_off" else "turn_on",
                     JsonObject(emptyMap()),
                 )
+                // Action-only domains shouldn't reach setPercent — the wheel is ignored on
+                // ActionCards. Defensive fallback: just fire the action.
+                Domain.SCENE, Domain.SCRIPT -> ServiceCall(target, "turn_on", JsonObject(emptyMap()))
+                Domain.BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
             }
         }
 
@@ -93,6 +97,11 @@ data class ServiceCall(
                 if (isOn) "lock" else "unlock",
                 JsonObject(emptyMap()),
             )
+            // Action entities — there's no "off" service. Tap always fires the trigger,
+            // regardless of any (mostly meaningless) isOn state. Buttons use `press`,
+            // scenes / scripts use `turn_on` to activate.
+            Domain.SCENE, Domain.SCRIPT -> ServiceCall(target, "turn_on", JsonObject(emptyMap()))
+            Domain.BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
         }
 
         /**
@@ -123,6 +132,11 @@ data class ServiceCall(
                 if (on) "unlock" else "lock",
                 JsonObject(emptyMap()),
             )
+            // Action entities only have a "fire" service — there's no "off" equivalent for
+            // a button press or a scene activation. The on-side of setSwitch is the fire
+            // service; the off-side is a no-op (we just turn_on again, which is harmless).
+            Domain.SCENE, Domain.SCRIPT -> ServiceCall(target, "turn_on", JsonObject(emptyMap()))
+            Domain.BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
         }
     }
 }

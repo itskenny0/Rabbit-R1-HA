@@ -19,10 +19,13 @@ class EntityDomainTest {
 
     @Test fun `fromPrefix rejects unknown prefix`() {
         // Domains the app deliberately doesn't surface — sensor/binary_sensor are read-
-        // only, scene/script/button are fire-and-forget triggers (no state to drive). They
-        // stay unsupported until the picker grows a separate Action-card variant.
+        // only displays (nothing to drive from a wheel/tap), device_tracker / weather
+        // similar. Keeping the negative list explicit makes the wire-supported set
+        // self-documenting in the test.
         assertThrows<IllegalArgumentException> { Domain.fromPrefix("sensor") }
-        assertThrows<IllegalArgumentException> { Domain.fromPrefix("scene") }
+        assertThrows<IllegalArgumentException> { Domain.fromPrefix("binary_sensor") }
+        assertThrows<IllegalArgumentException> { Domain.fromPrefix("device_tracker") }
+        assertThrows<IllegalArgumentException> { Domain.fromPrefix("weather") }
         assertThrows<IllegalArgumentException> { Domain.fromPrefix("") }
     }
 }

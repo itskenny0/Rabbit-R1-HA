@@ -319,10 +319,11 @@ private fun SelectBox(selected: Boolean, onClick: () -> Unit, accent: Color) {
 }
 
 private fun domainAccentFor(domain: Domain): Color = when (domain) {
-    Domain.LIGHT, Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.CLIMATE -> R1.AccentWarm
-    Domain.FAN -> R1.AccentGreen
+    Domain.LIGHT, Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION,
+    Domain.CLIMATE, Domain.BUTTON -> R1.AccentWarm
+    Domain.FAN, Domain.SCENE -> R1.AccentGreen
     Domain.COVER, Domain.LOCK -> R1.AccentNeutral
-    Domain.MEDIA_PLAYER, Domain.HUMIDIFIER -> R1.AccentCool
+    Domain.MEDIA_PLAYER, Domain.HUMIDIFIER, Domain.SCRIPT -> R1.AccentCool
 }
 
 private fun domainLabel(domain: Domain): String = when (domain) {
@@ -336,4 +337,7 @@ private fun domainLabel(domain: Domain): String = when (domain) {
     Domain.LOCK -> "LOCK"
     Domain.HUMIDIFIER -> "HUMIDIFIER"
     Domain.CLIMATE -> "CLIMATE"
+    Domain.SCENE -> "SCENE"
+    Domain.SCRIPT -> "SCRIPT"
+    Domain.BUTTON -> "BUTTON"
 }

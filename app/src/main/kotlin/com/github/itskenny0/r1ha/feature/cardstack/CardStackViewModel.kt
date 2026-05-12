@@ -219,6 +219,10 @@ class CardStackViewModel(
         // Ignore wheel on unavailable entities: spinning would create a runaway optimistic
         // override that never reconciles because HA never responds with a state change.
         if (!activeState.isAvailable) return
+        // Action-only entities (scenes, scripts, buttons) are tap-to-fire. Spinning the
+        // wheel on top of an ActionCard shouldn't accidentally fire the trigger or paint
+        // a phantom percent — wheels are deliberately a no-op there.
+        if (activeState.id.domain.isAction) return
 
         val sign = WheelInput.applyDirection(event.direction, wheel.invertDirection)
 

@@ -26,7 +26,18 @@ enum class Domain(val prefix: String) {
      * percent into the temperature range, which is a refactor beyond the time budget.
      */
     CLIMATE("climate"),
+    // ── Action-only domains ─────────────────────────────────────────────────────────────
+    // No persistent on/off state, no scalar; just a "fire" trigger. Rendered as ActionCard
+    // instead of SwitchCard / scalar card. Wheel input is ignored on these — they're
+    // tap-only. The "state" of these entities is mostly a last-fired timestamp in HA;
+    // scripts add an "on" state while running, the others stay stateless.
+    SCENE("scene"),
+    SCRIPT("script"),
+    BUTTON("button"),
     ;
+
+    /** Action-only domains — UI renders them as fire-and-forget ActionCard tiles. */
+    val isAction: Boolean get() = this == SCENE || this == SCRIPT || this == BUTTON
 
     companion object {
         private val byPrefix = entries.associateBy { it.prefix }

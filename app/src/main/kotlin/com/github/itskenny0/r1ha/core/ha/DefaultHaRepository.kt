@@ -338,6 +338,10 @@ class DefaultHaRepository(
             Domain.LOCK -> raw.state.equals("unlocked", ignoreCase = true)
             Domain.CLIMATE -> !raw.state.equals("off", ignoreCase = true) &&
                 raw.state != "unavailable" && raw.state != "unknown"
+            // Scripts have an "on" state while they're executing. Scene/button never get
+            // a meaningful on state — their state attribute is a last-fired timestamp.
+            Domain.SCRIPT -> raw.state.equals("on", ignoreCase = true)
+            Domain.SCENE, Domain.BUTTON -> false
         }
         val available = raw.state != "unavailable" && raw.state != "unknown"
         val pct = computePercent(id.domain, raw.attributes)
@@ -365,7 +369,8 @@ class DefaultHaRepository(
         // No scalar — these domains are pure on/off (climate's target_temperature could be
         // driven, but mapping it through 0..100 requires min_temp/max_temp range plumbing
         // that's out of scope for the current release).
-        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK, Domain.CLIMATE -> null
+        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
+        Domain.CLIMATE, Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> null
     }
 
     private fun computeRaw(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Number? = when (domain) {
@@ -374,7 +379,8 @@ class DefaultHaRepository(
         Domain.COVER -> attrs["current_position"].asInt()
         Domain.MEDIA_PLAYER -> attrs["volume_level"].asDouble()
         Domain.HUMIDIFIER -> attrs["humidity"].asInt()
-        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK, Domain.CLIMATE -> null
+        Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
+        Domain.CLIMATE, Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> null
     }
 
     /**
@@ -421,6 +427,8 @@ class DefaultHaRepository(
         Domain.HUMIDIFIER -> attrs["humidity"] != null
         // Pure on/off domains — no scalar; rendered as switch cards.
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK, Domain.CLIMATE -> false
+        // Action-only domains — no scalar; rendered as ActionCard tiles.
+        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> false
     }
 
     override fun observe(entities: Set<EntityId>): Flow<Map<EntityId, EntityState>> =

@@ -22,18 +22,33 @@ class EntityIdTest {
     }
 
     @Test fun `rejects unsupported domain`() {
-        // sensor/binary_sensor/scene/script/button are still outside the supported set —
-        // they need separate UI affordances (read-only display or fire-and-forget action
-        // tiles) before the wheel-driven card stack can host them sensibly.
-        assertThrows<IllegalArgumentException> { EntityId("sensor.foo") }
-        assertThrows<IllegalArgumentException> { EntityId("scene.movie_night") }
+        // sensor/binary_sensor are read-only displays — nothing for the wheel/tap to do.
+        // weather/device_tracker similarly read-only state surfaces.
+        assertThrows<IllegalArgumentException> { EntityId("sensor.living_room_temperature") }
+        assertThrows<IllegalArgumentException> { EntityId("binary_sensor.front_door") }
+        assertThrows<IllegalArgumentException> { EntityId("weather.home") }
     }
 
-    @Test fun `parses new domains`() {
+    @Test fun `parses on-off and scalar domains`() {
         assertThat(EntityId("switch.desk_lamp").domain).isEqualTo(Domain.SWITCH)
         assertThat(EntityId("input_boolean.guest_mode").domain).isEqualTo(Domain.INPUT_BOOLEAN)
         assertThat(EntityId("automation.morning_routine").domain).isEqualTo(Domain.AUTOMATION)
         assertThat(EntityId("lock.front_door").domain).isEqualTo(Domain.LOCK)
         assertThat(EntityId("humidifier.bedroom").domain).isEqualTo(Domain.HUMIDIFIER)
+        assertThat(EntityId("climate.living_room").domain).isEqualTo(Domain.CLIMATE)
+    }
+
+    @Test fun `parses action-only domains`() {
+        assertThat(EntityId("scene.movie_night").domain).isEqualTo(Domain.SCENE)
+        assertThat(EntityId("script.morning_lights").domain).isEqualTo(Domain.SCRIPT)
+        assertThat(EntityId("button.doorbell").domain).isEqualTo(Domain.BUTTON)
+    }
+
+    @Test fun `isAction flags action-only domains`() {
+        assertThat(Domain.SCENE.isAction).isTrue()
+        assertThat(Domain.SCRIPT.isAction).isTrue()
+        assertThat(Domain.BUTTON.isAction).isTrue()
+        assertThat(Domain.LIGHT.isAction).isFalse()
+        assertThat(Domain.SWITCH.isAction).isFalse()
     }
 }

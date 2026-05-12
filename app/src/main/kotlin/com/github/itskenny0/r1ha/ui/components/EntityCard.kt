@@ -39,6 +39,11 @@ fun EntityCard(
         Domain.LOCK -> CardRenderModel.Glyph.LOCK
         Domain.HUMIDIFIER -> CardRenderModel.Glyph.HUMIDIFIER
         Domain.CLIMATE -> CardRenderModel.Glyph.CLIMATE
+        // Action entities don't reach the theme card path — handled below — so the glyph
+        // mapping never lands on theme.Card. Routed to ActionCard which has its own label
+        // ("SCENE"/"SCRIPT"/"BUTTON") via domainLabel above. The Glyph value is unused but
+        // has to be exhaustive for the when to compile.
+        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> CardRenderModel.Glyph.SWITCH
     }
     val accentRole = when (state.id.domain) {
         Domain.LIGHT -> CardRenderModel.AccentRole.WARM
@@ -55,6 +60,12 @@ fun EntityCard(
         // controls temperature". Cooler accents can come back if/when a heat/cool sub-mode
         // colour pass lands alongside scalar target-temperature support.
         Domain.CLIMATE -> CardRenderModel.AccentRole.WARM
+        // Action entities — scenes get green (one-shot "go" energy), scripts cool, buttons
+        // warm. Picked to keep the deck visually varied so the action tiles don't all look
+        // identical when the user has a mix.
+        Domain.SCENE -> CardRenderModel.AccentRole.GREEN
+        Domain.SCRIPT -> CardRenderModel.AccentRole.COOL
+        Domain.BUTTON -> CardRenderModel.AccentRole.WARM
     }
     // When the entity is unavailable, dim the whole card and overlay a "UNAVAILABLE" label so
     // the user doesn't think the card is just at 0%. The themes themselves don't honour
@@ -70,7 +81,20 @@ fun EntityCard(
     }
     Box(modifier = modifier.then(tapModifier)) {
         val themeAlpha = if (state.isAvailable) 1f else 0.35f
-        if (!state.supportsScalar) {
+        if (state.id.domain.isAction) {
+            // Stateless trigger entity — scene, script, or button. Doesn't fit the
+            // scalar-percent OR the on/off-switch model; renders as ActionCard with one
+            // big ACTIVATE tile. Wheel input is ignored on these in the VM; only tap
+            // (whether on the whole card or on the button) fires the trigger.
+            ActionCard(
+                state = state,
+                accent = resolveAccentColor(accentRole),
+                domainLabel = actionDomainLabel(state.id.domain),
+                showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
+                onFire = onTapToggle,
+                modifier = Modifier.fillMaxSize().alpha(themeAlpha),
+            )
+        } else if (!state.supportsScalar) {
             // On/off-only entity — render the switch variant. We bypass the theme.Card path
             // because the percent slider doesn't make sense here; the switch card uses the
             // same R1 design tokens so it looks consistent across themes.
@@ -135,4 +159,14 @@ private fun domainLabel(glyph: CardRenderModel.Glyph): String = when (glyph) {
     CardRenderModel.Glyph.LOCK -> "LOCK"
     CardRenderModel.Glyph.HUMIDIFIER -> "HUMIDIFIER"
     CardRenderModel.Glyph.CLIMATE -> "CLIMATE"
+}
+
+/** Action-card label — bypasses the Glyph-based mapping above because action entities
+ *  never go through the theme.Card path. */
+private fun actionDomainLabel(domain: Domain): String = when (domain) {
+    Domain.SCENE -> "SCENE"
+    Domain.SCRIPT -> "SCRIPT"
+    Domain.BUTTON -> "BUTTON"
+    // Defensive: action-only path should only ever see action domains.
+    else -> domain.prefix.uppercase()
 }
