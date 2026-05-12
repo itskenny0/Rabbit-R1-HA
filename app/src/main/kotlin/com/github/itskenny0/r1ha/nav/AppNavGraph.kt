@@ -41,8 +41,15 @@ fun AppNavGraph(
                 haRepository = haRepository,
                 settings = settings,
                 wheelInput = wheelInput,
-                onOpenFavoritesPicker = { navController.navigate(Routes.FAVORITES_PICKER) },
-                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                // launchSingleTop = true on every push so a rapid double-tap on the gear or a
+                // double-fire of the swipe gesture can't stack two copies of the same screen
+                // on the back stack (which would otherwise need two back-presses to escape).
+                onOpenFavoritesPicker = {
+                    navController.navigate(Routes.FAVORITES_PICKER) { launchSingleTop = true }
+                },
+                onOpenSettings = {
+                    navController.navigate(Routes.SETTINGS) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.FAVORITES_PICKER) {
@@ -56,8 +63,12 @@ fun AppNavGraph(
             SettingsScreen(
                 settings = settings,
                 tokens = tokens,
-                onOpenThemePicker = { navController.navigate(Routes.THEME_PICKER) },
-                onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                onOpenThemePicker = {
+                    navController.navigate(Routes.THEME_PICKER) { launchSingleTop = true }
+                },
+                onOpenAbout = {
+                    navController.navigate(Routes.ABOUT) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
