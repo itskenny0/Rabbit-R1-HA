@@ -120,7 +120,7 @@ class TokenStore(
         }
     }
 
-    suspend fun load(): Tokens? {
+    suspend fun load(): Tokens? = withContext(Dispatchers.IO) {
         val p = store.data.first()
         // Try DataStore first; if any field is missing, look in the shadow.
         val aCipher = p[K.accessCipher] ?: shadow.getString(S.accessCipher, null)
@@ -134,10 +134,10 @@ class TokenStore(
         )
         if (aCipher == null || aIv == null || rCipher == null || rIv == null || expiresAt == null) {
             R1Log.w("TokenStore.load", "missing fields: aCipher=${aCipher != null} aIv=${aIv != null} rCipher=${rCipher != null} rIv=${rIv != null} expiresAt=${expiresAt != null}")
-            return null
+            return@withContext null
         }
         val key = keystoreProvider.getOrCreateKey(keyAlias)
-        return try {
+        try {
             Tokens(
                 accessToken = decrypt(key, aCipher, aIv),
                 refreshToken = decrypt(key, rCipher, rIv),
@@ -150,7 +150,9 @@ class TokenStore(
         }
     }
 
-    suspend fun clear() {
+    suspend fun clear(): Unit = withContext(Dispatchers.IO) {
+        // commit() blocks on disk I/O; run on the IO dispatcher to avoid jank when sign-out is
+        // triggered from a Compose handler on the main thread.
         shadow.edit().clear().commit()
         store.edit { it.clear() }
     }
