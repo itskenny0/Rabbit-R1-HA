@@ -195,12 +195,22 @@ fun CardStackScreen(
                 )
             }
 
-            // Position dots (centre) — honour the user's showPositionDots toggle
+            // Position dots (centre) — honour the user's showPositionDots toggle. For very
+            // long favourites lists, fall back to "N/M" text since a row of 100 dots would
+            // overflow the chrome row.
             if (state.cards.size > 1 && appSettings.ui.showPositionDots) {
-                PositionDots(
-                    count = state.cards.size,
-                    current = state.currentIndex,
-                )
+                if (state.cards.size > 15) {
+                    Text(
+                        text = "${state.currentIndex + 1}/${state.cards.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                    )
+                } else {
+                    PositionDots(
+                        count = state.cards.size,
+                        current = state.currentIndex,
+                    )
+                }
             } else {
                 Spacer(Modifier.size(44.dp))
             }
