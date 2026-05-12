@@ -48,9 +48,10 @@ internal val sharedDarkBaseline: ColorScheme = darkColorScheme(
 )
 
 /**
- * Spring-animated 0..1 fraction for the slider. Tuned for SNAPPY response with a visible
- * overshoot — high stiffness so the fill keeps up with the wheel, low damping so each detent
- * lands with a small bounce that reads as "physical knob clicked".
+ * Spring-animated 0..1 fraction for the slider. Damping is just under critical (0.45) and
+ * stiffness is in the medium band so the overshoot is actually visible — the fill bounces ~5%
+ * past the new target and settles over ~250 ms. StiffnessHigh + LowBouncy from earlier was so
+ * stiff that the bounce settled in one frame and effectively disappeared.
  */
 @Composable
 internal fun rememberSliderFraction(percent: Int): Float {
@@ -58,8 +59,8 @@ internal fun rememberSliderFraction(percent: Int): Float {
     val animated by androidx.compose.animation.core.animateFloatAsState(
         targetValue = target,
         animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
-            stiffness = androidx.compose.animation.core.Spring.StiffnessHigh,
+            dampingRatio = 0.45f,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
             visibilityThreshold = 0.001f,
         ),
         label = "sliderFraction",

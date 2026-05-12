@@ -12,12 +12,12 @@ import com.github.itskenny0.r1ha.core.ha.ServiceCall
 import com.github.itskenny0.r1ha.core.input.WheelEvent
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
+import com.github.itskenny0.r1ha.core.prefs.WheelSettings
 import com.github.itskenny0.r1ha.core.util.R1Log
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -64,6 +64,13 @@ class CardStackViewModel(
     private val _state = MutableStateFlow(CardStackUiState())
     val state: StateFlow<CardStackUiState> = _state
 
+    /** Snapshot of WheelSettings refreshed by the settings observer. We hold this in a
+     *  separate field instead of calling settings.first() per wheel event — even though a
+     *  hot Flow's first() is fast, doing it 50 times/sec inside the wheel collector lets
+     *  events queue + drop in the SharedFlow buffer, manifesting as the readout jumping in
+     *  irregular chunks rather than tracking the wheel. */
+    @Volatile private var cachedWheel: WheelSettings = WheelSettings()
+
     /** Recent wheel-event timestamps; used to compute rate for acceleration. */
     private val wheelTimestamps = ArrayDeque<Long>()
     private val rateWindowMillis = 250L
@@ -93,6 +100,13 @@ class CardStackViewModel(
 
     init {
         observeFavorites()
+        // Keep a non-suspend snapshot of WheelSettings so onWheel() never has to hit the
+        // settings Flow on the hot path.
+        settings.settings
+            .map { it.wheel }
+            .distinctUntilChanged()
+            .onEach { cachedWheel = it }
+            .launchIn(viewModelScope)
         // Wheel events are NOT collected here. They're collected by CardStackScreen only
         // while it is in composition, so spinning the wheel from any other screen does not
         // silently change the active card's brightness.
@@ -141,11 +155,11 @@ class CardStackViewModel(
             .launchIn(viewModelScope)
     }
 
-    /** Called from CardStackScreen when a wheel event arrives. Public so the screen can scope
-     *  collection to its own lifecycle. */
-    suspend fun onWheel(event: WheelEvent) {
-        val appSettings = settings.settings.first()
-        val wheel = appSettings.wheel
+    /** Called from CardStackScreen when a wheel event arrives. Synchronous on the hot path —
+     *  reads only cached state — so that 50 Hz wheel input doesn't back up in the SharedFlow
+     *  buffer. The actual HA call is dispatched via the debouncer in its own coroutine. */
+    fun onWheel(event: WheelEvent) {
+        val wheel = cachedWheel
         val activeState = _state.value.activeState ?: return
         // Ignore wheel on unavailable entities: spinning would create a runaway optimistic
         // override that never reconciles because HA never responds with a state change.
@@ -154,14 +168,12 @@ class CardStackViewModel(
         val sign = WheelInput.applyDirection(event.direction, wheel.invertDirection)
 
         // ── Switch (on/off only) entities: wheel sets absolute state ──────────────────
-        // UP → ON (100), DOWN → OFF (0). The optimistic value plays double-duty as the
-        // switch-card's slider position too — 0 = bottom (off), 100 = top (on).
         if (!activeState.supportsScalar) {
             val newPct = if (sign > 0) 100 else 0
             _state.value = _state.value.copy(
                 optimisticPercents = _state.value.optimisticPercents + (activeState.id to newPct)
             )
-            debounced.submit(activeState.id, newPct)
+            viewModelScope.launch { debounced.submit(activeState.id, newPct) }
             return
         }
 
@@ -185,8 +197,9 @@ class CardStackViewModel(
             optimisticPercents = _state.value.optimisticPercents + (activeState.id to newPct)
         )
 
-        // Submit debounced call (trails by debounceMillis)
-        debounced.submit(activeState.id, newPct)
+        // Submit debounced call (trails by debounceMillis). Suspend-free hot path: we launch
+        // the submit so onWheel can return immediately and the next event isn't blocked.
+        viewModelScope.launch { debounced.submit(activeState.id, newPct) }
     }
 
     /** Sync the VM's active-card index with the pager's settled page. The wheel/tap handlers

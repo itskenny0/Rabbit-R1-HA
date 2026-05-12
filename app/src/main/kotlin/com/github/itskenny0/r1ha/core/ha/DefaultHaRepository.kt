@@ -300,19 +300,25 @@ class DefaultHaRepository(
      */
     private fun supportsScalar(domain: Domain, attrs: kotlinx.serialization.json.JsonObject): Boolean = when (domain) {
         Domain.LIGHT -> {
-            // HA's `color_mode` is "onoff" for switches and brightness-less lights; anything
-            // else means at least brightness control. Some integrations advertise via
-            // `supported_color_modes` — accept either signal.
-            val mode = attrs["color_mode"].asString()
+            // `supported_color_modes` is the AUTHORITATIVE capability for a light — it lists
+            // the modes the integration can drive. Non-dimmable lights have `["onoff"]` only;
+            // anything else means at least brightness control. We trust it absolutely when
+            // present (don't fall through to brightness-attribute checks, which lit up false
+            // positives on non-dim lights when they were on with brightness=255).
             val supportedModes = (attrs["supported_color_modes"] as? kotlinx.serialization.json.JsonArray)
                 ?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
-            when {
-                mode != null && mode != "onoff" -> true
-                supportedModes.any { it != "onoff" } -> true
-                // No color_mode info yet (entity off, never reported). Fall back to brightness
-                // attribute presence as a hint that the platform supports it.
-                attrs["brightness"] != null -> true
-                else -> false
+            if (supportedModes.isNotEmpty()) {
+                supportedModes.any { it != "onoff" }
+            } else {
+                // Older integrations don't expose supported_color_modes. Fall back to
+                // color_mode then brightness as best-effort hints.
+                val mode = attrs["color_mode"].asString()
+                when {
+                    mode == "onoff" -> false
+                    mode != null -> true
+                    attrs["brightness"] != null -> true
+                    else -> false
+                }
             }
         }
         // FanEntityFeature.SET_SPEED = bit 0 of supported_features.

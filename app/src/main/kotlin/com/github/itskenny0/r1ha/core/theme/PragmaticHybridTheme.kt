@@ -1,12 +1,5 @@
 package com.github.itskenny0.r1ha.core.theme
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,19 +17,11 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.ThemeId
 
@@ -158,78 +143,19 @@ internal fun BigReadout(
     showPercentSuffix: Boolean,
     accent: Color,
 ) {
-    // Track "is the wheel actively churning". Each percent change resets a 250 ms timer.
-    var isWheelActive by remember { mutableStateOf(false) }
-    LaunchedEffect(percent) {
-        isWheelActive = true
-        delay(250)
-        isWheelActive = false
-    }
-
-    val jitterAmp by animateFloatAsState(
-        targetValue = if (isWheelActive) 1.2f else 0f,
-        animationSpec = tween(120),
-        label = "jitter-amp",
-    )
-    val aberrationAmp by animateFloatAsState(
-        targetValue = if (isWheelActive) 1.6f else 0f,
-        animationSpec = tween(140),
-        label = "aberration-amp",
-    )
-
-    // Phase oscillator only when needed — InfiniteTransition is suspended while jitterAmp is
-    // ~0 to avoid the per-frame recomposition cost when the wheel is idle.
-    val infTrans = rememberInfiniteTransition(label = "jitter")
-    val phase by infTrans.animateFloat(
-        initialValue = -1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 100, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "jitter-phase",
-    )
-    val yOffsetPx = phase * jitterAmp
-
-    val text = percent.coerceIn(0, 100).toString()
-
+    // Plain, snappy readout. Jitter and chromatic aberration were obscuring the live value
+    // and chewing recomposition budget; the slider, the spring on the slider, and the
+    // haptic on each detent already telegraph the wheel motion. We can layer subtler
+    // effects back in once the core feel is solid.
     Row(
         verticalAlignment = Alignment.Bottom,
         modifier = Modifier.wrapContentSize(),
     ) {
-        Box {
-            // Ghost layers only when aberration is non-trivial — saves the double Text draw
-            // cost when the wheel is idle.
-            if (aberrationAmp > 0.25f) {
-                val ghostAlpha = (aberrationAmp / 1.6f).coerceIn(0f, 1f) * 0.55f
-                Text(
-                    text = text,
-                    style = R1.numeralXl,
-                    color = Color(0xFFFF3333),
-                    modifier = Modifier.graphicsLayer {
-                        translationX = -aberrationAmp
-                        translationY = yOffsetPx
-                        alpha = ghostAlpha
-                    },
-                )
-                Text(
-                    text = text,
-                    style = R1.numeralXl,
-                    color = Color(0xFF33FFFF),
-                    modifier = Modifier.graphicsLayer {
-                        translationX = aberrationAmp
-                        translationY = yOffsetPx
-                        alpha = ghostAlpha
-                    },
-                )
-            }
-            Text(
-                text = text,
-                style = R1.numeralXl,
-                color = R1.Ink,
-                modifier = Modifier.graphicsLayer { translationY = yOffsetPx },
-            )
-        }
+        Text(
+            text = percent.coerceIn(0, 100).toString(),
+            style = R1.numeralXl,
+            color = R1.Ink,
+        )
         if (showPercentSuffix) {
             Spacer(Modifier.width(6.dp))
             Text(

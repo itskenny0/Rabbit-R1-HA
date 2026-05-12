@@ -42,8 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -83,20 +81,23 @@ fun CardStackScreen(
         wheelInput.events.collect { event -> vm.onWheel(event) }
     }
 
-    val haptic = LocalHapticFeedback.current
+    val view = LocalView.current
     // Honour the user's "Haptic feedback" toggle and throttle to ~20 Hz so a fast wheel spin
     // doesn't fire a continuous unpleasant buzz from the haptic motor. Keying on both id and
     // percent so swiping to a new card with the same percent still fires a tactile click.
+    // We bypass Compose's HapticFeedback (which is gated to a small set of feedback types on
+    // some devices) and go straight to View.performHapticFeedback with CLOCK_TICK — the same
+    // constant the system uses for picker wheels and reliably produces a tick on the R1.
     val lastHapticMs = remember { longArrayOf(0L) }
     LaunchedEffect(state.activeState?.id, state.activeState?.percent) {
         if (state.activeState == null || !appSettings.behavior.haptics) return@LaunchedEffect
         val now = System.currentTimeMillis()
         if (now - lastHapticMs[0] < 50L) return@LaunchedEffect
         lastHapticMs[0] = now
-        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        @Suppress("DEPRECATION")  // CLOCK_TICK is available on all our target SDKs (33+)
+        view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
     }
 
-    val view = LocalView.current
     DisposableEffect(appSettings.behavior.keepScreenOn) {
         view.keepScreenOn = appSettings.behavior.keepScreenOn
         onDispose { view.keepScreenOn = false }
@@ -164,28 +165,39 @@ private fun VerticalCardPager(
                 (pagerState.currentPage - page) +
                     pagerState.currentPageOffsetFraction
             )
-            EntityCard(
-                state = cards[page],
-                onTapToggle = { if (appSettings.behavior.tapToToggle) vm.tapToggle() },
-                onSetOn = { on -> vm.setSwitchOn(on) },
+            // ~85% viewport — pad the card inward so the bg shows around it. Combined with a
+            // rounded corner shape and the shadow elevation, the card looks like a free-
+            // floating panel rather than a full-screen surface.
+            val cardShape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        val abs = kotlin.math.abs(pageOffset)
-                        // The active page is z=1, neighbours are z=0 — so the active card
-                        // casts a shadow ONTO the incoming card during the drag.
-                        shadowElevation = if (abs < 0.5f) 24.dp.toPx() else 0f
-                        // Slight scale-down on the incoming card so the active one feels
-                        // forward in the stack.
-                        val scale = 1f - (abs * 0.04f).coerceIn(0f, 0.04f)
-                        scaleX = scale
-                        scaleY = scale
-                        // The shadow needs a non-zero shape clip; otherwise Compose draws no
-                        // shadow at all. A small corner radius does it.
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)
-                        clip = false
-                    },
-            )
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                EntityCard(
+                    state = cards[page],
+                    onTapToggle = { if (appSettings.behavior.tapToToggle) vm.tapToggle() },
+                    onSetOn = { on -> vm.setSwitchOn(on) },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val abs = kotlin.math.abs(pageOffset)
+                            // The active page (offset ≈ 0) casts a strong shadow that fades
+                            // to nothing as the page slides off screen.
+                            shadowElevation = (24.dp.toPx() * (1f - abs).coerceIn(0f, 1f))
+                            // Slight scale-down on the incoming card so the active one feels
+                            // forward in the stack.
+                            val scale = 1f - (abs * 0.04f).coerceIn(0f, 0.04f)
+                            scaleX = scale
+                            scaleY = scale
+                            // Clip = true with a rounded shape applies the radius AND makes
+                            // the shadow follow the contour.
+                            shape = cardShape
+                            clip = true
+                        },
+                )
+            }
         }
 
         // ── Chevron hints ─────────────────────────────────────────────────────────────
