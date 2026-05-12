@@ -222,6 +222,36 @@ fun RenameDialog(
                 )
             }
 
+            // ── DETAILS — full HA attribute payload, collapsible. Useful for diagnosing
+            // MQTT payloads and verifying that specific-field parsers pick up the right
+            // values. Defaults to collapsed so it doesn't dominate the dialog; tap the
+            // header to expand. The entity state + last_changed sit at the top so the
+            // most-useful info is one tap away even without scrolling the attribute list.
+            var detailsOpen by remember { mutableStateOf(false) }
+            SectionHeader("DETAILS")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (detailsOpen) "▼ TAP TO COLLAPSE" else "▶ TAP TO EXPAND",
+                    style = R1.body,
+                    color = R1.InkSoft,
+                    modifier = Modifier
+                        .r1Pressable({ detailsOpen = !detailsOpen })
+                        .padding(vertical = 4.dp),
+                )
+            }
+            if (detailsOpen) {
+                Spacer(Modifier.height(6.dp))
+                DetailRow(label = "state", value = entity.rawState ?: "—")
+                DetailRow(label = "last_changed", value = entity.lastChanged.toString())
+                entity.attributesJson?.let { attrs ->
+                    attrs.entries
+                        .sortedBy { it.key }
+                        .forEach { (k, v) ->
+                            DetailRow(label = k, value = jsonElementToShortString(v))
+                        }
+                }
+            }
+
             // ── GESTURE ──────────────────────────────────────────────────────────────
             SectionHeader("GESTURE")
             Text(
@@ -330,6 +360,45 @@ private fun androidx.compose.foundation.layout.RowScope.TristateCell(
 @Composable
 private fun CellDivider() {
     Box(modifier = Modifier.width(1.dp).height(34.dp).background(R1.Bg))
+}
+
+/**
+ * Single attribute key/value row in the customize-dialog DETAILS section. Monospace
+ * for both columns (we're showing JSON-shaped data), with the value soft-wrapped so
+ * long arrays/dicts don't push the dialog wider than the screen.
+ */
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(
+            text = label,
+            style = R1.labelMicro,
+            color = R1.InkMuted,
+        )
+        Text(
+            text = value,
+            style = R1.body.copy(fontFamily = FontFamily.Monospace),
+            color = R1.Ink,
+            maxLines = 4,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * Compact one-line representation of a JsonElement. Primitives unwrap to their content
+ * (strings without surrounding quotes for readability), arrays render as comma-joined
+ * elements with brackets, objects collapse to their key count to keep the dialog
+ * tractable on big payloads. The full structured form is overkill for at-a-glance
+ * diagnostics; users who need the full thing can `adb logcat` the listAll output.
+ */
+private fun jsonElementToShortString(el: kotlinx.serialization.json.JsonElement): String = when (el) {
+    is kotlinx.serialization.json.JsonNull -> "null"
+    is kotlinx.serialization.json.JsonPrimitive -> el.content
+    is kotlinx.serialization.json.JsonArray -> el.joinToString(prefix = "[", postfix = "]") {
+        jsonElementToShortString(it)
+    }
+    is kotlinx.serialization.json.JsonObject -> "{${el.size} keys}"
 }
 
 /** Horizontal-scrolling swatch row for the per-card accent colour. First chip resets to

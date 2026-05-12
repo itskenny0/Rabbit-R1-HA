@@ -14,6 +14,15 @@ interface HaRepository {
      * optimistic UI override; the repository already surfaces a user-visible toast.
      */
     val callFailures: SharedFlow<EntityId>
+
+    /**
+     * Wall-clock millis when the next reconnect attempt is scheduled to fire, or null
+     * if no backoff is pending (we're either connected or actively connecting). UI
+     * reads this to show "Reconnecting in Xs…" countdown text on the stalled-loading
+     * empty state, which is much friendlier than an indefinite spinner during a long
+     * backoff window.
+     */
+    val reconnectNextAttemptAtMillis: StateFlow<Long?>
     /** Fire a service call. Coalesces back-to-back calls per entity via internal debounce. */
     suspend fun call(call: ServiceCall): Result<Unit>
     /** One-shot REST GET /api/states equivalent, used by FavoritesPicker. */

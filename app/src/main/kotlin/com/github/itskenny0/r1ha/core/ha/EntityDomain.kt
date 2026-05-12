@@ -62,6 +62,20 @@ enum class Domain(val prefix: String) {
      * cover (`open_valve`, `close_valve`, `set_valve_position`, `stop_valve`).
      */
     VALVE("valve"),
+    /**
+     * Robot vacuums. State is one of cleaning / docked / returning / paused / idle /
+     * error. Services: vacuum.start, vacuum.stop, vacuum.pause, vacuum.return_to_base.
+     * Rendered as a switch card with the state word visible — tap toggles
+     * start ↔ return-to-base which is the natural "send the robot home" / "send it
+     * out" intent users have on a card.
+     */
+    VACUUM("vacuum"),
+    /**
+     * Water heaters — same scalar shape as climate: target_temperature within
+     * min_temp..max_temp. Services: water_heater.set_temperature, water_heater.turn_on,
+     * water_heater.turn_off. Reuses the climate dispatch path.
+     */
+    WATER_HEATER("water_heater"),
     ;
 
     /** Action-only domains — UI renders them as fire-and-forget ActionCard tiles. */

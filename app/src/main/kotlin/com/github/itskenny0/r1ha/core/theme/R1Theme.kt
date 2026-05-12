@@ -44,6 +44,13 @@ data class CardRenderModel(
      * tap-to-cycle affordance on the readout. Non-light cards ignore.
      */
     val lightWheelMode: com.github.itskenny0.r1ha.core.ha.LightWheelMode? = null,
+    /** Light-card-only: currently-active effect name from HA (`effect` attribute). Null
+     *  when the bulb doesn't support effects or has none active. */
+    val lightEffect: String? = null,
+    /** Light-card-only: how many effects the bulb has available. Used by themes to
+     *  decide whether to show the effect chip — single-effect-list lights still get
+     *  the chip so the user can toggle the effect on/off. */
+    val lightEffectListSize: Int = 0,
 ) {
     enum class Glyph {
         LIGHT, FAN, COVER, MEDIA_PLAYER,
@@ -55,6 +62,8 @@ data class CardRenderModel(
         CLIMATE,
         NUMBER,
         VALVE,
+        VACUUM,
+        WATER_HEATER,
     }
     enum class AccentRole { WARM, COOL, GREEN, NEUTRAL }
 }

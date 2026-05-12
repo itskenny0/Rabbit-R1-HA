@@ -28,11 +28,12 @@ enum class PickerFilter(val label: String, val matches: (Domain) -> Boolean) {
     LIGHTS("LIGHTS", { it == Domain.LIGHT }),
     SWITCHES("SWITCHES", { it == Domain.SWITCH || it == Domain.INPUT_BOOLEAN || it == Domain.AUTOMATION }),
     COVERS("COVERS", { it == Domain.COVER }),
-    CLIMATE("CLIMATE", { it == Domain.CLIMATE || it == Domain.HUMIDIFIER || it == Domain.FAN }),
+    CLIMATE("CLIMATE", { it == Domain.CLIMATE || it == Domain.HUMIDIFIER || it == Domain.FAN || it == Domain.WATER_HEATER }),
     LOCKS("LOCKS", { it == Domain.LOCK }),
     MEDIA("MEDIA", { it == Domain.MEDIA_PLAYER }),
     SCENES("SCENES", { it.isAction }),
     SENSORS("SENSORS", { it.isSensor }),
+    VACUUMS("VACUUMS", { it == Domain.VACUUM }),
 }
 
 class FavoritesPickerViewModel(

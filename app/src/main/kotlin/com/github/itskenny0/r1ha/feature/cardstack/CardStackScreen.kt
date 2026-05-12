@@ -203,6 +203,7 @@ fun CardStackScreen(
         com.github.itskenny0.r1ha.core.theme.LocalHaRepository provides haRepository,
         com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides appSettings.entityOverrides,
         com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightMode provides { id -> vm.cycleLightWheelMode(id) },
+        com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightEffect provides { id -> vm.cycleLightEffect(id) },
     ) {
     Box(modifier = Modifier.fillMaxSize().background(R1.Bg)) {
         // displayedCards = cards with optimistic overrides applied per entity. Binding the
@@ -221,10 +222,13 @@ fun CardStackScreen(
                 lightWheelModes = state.lightWheelMode,
             )
         } else {
+            val reconnectAt by haRepository.reconnectNextAttemptAtMillis
+                .collectAsStateWithLifecycle()
             EmptyState(
                 loading = state.favouritesCount > 0,
                 favouritesCount = state.favouritesCount,
                 connection = connection,
+                reconnectAt = reconnectAt,
                 onOpenFavoritesPicker = onOpenFavoritesPicker,
                 onOpenSettings = onOpenSettings,
                 onRetry = { haRepository.reconnectNow() },
@@ -406,6 +410,7 @@ private fun EmptyState(
     loading: Boolean,
     favouritesCount: Int,
     connection: ConnectionState,
+    reconnectAt: Long?,
     onOpenFavoritesPicker: () -> Unit,
     onOpenSettings: () -> Unit,
     onRetry: () -> Unit,
@@ -421,6 +426,25 @@ private fun EmptyState(
             kotlinx.coroutines.delay(STALLED_AFTER_MS)
             stalled.value = true
         }
+    }
+    // Reconnect countdown — when the repo has a backoff in flight, tick a once-per-second
+    // recomputed "RECONNECTING IN Xs…" so the user can see the indefinite-spinner state is
+    // actually doing something. We only need a coarse 1-Hz refresh; the actual reconnect
+    // fires from the repo's coroutine, not from this tick. Driven by a wall-clock-now
+    // mutableState that the LaunchedEffect rewrites every second while there's a future
+    // target — cheap to recompose on, and goes silent once reconnectAt clears.
+    val nowMs = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(System.currentTimeMillis()) }
+    androidx.compose.runtime.LaunchedEffect(reconnectAt) {
+        if (reconnectAt == null) return@LaunchedEffect
+        while (true) {
+            nowMs.value = System.currentTimeMillis()
+            // 1 Hz is more than enough fidelity for human-readable seconds; faster ticks
+            // just burn frames without changing the rendered string.
+            kotlinx.coroutines.delay(1_000)
+        }
+    }
+    val countdownSeconds = reconnectAt?.let {
+        ((it - nowMs.value) / 1000L).coerceAtLeast(0L)
     }
 
     Column(
@@ -454,6 +478,20 @@ private fun EmptyState(
             style = R1.body,
             color = R1.InkMuted,
         )
+        // Countdown chip — only meaningful while we're loading AND there's a backoff
+        // scheduled. (Without the loading gate, a transient reconnectAt during normal use
+        // would briefly leak through here.) Friendlier than the bare spinner: the user
+        // can see something will happen in 14 seconds, not just "loading forever". We
+        // suppress it once seconds reaches zero — at that point the repo has fired and
+        // is actively reconnecting; the spinner alone is correct.
+        if (loading && countdownSeconds != null && countdownSeconds > 0) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "RECONNECTING IN ${countdownSeconds}s…",
+                style = R1.labelMicro,
+                color = R1.InkSoft,
+            )
+        }
         Spacer(Modifier.height(28.dp))
         R1Button(
             text = if (loading) "EDIT FAVOURITES" else "ADD FAVOURITES",

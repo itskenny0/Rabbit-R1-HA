@@ -57,6 +57,8 @@ object PragmaticHybridTheme : R1Theme {
         CardRenderModel.Glyph.CLIMATE -> "CLIMATE"
         CardRenderModel.Glyph.NUMBER -> "NUMBER"
         CardRenderModel.Glyph.VALVE -> "VALVE"
+        CardRenderModel.Glyph.VACUUM -> "VACUUM"
+        CardRenderModel.Glyph.WATER_HEATER -> "WATER HEATER"
     }
 
     @Composable
@@ -101,6 +103,17 @@ object PragmaticHybridTheme : R1Theme {
                     lightEntityId = if (model.lightWheelMode != null) com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText) else null,
                     lightWheelMode = model.lightWheelMode,
                 )
+                // Light effect chip — only on lights that report a non-empty effect_list.
+                // Tap → cycles through (None → first → … → last → None). Hidden on bulbs
+                // that don't expose effects so it doesn't clutter the card.
+                if (model.lightEffectListSize > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    EffectChip(
+                        entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
+                        currentEffect = model.lightEffect,
+                        accent = accent,
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 if (ui.showOnOffPill) OnOffPill(isOn = model.isOn, accent = accent)
             }
@@ -320,6 +333,37 @@ private fun ThumbCapsule(fraction: Float, accent: Color) {
                 .height(thumbH)
                 .clip(RoundedCornerShape(3.dp))
                 .background(accent),
+        )
+    }
+}
+
+/**
+ * Tap-to-cycle chip for light effects. Shows "EFFECT: NAME" when an effect is active,
+ * or "EFFECT: NONE — TAP TO CYCLE" when none is set. Tap fires the LocalOnCycleLightEffect
+ * callback which the card-stack screen wires to vm.cycleLightEffect. Stays inert when
+ * the callback is unavailable (e.g. previews where there's no VM in scope).
+ */
+@Composable
+private fun EffectChip(
+    entityId: com.github.itskenny0.r1ha.core.ha.EntityId,
+    currentEffect: String?,
+    accent: Color,
+) {
+    val onCycle = com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightEffect.current
+    val active = !currentEffect.isNullOrBlank()
+    Box(
+        modifier = Modifier
+            .clip(R1.ShapeS)
+            .background(if (active) accent else R1.SurfaceMuted)
+            .let { m ->
+                if (onCycle != null) m.r1Pressable(onClick = { onCycle(entityId) }) else m
+            }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(
+            text = if (active) "FX · ${currentEffect!!.uppercase()}" else "FX · NONE",
+            style = R1.labelMicro,
+            color = if (active) R1.Bg else R1.InkSoft,
         )
     }
 }

@@ -73,6 +73,32 @@ data class EntityState(
      * in a colour mode, even though it might support one.
      */
     val hue: Double? = null,
+    /**
+     * Native step granularity for the entity's settable scalar. `number` / `input_number`
+     * report this directly (`step` attribute, e.g. 0.1 / 1 / 5). We carry it through so
+     * the VM can snap wheel-derived values to multiples of step before the service call —
+     * sending "42.7341" to an entity whose step is 1 just gets silently rounded by HA
+     * anyway, but doing the rounding ourselves also keeps the displayed value honest.
+     */
+    val step: Double? = null,
+    /**
+     * Light effect list — HA's `effect_list` attribute. Empty when the bulb doesn't
+     * support effects (most plain RGB bulbs). When non-empty, the card surfaces a small
+     * effect-cycle chip that lets the user pick from the available effects.
+     */
+    val effectList: List<String> = emptyList(),
+    /** Currently-active effect from `effect`. Used by the card to highlight which chip
+     *  in the cycle is active. */
+    val effect: String? = null,
+    /**
+     * Full raw attributes JSON from HA, kept so the customize dialog's DETAILS section
+     * can list every attribute the entity reports — useful for diagnosing weird MQTT
+     * payloads, exploring undocumented integrations, and verifying that the app's
+     * specific-field parsers (color_temp_kelvin, supported_color_modes, etc.) are
+     * picking up the right values. Null when we constructed this EntityState without
+     * a source JSON object (e.g. in tests).
+     */
+    val attributesJson: kotlinx.serialization.json.JsonObject? = null,
 ) {
     companion object {
         fun normaliseLightBrightness(raw: Int): Int = ((raw.coerceIn(0, 255)) * 100.0 / 255.0).roundToInt()

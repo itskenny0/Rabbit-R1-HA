@@ -135,11 +135,13 @@ class CardStackViewModel(
             // range using minRaw/maxRaw. Falls through to setPercent if the range is
             // missing (which shouldn't happen because supportsScalar=true requires it,
             // but defensive code in case the cached state is stale).
-            entityState?.id?.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE &&
+            (entityState?.id?.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE ||
+                entityState?.id?.domain == com.github.itskenny0.r1ha.core.ha.Domain.WATER_HEATER) &&
                 entityState.minRaw != null && entityState.maxRaw != null -> {
                 // Snap to the nearest 0.5° so the wheel's percent-step (~1.67% per detent
                 // for a 30° span) doesn't accumulate floating-point drift; the user gets
                 // reliable half-degree increments matching thermostat conventions.
+                // water_heater shares the same set_temperature service signature.
                 val raw = entityState.minRaw + (pct / 100.0) * (entityState.maxRaw - entityState.minRaw)
                 val temp = Math.round(raw * 2.0) / 2.0
                 R1Log.i("CardStack.debounced", "sending setTemperature($entityId, ${"%.1f".format(temp)})")
@@ -150,9 +152,16 @@ class CardStackViewModel(
             entityState != null && entityState.minRaw != null && entityState.maxRaw != null &&
                 (entityState.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.NUMBER ||
                     entityState.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.INPUT_NUMBER) -> {
-                val value = entityState.minRaw + (pct / 100.0) * (entityState.maxRaw - entityState.minRaw)
-                R1Log.i("CardStack.debounced", "sending setNumberValue($entityId, ${"%.2f".format(value)})")
-                ServiceCall.setNumberValue(entityId, value)
+                val raw = entityState.minRaw + (pct / 100.0) * (entityState.maxRaw - entityState.minRaw)
+                // Snap to the entity's native `step` so a value like 42.7341 lands on a
+                // clean multiple (42.7 if step=0.1, 43 if step=1, 45 if step=5). HA
+                // would round anyway on receipt, but doing it ourselves keeps the
+                // displayed value honest and the optimistic state coherent.
+                val step = entityState.step?.takeIf { it > 0.0 }
+                val snapped = if (step != null) Math.round(raw / step) * step else raw
+                val clamped = snapped.coerceIn(entityState.minRaw, entityState.maxRaw)
+                R1Log.i("CardStack.debounced", "sending setNumberValue($entityId, ${"%.3f".format(clamped)} step=$step)")
+                ServiceCall.setNumberValue(entityId, clamped)
             }
             // Light wheel-mode dispatch — when the user has cycled into CT or HUE mode
             // for a light, the wheel's 0..100 is reinterpreted into kelvin or degrees
@@ -356,7 +365,8 @@ class CardStackViewModel(
         // entity's min/max range. With a typical 5..35°C range (30° span), 0.5° ≈ 1.67%
         // which rounds to 2% — and combined with the snap-to-0.5° at service-call time
         // the wheel feels exactly like a thermostat dial.
-        val step = if (activeState.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE &&
+        val step = if ((activeState.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE ||
+                activeState.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.WATER_HEATER) &&
             activeState.minRaw != null && activeState.maxRaw != null) {
             val range = activeState.maxRaw - activeState.minRaw
             if (range > 0) {
@@ -405,6 +415,24 @@ class CardStackViewModel(
      * dimmable bulbs) become a no-op. Called from the BigReadout-suffix tap on light
      * cards.
      */
+    /**
+     * Cycle the light's effect through its effect_list. None → first effect → second →
+     * … → None (so the user can wrap back to no-effect by stepping past the end). Sends
+     * `light.turn_on` with the new effect; HA accepts "None" as the no-effect sentinel.
+     */
+    fun cycleLightEffect(entityId: EntityId) {
+        val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
+        if (entity.id.domain != Domain.LIGHT || entity.effectList.isEmpty()) return
+        // Sequence with null at both ends so cycling wraps cleanly: null → first → ... → last → null.
+        val sequence: List<String?> = listOf(null) + entity.effectList
+        val currentIdx = sequence.indexOf(entity.effect).let { if (it == -1) 0 else it }
+        val next = sequence[(currentIdx + 1) % sequence.size]
+        R1Log.i("CardStack.cycleEffect", "$entityId: ${entity.effect ?: "none"} → ${next ?: "none"}")
+        viewModelScope.launch {
+            haRepository.call(ServiceCall.setLightEffect(entityId, next))
+        }
+    }
+
     fun cycleLightWheelMode(entityId: EntityId) {
         val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
         if (entity.id.domain != Domain.LIGHT) return

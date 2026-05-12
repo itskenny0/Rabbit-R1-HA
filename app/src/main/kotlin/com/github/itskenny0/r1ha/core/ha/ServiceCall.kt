@@ -61,9 +61,16 @@ data class ServiceCall(
                 // (no range / TARGET_TEMPERATURE not supported), so on/off is correct.
                 // The proper scalar path uses [setTemperature] with the converted Celsius/
                 // Fahrenheit value computed at the VM layer.
-                Domain.CLIMATE -> ServiceCall(
+                Domain.CLIMATE, Domain.WATER_HEATER -> ServiceCall(
                     target,
                     if (clamped == 0) "turn_off" else "turn_on",
+                    JsonObject(emptyMap()),
+                )
+                // Vacuums shouldn't reach the percent path — they're switch cards. If
+                // they do (defensive), start when non-zero, return-to-base on zero.
+                Domain.VACUUM -> ServiceCall(
+                    target,
+                    if (clamped == 0) "return_to_base" else "start",
                     JsonObject(emptyMap()),
                 )
                 // Action-only domains shouldn't reach setPercent — the wheel is ignored on
@@ -144,6 +151,20 @@ data class ServiceCall(
             )
         }
 
+        /**
+         * Light effect setter — `light.turn_on` with `effect: "<name>"`. Pass null /
+         * empty to clear the effect (HA accepts the literal string "None" for "no
+         * effect"). The bulb stays in whatever mode it was in; only the effect changes.
+         */
+        fun setLightEffect(target: EntityId, effect: String?): ServiceCall =
+            ServiceCall(
+                target,
+                "turn_on",
+                buildJsonObject {
+                    put("effect", JsonPrimitive(effect.takeIf { !it.isNullOrBlank() } ?: "None"))
+                },
+            )
+
         fun setNumberValue(target: EntityId, value: Double): ServiceCall {
             val rounded = (Math.round(value * 100.0) / 100.0)
             return ServiceCall(
@@ -167,12 +188,20 @@ data class ServiceCall(
             Domain.VALVE -> ServiceCall(target, if (isOn) "close_valve" else "open_valve", JsonObject(emptyMap()))
             Domain.MEDIA_PLAYER -> ServiceCall(target, "media_play_pause", JsonObject(emptyMap()))
             // Generic on/off — switch.foo, input_boolean.foo, automation.foo, humidifier.foo,
-            // climate.foo all use the same turn_on/turn_off pair. For climate this restores
-            // the previous HVAC mode (HA remembers it across off/on cycles).
+            // climate.foo, water_heater.foo all use the same turn_on/turn_off pair. For
+            // climate this restores the previous HVAC mode (HA remembers it across cycles).
             Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION,
-            Domain.HUMIDIFIER, Domain.CLIMATE -> ServiceCall(
+            Domain.HUMIDIFIER, Domain.CLIMATE, Domain.WATER_HEATER -> ServiceCall(
                 target,
                 if (isOn) "turn_off" else "turn_on",
+                JsonObject(emptyMap()),
+            )
+            // Vacuum: tap when running sends it back to base; tap when docked starts it.
+            // Pause/stop need a dedicated UI affordance; for the simple tap-toggle this
+            // is the natural "send the robot somewhere" intent.
+            Domain.VACUUM -> ServiceCall(
+                target,
+                if (isOn) "return_to_base" else "start",
                 JsonObject(emptyMap()),
             )
             // Lock entity — `isOn` here means "unlocked". Tap to flip: lock if unlocked,
@@ -211,10 +240,15 @@ data class ServiceCall(
          * give us deterministic behaviour from the wheel.
          */
         fun setSwitch(target: EntityId, on: Boolean): ServiceCall = when (target.domain) {
-            Domain.LIGHT, Domain.FAN, Domain.HUMIDIFIER, Domain.CLIMATE,
+            Domain.LIGHT, Domain.FAN, Domain.HUMIDIFIER, Domain.CLIMATE, Domain.WATER_HEATER,
             Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION -> ServiceCall(
                 target,
                 if (on) "turn_on" else "turn_off",
+                JsonObject(emptyMap()),
+            )
+            Domain.VACUUM -> ServiceCall(
+                target,
+                if (on) "start" else "return_to_base",
                 JsonObject(emptyMap()),
             )
             Domain.COVER -> ServiceCall(
@@ -256,12 +290,15 @@ data class ServiceCall(
         }
 
         /**
-         * Climate target-temperature setter. The VM converts the wheel's 0..100 percent
-         * to a temperature using the entity's [EntityState.minRaw] / [EntityState.maxRaw]
-         * range and calls this helper with the resolved value in the entity's native
-         * temperature unit (°C or °F — HA picks based on the user's HA config, we don't
-         * convert). Rounded to 1 decimal because most thermostats won't accept finer
-         * resolution and 21.3 → 21.27 is just visual noise.
+         * Climate / water_heater target-temperature setter. The VM converts the wheel's
+         * 0..100 percent to a temperature using the entity's [EntityState.minRaw] /
+         * [EntityState.maxRaw] range and calls this helper with the resolved value in
+         * the entity's native temperature unit (°C or °F — HA picks based on the
+         * user's HA config, we don't convert). Rounded to 1 decimal because most
+         * thermostats won't accept finer resolution and 21.3 → 21.27 is just noise.
+         *
+         * Both domains use the same `set_temperature` service name and the same
+         * `temperature` data field, so no domain-specific dispatch is needed here.
          */
         fun setTemperature(target: EntityId, temperature: Double): ServiceCall {
             val rounded = (Math.round(temperature * 10.0) / 10.0)

@@ -99,8 +99,12 @@ fun SwitchCard(
             targetValue = if (state.isOn) accent else R1.InkSoft,
             label = "switch-label-color",
         )
+        // State word — domain-aware. Covers in motion show OPENING/CLOSING (not ON/OFF
+        // which would lie about the in-between state); vacuums show CLEANING/RETURNING/
+        // DOCKED/IDLE for the same reason. Everything else falls back to ON/OFF.
+        val stateWord = friendlySwitchStateWord(state)
         androidx.compose.animation.AnimatedContent(
-            targetState = state.isOn,
+            targetState = stateWord,
             transitionSpec = {
                 androidx.compose.animation.fadeIn(
                     androidx.compose.animation.core.tween(durationMillis = 120),
@@ -109,9 +113,9 @@ fun SwitchCard(
                 )
             },
             label = "switch-state-word",
-        ) { on ->
+        ) { word ->
             Text(
-                text = if (on) "ON" else "OFF",
+                text = word,
                 style = R1.numeralXl,
                 color = labelColor,
             )
@@ -219,5 +223,47 @@ private fun SwitchTrack(
                     .background(if (isOn) accent else R1.InkSoft),
             )
         }
+    }
+}
+
+/**
+ * Domain-aware state word for the SwitchCard's big readout. Covers in motion read
+ * OPENING / CLOSING; vacuums read CLEANING / DOCKED / RETURNING / PAUSED; locks read
+ * UNLOCKED / LOCKED; climate reads its HVAC mode (HEAT / COOL / etc.) when on. Falls
+ * back to ON / OFF for everything else.
+ */
+private fun friendlySwitchStateWord(state: EntityState): String {
+    val raw = state.rawState?.lowercase() ?: return if (state.isOn) "ON" else "OFF"
+    return when (state.id.domain) {
+        com.github.itskenny0.r1ha.core.ha.Domain.COVER,
+        com.github.itskenny0.r1ha.core.ha.Domain.VALVE -> when (raw) {
+            "open" -> "OPEN"
+            "closed" -> "CLOSED"
+            "opening" -> "OPENING"
+            "closing" -> "CLOSING"
+            "stopped" -> "STOPPED"
+            else -> raw.uppercase()
+        }
+        com.github.itskenny0.r1ha.core.ha.Domain.VACUUM -> when (raw) {
+            "cleaning" -> "CLEANING"
+            "docked" -> "DOCKED"
+            "returning" -> "RETURNING"
+            "paused" -> "PAUSED"
+            "idle" -> "IDLE"
+            "error" -> "ERROR"
+            else -> raw.uppercase()
+        }
+        com.github.itskenny0.r1ha.core.ha.Domain.LOCK -> if (state.isOn) "UNLOCKED" else "LOCKED"
+        com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE,
+        com.github.itskenny0.r1ha.core.ha.Domain.WATER_HEATER -> raw.uppercase()
+        com.github.itskenny0.r1ha.core.ha.Domain.MEDIA_PLAYER -> when (raw) {
+            "playing" -> "PLAYING"
+            "paused" -> "PAUSED"
+            "idle" -> "IDLE"
+            "standby" -> "STANDBY"
+            "buffering" -> "BUFFERING"
+            else -> raw.uppercase()
+        }
+        else -> if (state.isOn) "ON" else "OFF"
     }
 }

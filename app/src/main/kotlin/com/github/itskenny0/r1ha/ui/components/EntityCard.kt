@@ -58,8 +58,10 @@ fun EntityCard(
         Domain.LOCK -> CardRenderModel.Glyph.LOCK
         Domain.HUMIDIFIER -> CardRenderModel.Glyph.HUMIDIFIER
         Domain.CLIMATE -> CardRenderModel.Glyph.CLIMATE
+        Domain.WATER_HEATER -> CardRenderModel.Glyph.WATER_HEATER
         Domain.NUMBER, Domain.INPUT_NUMBER -> CardRenderModel.Glyph.NUMBER
         Domain.VALVE -> CardRenderModel.Glyph.VALVE
+        Domain.VACUUM -> CardRenderModel.Glyph.VACUUM
         // Action entities don't reach the theme card path — handled below — so the glyph
         // mapping never lands on theme.Card. Routed to ActionCard which has its own label
         // ("SCENE"/"SCRIPT"/"BUTTON") via domainLabel above. The Glyph value is unused but
@@ -90,6 +92,8 @@ fun EntityCard(
         Domain.BUTTON -> CardRenderModel.AccentRole.WARM
         Domain.NUMBER, Domain.INPUT_NUMBER -> CardRenderModel.AccentRole.WARM
         Domain.VALVE -> CardRenderModel.AccentRole.COOL
+        Domain.VACUUM -> CardRenderModel.AccentRole.GREEN
+        Domain.WATER_HEATER -> CardRenderModel.AccentRole.WARM
         // Sensors — colour by the most common device_class so the deck doesn't read as a
         // wall of orange. Temperature/humidity reads cool, motion/door reads green ("safe
         // / unobtrusive"), everything else falls back to neutral.
@@ -172,8 +176,10 @@ fun EntityCard(
             // percent → range-position gives a value that tracks the wheel live rather
             // than waiting for HA's echo. Falls back to state.raw (HA's confirmed value)
             // only when no scalar range is available.
+            val isTempDomain = state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE ||
+                state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.WATER_HEATER
             val (displayValue, displayUnit) = when {
-                state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE &&
+                isTempDomain &&
                     state.minRaw != null && state.maxRaw != null && state.percent != null -> {
                     val tempNative = state.minRaw + (state.percent / 100.0) * (state.maxRaw - state.minRaw)
                     // Snap to 0.5° (in native unit) so the display matches the service call.
@@ -181,7 +187,7 @@ fun EntityCard(
                     val (converted, suffix) = convertTemperature(snappedNative, state.unit, mergedUi.tempUnit)
                     formatSensorValue(converted.toString(), maxDecimals = mergedUi.maxDecimalPlaces) to suffix
                 }
-                state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.CLIMATE && state.raw != null -> {
+                isTempDomain && state.raw != null -> {
                     val (converted, suffix) = convertTemperature(state.raw.toDouble(), state.unit, mergedUi.tempUnit)
                     formatSensorValue(converted.toString(), maxDecimals = mergedUi.maxDecimalPlaces) to suffix
                 }
@@ -213,6 +219,8 @@ fun EntityCard(
                     displayUnit = lightDisplayUnit ?: displayUnit,
                     textScale = perCardOverride.textScale,
                     lightWheelMode = lightWheelMode,
+                    lightEffect = state.effect,
+                    lightEffectListSize = state.effectList.size,
                 ),
                 modifier = Modifier
                     .fillMaxSize()
@@ -257,6 +265,8 @@ private fun domainLabel(glyph: CardRenderModel.Glyph): String = when (glyph) {
     CardRenderModel.Glyph.CLIMATE -> "CLIMATE"
     CardRenderModel.Glyph.NUMBER -> "NUMBER"
     CardRenderModel.Glyph.VALVE -> "VALVE"
+    CardRenderModel.Glyph.VACUUM -> "VACUUM"
+    CardRenderModel.Glyph.WATER_HEATER -> "WATER HEATER"
 }
 
 /** Action-card label — bypasses the Glyph-based mapping above because action entities

@@ -73,6 +73,12 @@ class DefaultHaRepository(
     /** Tracks the currently-scheduled reconnect-backoff job so [reconnectNow] can cancel it. */
     @Volatile private var pendingReconnect: Job? = null
 
+    /** Wall-clock target for the next scheduled reconnect. UI reads this for the
+     *  countdown text. Cleared when we connect or when reconnectNow() short-circuits
+     *  the backoff. */
+    private val _reconnectAt = MutableStateFlow<Long?>(null)
+    override val reconnectNextAttemptAtMillis: StateFlow<Long?> = _reconnectAt.asStateFlow()
+
     /** Tracks consecutive reconnect attempts so BackoffPolicy actually backs off. */
     @Volatile private var reconnectAttempt: Int = 0
 
@@ -134,6 +140,12 @@ class DefaultHaRepository(
                     is ConnectionState.Connected -> {
                         reconnectAttempt = 0
                         authLostRefreshAttempt = 0
+                        // Connected — there's nothing scheduled, so the UI countdown should
+                        // stop. The pendingReconnect job, if any, has already fired and
+                        // self-cleared this; this assignment is the belt-and-braces case
+                        // where we landed in Connected via reconnectNow() or a manual
+                        // start() while a backoff was pending.
+                        _reconnectAt.value = null
                         resubscribe()
                         // Don't block the state observer on the REST seed (can take a few
                         // seconds with retries) — if a Disconnect happens mid-seed, the
@@ -291,8 +303,11 @@ class DefaultHaRepository(
         // previously-pending reconnect first so two overlapping backoffs don't both fire
         // (would cause an immediate-after-delay double-connect from rapid bouncing).
         pendingReconnect?.cancel()
+        val delayMs = backoff.delayForAttempt(attempt)
+        _reconnectAt.value = System.currentTimeMillis() + delayMs
         pendingReconnect = scope.launch {
-            delay(backoff.delayForAttempt(attempt))
+            delay(delayMs)
+            _reconnectAt.value = null
             connectFromSettings()
         }
     }
@@ -310,6 +325,10 @@ class DefaultHaRepository(
         }
         pendingReconnect?.cancel()
         pendingReconnect = null
+        // Clear the countdown target — we're firing now, not waiting. Without this the UI
+        // would keep showing "RECONNECTING IN Xs…" briefly until Connected updates the
+        // surrounding state, which looks broken when the user just tapped retry.
+        _reconnectAt.value = null
         // Reset the consecutive-failure counter so the *next* backoff (if this attempt also
         // fails) starts from scratch — the user has signalled they want a fresh start.
         reconnectAttempt = 0
@@ -337,7 +356,7 @@ class DefaultHaRepository(
             Domain.COVER, Domain.VALVE -> raw.state.equals("open", ignoreCase = true)
             Domain.MEDIA_PLAYER -> raw.state.equals("playing", ignoreCase = true)
             Domain.LOCK -> raw.state.equals("unlocked", ignoreCase = true)
-            Domain.CLIMATE -> !raw.state.equals("off", ignoreCase = true) &&
+            Domain.CLIMATE, Domain.WATER_HEATER -> !raw.state.equals("off", ignoreCase = true) &&
                 raw.state != "unavailable" && raw.state != "unknown"
             // Scripts have an "on" state while they're executing. Scene/button never get
             // a meaningful on state — their state attribute is a last-fired timestamp.
@@ -353,6 +372,10 @@ class DefaultHaRepository(
             // the wheel just drives the value. Treat as false so tap-toggle doesn't try
             // to flip a slider to its zero/non-zero positions.
             Domain.NUMBER, Domain.INPUT_NUMBER -> false
+            // Vacuum: any active state (cleaning, returning) reads as "on".
+            Domain.VACUUM -> raw.state.equals("cleaning", ignoreCase = true) ||
+                raw.state.equals("returning", ignoreCase = true) ||
+                raw.state.equals("on", ignoreCase = true)
         }
         val available = raw.state != "unavailable" && raw.state != "unknown"
         val pct = computePercentWithState(id.domain, raw.attributes, raw.state)
@@ -379,13 +402,13 @@ class DefaultHaRepository(
             // (min_humidity), number/input_number (min). Picked by domain so HA's
             // overloaded attribute names don't bleed across.
             minRaw = when (id.domain) {
-                Domain.CLIMATE -> raw.attributes["min_temp"].asDouble()
+                Domain.CLIMATE, Domain.WATER_HEATER -> raw.attributes["min_temp"].asDouble()
                 Domain.HUMIDIFIER -> raw.attributes["min_humidity"].asDouble()
                 Domain.NUMBER, Domain.INPUT_NUMBER -> raw.attributes["min"].asDouble() ?: 0.0
                 else -> null
             },
             maxRaw = when (id.domain) {
-                Domain.CLIMATE -> raw.attributes["max_temp"].asDouble()
+                Domain.CLIMATE, Domain.WATER_HEATER -> raw.attributes["max_temp"].asDouble()
                 Domain.HUMIDIFIER -> raw.attributes["max_humidity"].asDouble()
                 Domain.NUMBER, Domain.INPUT_NUMBER -> raw.attributes["max"].asDouble() ?: 100.0
                 else -> null
@@ -395,6 +418,11 @@ class DefaultHaRepository(
             minColorTempK = if (id.domain == Domain.LIGHT) raw.attributes["min_color_temp_kelvin"].asInt() else null,
             maxColorTempK = if (id.domain == Domain.LIGHT) raw.attributes["max_color_temp_kelvin"].asInt() else null,
             hue = if (id.domain == Domain.LIGHT) extractHue(raw.attributes) else null,
+            step = if (id.domain == Domain.NUMBER || id.domain == Domain.INPUT_NUMBER)
+                raw.attributes["step"].asDouble() else null,
+            effectList = if (id.domain == Domain.LIGHT) extractEffectList(raw.attributes) else emptyList(),
+            effect = if (id.domain == Domain.LIGHT) raw.attributes["effect"].asString()?.takeIf { it != "None" } else null,
+            attributesJson = raw.attributes,
         )
         cache.update { it + (id to newState) }
     }
@@ -430,7 +458,7 @@ class DefaultHaRepository(
         // percent abstraction maps naturally to "low end is cold, high end is hot". Falls
         // back to null (and the card stays on the switch-only path) when the range attrs
         // are missing on a particular HA install.
-        Domain.CLIMATE -> {
+        Domain.CLIMATE, Domain.WATER_HEATER -> {
             val target = climateTargetTemp(attrs)
             val min = attrs["min_temp"].asDouble()
             val max = attrs["max_temp"].asDouble()
@@ -440,6 +468,8 @@ class DefaultHaRepository(
         }
         // Valve: same shape as cover — `current_position` 0..100 (closed..open).
         Domain.VALVE -> attrs["current_position"].asInt()?.coerceIn(0, 100)
+        // Vacuums: percent abstraction doesn't apply (states are categorical).
+        Domain.VACUUM -> null
         // Number / input_number: state is the value. We don't have access to row.state
         // here (computePercent takes only attrs), but we can read the entity's range
         // from attributes; the actual conversion uses minRaw/maxRaw at the VM layer
@@ -459,6 +489,16 @@ class DefaultHaRepository(
      */
     private fun extractColorModes(attrs: kotlinx.serialization.json.JsonObject): List<String> {
         val arr = attrs["supported_color_modes"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+        return arr.mapNotNull { (it as? JsonPrimitive)?.content }
+    }
+
+    /**
+     * Read the light's effect_list attribute as a list of effect names. HA exposes it as
+     * a JSON array of strings; an absent attribute (most plain bulbs) returns empty so
+     * the card hides the effect chip entirely.
+     */
+    private fun extractEffectList(attrs: kotlinx.serialization.json.JsonObject): List<String> {
+        val arr = attrs["effect_list"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
         return arr.mapNotNull { (it as? JsonPrimitive)?.content }
     }
 
@@ -498,11 +538,12 @@ class DefaultHaRepository(
         Domain.HUMIDIFIER -> attrs["humidity"].asInt()
         // Climate's raw is the actual target_temperature for the card's display, with
         // the same fallback chain as computePercent so a `heat_cool` mode entity that
-        // only exposes target_temp_high/low still renders sensibly.
-        Domain.CLIMATE -> climateTargetTemp(attrs)
+        // only exposes target_temp_high/low still renders sensibly. Water-heater
+        // mirrors the climate path.
+        Domain.CLIMATE, Domain.WATER_HEATER -> climateTargetTemp(attrs)
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON,
-        Domain.BINARY_SENSOR -> null
+        Domain.BINARY_SENSOR, Domain.VACUUM -> null
         // For plain sensors the *state* IS the reading — there's no attribute to read from.
         // The SensorCard renders the rawState string directly; we don't try to coerce it
         // into a Number here because that loses precision (e.g. "21.7" → 21) and locale
@@ -560,12 +601,12 @@ class DefaultHaRepository(
         // (min/max). Without the range we can't map percent → °C, so the card falls back
         // to the switch-only path (turn_on / turn_off). ClimateEntityFeature.TARGET_TEMPERATURE
         // is bit 1 — we trust the supported_features bitmask AND the presence of min_temp.
-        // Climate: scalar when we have a temperature target AND a range. Earlier this
-        // gated only on supported_features bit 1 (TARGET_TEMPERATURE) plus min/max, but
-        // some integrations (notably MQTT-thermostats) forget the bit while still
-        // exposing the attribute — fall back to climateTargetTemp() probing the
-        // attributes themselves so those entities don't degrade to switch-only.
-        Domain.CLIMATE -> climateTargetTemp(attrs) != null &&
+        // Climate / water_heater: scalar when we have a temperature target AND a range.
+        // Earlier this gated only on supported_features bit 1 (TARGET_TEMPERATURE) plus
+        // min/max, but some integrations (notably MQTT-thermostats) forget the bit
+        // while still exposing the attribute — fall back to climateTargetTemp() probing
+        // the attributes themselves so those entities don't degrade to switch-only.
+        Domain.CLIMATE, Domain.WATER_HEATER -> climateTargetTemp(attrs) != null &&
             attrs["min_temp"] != null && attrs["max_temp"] != null
         // Valve: same shape as cover — has the SET_POSITION bit (1<<1) or an explicit
         // current_position attribute. Falls back to switch (open_valve/close_valve)
@@ -577,6 +618,8 @@ class DefaultHaRepository(
         Domain.NUMBER, Domain.INPUT_NUMBER -> true
         // Pure on/off domains — no scalar; rendered as switch cards.
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK -> false
+        // Vacuums map naturally to switch cards (start/return-to-base on tap).
+        Domain.VACUUM -> false
         // Action-only domains — no scalar; rendered as ActionCard tiles.
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON -> false
         // Sensors are read-only — rendered as SensorCard, no wheel.
@@ -662,12 +705,16 @@ class DefaultHaRepository(
                         Domain.COVER, Domain.VALVE -> stateStr.equals("open", ignoreCase = true)
                         Domain.MEDIA_PLAYER -> stateStr.equals("playing", ignoreCase = true)
                         Domain.LOCK -> stateStr.equals("unlocked", ignoreCase = true)
-                        Domain.CLIMATE -> !stateStr.equals("off", ignoreCase = true) && available
+                        Domain.CLIMATE, Domain.WATER_HEATER ->
+                            !stateStr.equals("off", ignoreCase = true) && available
                         Domain.SCRIPT -> stateStr.equals("on", ignoreCase = true)
                         Domain.SCENE, Domain.BUTTON -> false
                         Domain.BINARY_SENSOR -> stateStr.equals("on", ignoreCase = true)
                         Domain.SENSOR -> false
                         Domain.NUMBER, Domain.INPUT_NUMBER -> false
+                        Domain.VACUUM -> stateStr.equals("cleaning", ignoreCase = true) ||
+                            stateStr.equals("returning", ignoreCase = true) ||
+                            stateStr.equals("on", ignoreCase = true)
                     },
                     percent = pct,
                     raw = rawNum,
@@ -679,13 +726,13 @@ class DefaultHaRepository(
                         ?: attrs["temperature_unit"].asString(),
                     deviceClass = attrs["device_class"].asString(),
                     minRaw = when (id.domain) {
-                        Domain.CLIMATE -> attrs["min_temp"].asDouble()
+                        Domain.CLIMATE, Domain.WATER_HEATER -> attrs["min_temp"].asDouble()
                         Domain.HUMIDIFIER -> attrs["min_humidity"].asDouble()
                         Domain.NUMBER, Domain.INPUT_NUMBER -> attrs["min"].asDouble() ?: 0.0
                         else -> null
                     },
                     maxRaw = when (id.domain) {
-                        Domain.CLIMATE -> attrs["max_temp"].asDouble()
+                        Domain.CLIMATE, Domain.WATER_HEATER -> attrs["max_temp"].asDouble()
                         Domain.HUMIDIFIER -> attrs["max_humidity"].asDouble()
                         Domain.NUMBER, Domain.INPUT_NUMBER -> attrs["max"].asDouble() ?: 100.0
                         else -> null
@@ -695,6 +742,11 @@ class DefaultHaRepository(
                     minColorTempK = if (id.domain == Domain.LIGHT) attrs["min_color_temp_kelvin"].asInt() else null,
                     maxColorTempK = if (id.domain == Domain.LIGHT) attrs["max_color_temp_kelvin"].asInt() else null,
                     hue = if (id.domain == Domain.LIGHT) extractHue(attrs) else null,
+                    step = if (id.domain == Domain.NUMBER || id.domain == Domain.INPUT_NUMBER)
+                        attrs["step"].asDouble() else null,
+                    effectList = if (id.domain == Domain.LIGHT) extractEffectList(attrs) else emptyList(),
+                    effect = if (id.domain == Domain.LIGHT) attrs["effect"].asString()?.takeIf { it != "None" } else null,
+                    attributesJson = attrs,
                 )
             }
         }

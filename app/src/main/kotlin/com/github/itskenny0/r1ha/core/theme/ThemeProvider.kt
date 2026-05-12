@@ -40,6 +40,9 @@ val LocalEntityOverrides = staticCompositionLocalOf<Map<String, com.github.itske
  */
 val LocalOnCycleLightMode = staticCompositionLocalOf<((com.github.itskenny0.r1ha.core.ha.EntityId) -> Unit)?> { null }
 
+/** Same idea for the light-effect cycle gesture: tap the effect chip → next effect. */
+val LocalOnCycleLightEffect = staticCompositionLocalOf<((com.github.itskenny0.r1ha.core.ha.EntityId) -> Unit)?> { null }
+
 @Composable
 fun R1ThemeHost(themeId: ThemeId, content: @Composable () -> Unit) {
     val theme = when (themeId) {

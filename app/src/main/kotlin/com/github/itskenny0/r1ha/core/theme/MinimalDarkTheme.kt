@@ -48,6 +48,8 @@ object MinimalDarkTheme : R1Theme {
         CardRenderModel.Glyph.CLIMATE -> "CLIMATE"
         CardRenderModel.Glyph.NUMBER -> "NUMBER"
         CardRenderModel.Glyph.VALVE -> "VALVE"
+        CardRenderModel.Glyph.VACUUM -> "VACUUM"
+        CardRenderModel.Glyph.WATER_HEATER -> "WATER HEATER"
     }
 
     @Composable
