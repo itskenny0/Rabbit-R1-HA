@@ -71,8 +71,10 @@ class CardStackViewModel(
 
     init {
         observeFavorites()
-        collectWheelEvents()
         announceServerOnce()
+        // Wheel events are NOT collected here. They're collected by CardStackScreen only
+        // while it is in composition, so spinning the wheel from any other screen does not
+        // silently change the active card's brightness.
     }
 
     /** Show a one-shot toast on first mount so the user can see the resolved server URL. */
@@ -127,13 +129,9 @@ class CardStackViewModel(
             .launchIn(viewModelScope)
     }
 
-    private fun collectWheelEvents() {
-        wheelInput.events
-            .onEach { event -> onWheel(event) }
-            .launchIn(viewModelScope)
-    }
-
-    private suspend fun onWheel(event: WheelEvent) {
+    /** Called from CardStackScreen when a wheel event arrives. Public so the screen can scope
+     *  collection to its own lifecycle. */
+    suspend fun onWheel(event: WheelEvent) {
         val appSettings = settings.settings.first()
         val wheel = appSettings.wheel
         val activeState = _state.value.activeState ?: return

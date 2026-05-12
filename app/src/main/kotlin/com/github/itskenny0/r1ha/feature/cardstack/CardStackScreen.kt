@@ -68,6 +68,13 @@ fun CardStackScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val appSettings by settings.settings.collectStateAsLife(initialValue = AppSettings())
 
+    // Wheel events are processed ONLY while CardStackScreen is composed. Navigating away
+    // (e.g. into FavoritesPicker or Settings) suspends the collection so spinning the wheel
+    // there can't silently move the active card's brightness behind the user's back.
+    LaunchedEffect(Unit) {
+        wheelInput.events.collect { event -> vm.onWheel(event) }
+    }
+
     val haptic = LocalHapticFeedback.current
     // Honour the user's "Haptic feedback" toggle: only fire when enabled.
     LaunchedEffect(state.activeState?.percent) {
