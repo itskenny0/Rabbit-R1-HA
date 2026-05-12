@@ -151,7 +151,7 @@ fun AboutScreen(
                     modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
                 )
             }
-            item { InfoRow(label = "Server", value = appSettings.server?.url ?: "(not configured)") }
+            item { InfoRow(label = "Server", value = appSettings.server?.url ?: "(not connected)") }
             item {
                 InfoRow(
                     label = "WebSocket",
