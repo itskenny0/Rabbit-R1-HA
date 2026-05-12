@@ -182,17 +182,21 @@ private fun InfoRow(label: String, value: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
+        // Label takes its intrinsic width (never squished); value takes the rest and wraps as
+        // many lines as needed — long server URLs were previously squishing the label.
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
         )
+        androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 12.dp))
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+            modifier = Modifier.weight(1f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
         )
     }
 }
