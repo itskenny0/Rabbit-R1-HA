@@ -58,26 +58,11 @@ fun OnboardingScreen(
             // Back press inside the OAuth WebView should drop the user back to the URL
             // entry form instead of exiting the app.
             BackHandler { vm.resetError() }
-            // Extract server base URL from the authorizeUrl for token exchange. We need to
-            // guard against Uri.parse() returning null fields (rare but possible for malformed
-            // URLs) — string-interpolating null would produce "null://null" which would then
-            // be silently stored as the server URL.
-            val serverUrl = remember(s.authorizeUrl) {
-                runCatching {
-                    val uri = android.net.Uri.parse(s.authorizeUrl)
-                    val scheme = uri.scheme
-                    val host = uri.host
-                    if (scheme.isNullOrBlank() || host.isNullOrBlank()) {
-                        ""
-                    } else {
-                        val portPart = if (uri.port != -1) ":${uri.port}" else ""
-                        "$scheme://$host$portPart"
-                    }
-                }.getOrDefault("")
-            }
             OAuthWebView(
                 authorizeUrl = s.authorizeUrl,
-                onCodeCaptured = { code -> vm.exchangeCode(code, serverUrl) },
+                // Use the baseUrl the user originally probed so path-prefixed HA setups
+                // (e.g. https://example.com/ha) keep their prefix on /auth/token.
+                onCodeCaptured = { code -> vm.exchangeCode(code, s.baseUrl) },
                 // If HA redirects without a `code` query parameter — typically because the
                 // user tapped "Deny" — drop them back to the URL entry form rather than
                 // leaving the WebView pinned on HA's error page with no clear next step.

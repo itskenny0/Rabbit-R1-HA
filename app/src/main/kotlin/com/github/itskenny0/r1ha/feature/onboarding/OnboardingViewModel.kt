@@ -31,8 +31,14 @@ class OnboardingViewModel(
     sealed interface State {
         data object Idle : State
         data object Probing : State
-        /** Server responded with an authorize URL ready to open in the WebView. */
-        data class ReadyToAuth(val authorizeUrl: String) : State
+        /**
+         * Server responded with an authorize URL ready to open in the WebView. Carries
+         * [baseUrl] alongside [authorizeUrl] so the token exchange POSTs to the same path-
+         * prefixed HA installation the user signed into (e.g. `https://example.com/ha`) —
+         * deriving the base from `authorizeUrl`'s host alone would strip the `/ha` prefix
+         * and POST to the wrong path.
+         */
+        data class ReadyToAuth(val authorizeUrl: String, val baseUrl: String) : State
         data object Exchanging : State
         data object Done : State
         data class Error(val message: String) : State
@@ -84,7 +90,7 @@ class OnboardingViewModel(
                 settings.update { it.copy(server = ServerConfig(url = baseUrl)) }
                 R1Log.i("Onboarding.probe", "settings.update returned")
                 val authorizeUrl = "$baseUrl/auth/authorize?response_type=code&client_id=https%3A%2F%2Fitskenny0.github.io%2FRabbit-R1-HA%2F&redirect_uri=r1ha%3A%2F%2Fauth-callback"
-                _state.value = State.ReadyToAuth(authorizeUrl)
+                _state.value = State.ReadyToAuth(authorizeUrl = authorizeUrl, baseUrl = baseUrl)
             } catch (e: Exception) {
                 R1Log.e("Onboarding.probe", "failed", e)
                 Toaster.show("Probe failed: ${e.message}", long = true)
