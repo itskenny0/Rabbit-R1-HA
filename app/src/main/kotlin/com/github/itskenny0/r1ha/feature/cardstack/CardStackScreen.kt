@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,11 +77,17 @@ fun CardStackScreen(
     }
 
     val haptic = LocalHapticFeedback.current
-    // Honour the user's "Haptic feedback" toggle: only fire when enabled.
+    // Honour the user's "Haptic feedback" toggle and throttle to ~20 Hz so a fast wheel spin
+    // (events at up to 50 Hz) doesn't fire a continuous unpleasant buzz from the haptic motor.
+    // We keep the timestamp in a one-element LongArray instead of a State so updating it does
+    // not itself trigger recomposition.
+    val lastHapticMs = remember { longArrayOf(0L) }
     LaunchedEffect(state.activeState?.percent) {
-        if (state.activeState != null && appSettings.behavior.haptics) {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        }
+        if (state.activeState == null || !appSettings.behavior.haptics) return@LaunchedEffect
+        val now = System.currentTimeMillis()
+        if (now - lastHapticMs[0] < 50L) return@LaunchedEffect
+        lastHapticMs[0] = now
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
     // Honour the user's "Keep screen on" toggle by toggling the View flag while CardStack
