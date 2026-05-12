@@ -78,6 +78,10 @@ fun OnboardingScreen(
             OAuthWebView(
                 authorizeUrl = s.authorizeUrl,
                 onCodeCaptured = { code -> vm.exchangeCode(code, serverUrl) },
+                // If HA redirects without a `code` query parameter — typically because the
+                // user tapped "Deny" — drop them back to the URL entry form rather than
+                // leaving the WebView pinned on HA's error page with no clear next step.
+                onMissingCode = { vm.resetError() },
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding(),
