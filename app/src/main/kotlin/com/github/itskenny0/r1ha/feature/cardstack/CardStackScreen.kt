@@ -233,11 +233,14 @@ fun CardStackScreen(
                     tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
                     modifier = Modifier.size(20.dp),
                 )
+                // Hardcoded amber/red rather than relying on tertiary (default ~pink in M3 dark
+                // schemes, doesn't read as "connecting") and error so the dot is meaningful
+                // across the three themes.
                 val statusColor = when (connection) {
                     is ConnectionState.Connected -> null  // healthy, no dot
                     ConnectionState.Connecting,
-                    ConnectionState.Authenticating -> MaterialTheme.colorScheme.tertiary
-                    else -> MaterialTheme.colorScheme.error
+                    ConnectionState.Authenticating -> Color(0xFFFFB300)  // amber
+                    else -> Color(0xFFE53935)  // red
                 }
                 if (statusColor != null) {
                     Box(
