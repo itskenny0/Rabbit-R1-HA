@@ -48,7 +48,12 @@ fun FavoritesPickerScreen(
     val ui by vm.ui.collectAsStateWithLifecycle()
 
     Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+        ) {
             ChevronBack(onClick = onBack)
             Text(
                 text = "Favourites",
