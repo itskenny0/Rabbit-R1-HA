@@ -80,10 +80,11 @@ fun CardStackScreen(
     val haptic = LocalHapticFeedback.current
     // Honour the user's "Haptic feedback" toggle and throttle to ~20 Hz so a fast wheel spin
     // (events at up to 50 Hz) doesn't fire a continuous unpleasant buzz from the haptic motor.
-    // We keep the timestamp in a one-element LongArray instead of a State so updating it does
-    // not itself trigger recomposition.
+    // Keying on BOTH id and percent so swiping to a new card with the same percent still fires
+    // a tactile confirmation; the timestamp lives in a one-element LongArray so updating it
+    // doesn't itself trigger recomposition.
     val lastHapticMs = remember { longArrayOf(0L) }
-    LaunchedEffect(state.activeState?.percent) {
+    LaunchedEffect(state.activeState?.id, state.activeState?.percent) {
         if (state.activeState == null || !appSettings.behavior.haptics) return@LaunchedEffect
         val now = System.currentTimeMillis()
         if (now - lastHapticMs[0] < 50L) return@LaunchedEffect
