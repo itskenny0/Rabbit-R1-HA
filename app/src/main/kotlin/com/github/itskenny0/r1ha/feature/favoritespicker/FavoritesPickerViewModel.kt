@@ -42,7 +42,8 @@ class FavoritesPickerViewModel(
                         Row(it, isFavorite = it.id.value in favOrder, orderIndex = favOrder[it.id.value])
                     }
                     R1Log.i("FavoritesPicker.refresh", "fetched ${rows.size} entities")
-                    Toaster.show("Loaded ${rows.size} entities")
+                    // No toast here; the UI update itself is the feedback. seedCacheFromHa
+                    // already toasts for the user when its load succeeds.
                     _ui.value = UiState(loading = false, rows = rows)
                 },
                 onFailure = {
