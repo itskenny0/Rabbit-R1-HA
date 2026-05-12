@@ -325,6 +325,14 @@ private fun decodeNameOverrides(raw: String?): Map<String, String> {
  * default to inherit, malformed lines are skipped with a log. Future fields append after
  * `longpress` and stay backward-compatible by virtue of being absent on old saves.
  */
+// Visible to tests so we can round-trip the encoding format without going through
+// DataStore. Kept package-private (file-level) so production callers still go through
+// SettingsRepository.update / settings to read/write.
+internal fun encodeEntityOverrides_visibleForTesting(map: Map<String, EntityOverride>): String =
+    encodeEntityOverrides(map)
+internal fun decodeEntityOverrides_visibleForTesting(raw: String?): Map<String, EntityOverride> =
+    decodeEntityOverrides(raw)
+
 private fun encodeEntityOverrides(map: Map<String, EntityOverride>): String {
     if (map.isEmpty()) return ""
     return map.entries.joinToString("\n") { (id, o) ->
