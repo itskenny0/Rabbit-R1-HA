@@ -328,7 +328,17 @@ class DefaultHaRepository(
     private fun resubscribe() {
         scope.launch {
             val favs = settings.settings.first().favorites
-            if (favs.isEmpty()) return@launch
+            if (favs.isEmpty()) {
+                // User cleared their favourites — tear down the existing subscription so HA
+                // stops pushing events we no longer care about, instead of leaving a stale
+                // trigger subscribed forever.
+                subscriptionId?.let { old ->
+                    val unsubId = ws.nextRequestId()
+                    ws.send(HaOutbound.UnsubscribeEvents(id = unsubId, subscription = old))
+                    subscriptionId = null
+                }
+                return@launch
+            }
             val newId = ws.nextRequestId()
             ws.send(HaOutbound.SubscribeStateTrigger(id = newId, entityIds = favs))
             subscriptionId?.let { old ->
