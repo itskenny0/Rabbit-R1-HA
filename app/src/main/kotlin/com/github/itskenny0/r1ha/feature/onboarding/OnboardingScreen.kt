@@ -3,12 +3,16 @@ package com.github.itskenny0.r1ha.feature.onboarding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -113,12 +117,23 @@ private fun UrlEntryForm(
     onErrorDismiss: () -> Unit,
 ) {
     var urlText by rememberSaveable { mutableStateOf("http://") }
+    val scrollState = androidx.compose.foundation.rememberScrollState()
+    // Auto-scroll to the bottom (where the input + button live) when the IME opens so the
+    // focused field is never hidden behind the keyboard. We watch WindowInsets.Companion.ime
+    // for changes; LaunchedEffect re-runs whenever the IME slides in or out.
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(imeBottom) {
+        if (imeBottom > 0) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .systemBarsPadding()
             .imePadding()
+            .verticalScroll(scrollState)
             .padding(horizontal = 24.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
