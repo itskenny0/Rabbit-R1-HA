@@ -46,4 +46,49 @@ class SettingsRepositoryTest {
             cancelAndConsumeRemainingEvents()
         }
     }
+
+    /**
+     * Sign-in then sign-out: confirms the shadow's "no server" state takes priority over a
+     * lingering DataStore value. Regression test for the production bug where signing out
+     * appeared not to stick because the DataStore delete silently failed on the user's device.
+     */
+    @Test fun signOutClearsServerEvenIfDataStoreLags() = runTest {
+        val repo = newRepo()
+        repo.update { it.copy(server = ServerConfig(url = "http://ha.example:8123")) }
+        // Sanity check: signed in.
+        repo.settings.test {
+            assertThat(awaitItem().server?.url).isEqualTo("http://ha.example:8123")
+            cancelAndConsumeRemainingEvents()
+        }
+        // Sign out.
+        repo.update { it.copy(server = null) }
+        repo.settings.test {
+            assertThat(awaitItem().server).isNull()
+            cancelAndConsumeRemainingEvents()
+        }
+    }
+
+    /**
+     * Sign-in then sign-out then sign-in again — favorites set in between should persist
+     * (covers the order-preservation regression where the favourites list reset on the
+     * second sign-in).
+     */
+    @Test fun favouritesPersistAcrossSignOutAndIn() = runTest {
+        val repo = newRepo()
+        repo.update {
+            it.copy(
+                server = ServerConfig(url = "http://ha.example:8123"),
+                favorites = listOf("light.kitchen", "fan.bedroom"),
+            )
+        }
+        repo.update { it.copy(server = null) }
+        repo.update { it.copy(server = ServerConfig(url = "http://ha.example:8123")) }
+        repo.settings.test {
+            val s = awaitItem()
+            assertThat(s.server?.url).isEqualTo("http://ha.example:8123")
+            // Favourites still there from before sign-out.
+            assertThat(s.favorites).containsExactly("light.kitchen", "fan.bedroom").inOrder()
+            cancelAndConsumeRemainingEvents()
+        }
+    }
 }
