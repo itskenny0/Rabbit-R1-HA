@@ -203,28 +203,31 @@ private fun VerticalCardPager(
 
         // ── Chevron hints ─────────────────────────────────────────────────────────────
         // A small ↑ just under the chrome row when there's a previous card, and a small ↓
-        // just above the bottom edge when there's a next card. They live ABOVE the pager
-        // visually but don't intercept its gestures (no clickable on either). Drawn with
-        // the same Chevron primitive as the back-button so the whole screen language stays
-        // consistent — no Material `KeyboardArrowUp/Down` glyphs.
+        // just above the bottom edge when there's a next card. Drawn with the same Chevron
+        // primitive as the back-button so the whole screen language stays consistent —
+        // no Material `KeyboardArrowUp/Down` glyphs. AnimatedVisibility softens the
+        // appear/disappear so the hint doesn't pop in when the user lands on the first or
+        // last card; reads as a deliberate hint rather than a UI bounce.
         val currentPage = pagerState.currentPage
-        if (currentPage > 0) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 60.dp),
-            ) {
-                Chevron(direction = ChevronDirection.Up, size = 14.dp, tint = R1.InkMuted)
-            }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = currentPage > 0,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 60.dp),
+        ) {
+            Chevron(direction = ChevronDirection.Up, size = 14.dp, tint = R1.InkMuted)
         }
-        if (currentPage < cards.size - 1) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 8.dp),
-            ) {
-                Chevron(direction = ChevronDirection.Down, size = 14.dp, tint = R1.InkMuted)
-            }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = currentPage < cards.size - 1,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp),
+        ) {
+            Chevron(direction = ChevronDirection.Down, size = 14.dp, tint = R1.InkMuted)
         }
     }
 }
@@ -384,8 +387,11 @@ private fun ChromeRow(
             contentAlignment = Alignment.Center,
         ) {
             SettingsCogGlyph(size = 18.dp)
-            // Connection dot: only visible when NOT connected (subtle when healthy, screaming
-            // when not).
+            // Connection dot: only visible when NOT connected (subtle when healthy, loud
+            // when not). Animated colour transition so the amber→red flip on a failed
+            // reconnect reads as deliberate rather than a UI bounce; AnimatedVisibility on
+            // the dot itself so its appear/disappear doesn't snap when state crosses the
+            // Connected boundary.
             val statusColor = when (connection) {
                 is ConnectionState.Connected -> null
                 ConnectionState.Idle,
@@ -393,14 +399,25 @@ private fun ChromeRow(
                 ConnectionState.Authenticating -> R1.StatusAmber
                 else -> R1.StatusRed
             }
-            if (statusColor != null) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = statusColor != null,
+                enter = androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 8.dp, end = 8.dp),
+            ) {
+                // Lock in the *last non-null* colour so the dot doesn't flash a default
+                // colour during the exit animation when state transitions back to Connected.
+                val animatedColor by androidx.compose.animation.animateColorAsState(
+                    targetValue = statusColor ?: R1.StatusAmber,
+                    label = "conn-dot-color",
+                )
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 8.dp, end = 8.dp)
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(statusColor),
+                        .background(animatedColor),
                 )
             }
         }

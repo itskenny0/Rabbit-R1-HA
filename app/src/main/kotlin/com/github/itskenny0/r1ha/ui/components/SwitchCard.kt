@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -89,11 +90,32 @@ fun SwitchCard(
         Spacer(Modifier.height(20.dp))
 
         // ── State word ─────────────────────────────────────────────────────────────
-        Text(
-            text = if (state.isOn) "ON" else "OFF",
-            style = R1.numeralXl,
-            color = if (state.isOn) accent else R1.InkSoft,
+        // Crossfade ON↔OFF so the flip reads as a deliberate state change rather than a
+        // text swap. AnimatedContent picks the labels by isOn key, fades the outgoing
+        // word out while the new one fades in — quicker than the default 220 ms because
+        // the user has already seen the thumb move on the switch track and the readout
+        // should land before the eye drifts away.
+        val labelColor by androidx.compose.animation.animateColorAsState(
+            targetValue = if (state.isOn) accent else R1.InkSoft,
+            label = "switch-label-color",
         )
+        androidx.compose.animation.AnimatedContent(
+            targetState = state.isOn,
+            transitionSpec = {
+                androidx.compose.animation.fadeIn(
+                    androidx.compose.animation.core.tween(durationMillis = 120),
+                ) togetherWith androidx.compose.animation.fadeOut(
+                    androidx.compose.animation.core.tween(durationMillis = 120),
+                )
+            },
+            label = "switch-state-word",
+        ) { on ->
+            Text(
+                text = if (on) "ON" else "OFF",
+                style = R1.numeralXl,
+                color = labelColor,
+            )
+        }
 
         Spacer(Modifier.height(14.dp))
 
