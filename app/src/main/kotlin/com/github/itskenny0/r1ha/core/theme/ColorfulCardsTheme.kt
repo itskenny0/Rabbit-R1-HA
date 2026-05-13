@@ -168,6 +168,10 @@ object ColorfulCardsTheme : R1Theme {
                 accent = accent,
                 tickLabels = model.meterLabels,
                 rainbow = model.lightWheelMode == com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE,
+                // Default tick colour (R1.InkMuted) is invisible against the
+                // colourful gradient; force a soft-white that reads on every
+                // palette in the theme.
+                tickLabelColor = Color.White.copy(alpha = 0.78f),
             )
         }
     }

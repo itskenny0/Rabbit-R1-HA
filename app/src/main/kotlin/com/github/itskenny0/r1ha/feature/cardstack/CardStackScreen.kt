@@ -3,6 +3,7 @@ package com.github.itskenny0.r1ha.feature.cardstack
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -95,6 +96,14 @@ fun CardStackScreen(
     // VM's own deque (which accelerates scalar percent steps) but lives at the screen
     // layer because navigation is a screen concern, not a per-card one.
     val navTimestamps = remember { ArrayDeque<Long>() }
+    // Transient hint shown on read-only / explicit-button-only cards when the user
+    // spins the wheel — they previously expected nav, but the wheel no longer moves
+    // between cards (swipe / pip-tap are the deck-nav affordances). The hint surfaces
+    // inline on the card for ~2 s then fades, so the user learns the new gesture
+    // vocabulary without a permanent piece of chrome. Declared here (rather than
+    // inside the chrome-render block) so the LaunchedEffect that observes wheel events
+    // can capture it.
+    val wheelHintAt = remember { androidx.compose.runtime.mutableLongStateOf(0L) }
     // Pager state hoisted to screen scope so the wheel handler can route navigation
     // requests through pagerNavRequests for read-only / action cards (whose wheel
     // should move between cards rather than mutate state).
@@ -134,11 +143,13 @@ fun CardStackScreen(
         wheelInput.events.collect { event ->
             val active = vm.state.value.activeState
             val dir = event.direction
-            // Compute the nav delta with acceleration: 1 card per detent at slow
-            // speed, scaling up to several cards per detent during a sustained spin.
-            // Same rate-window + WheelInput.effectiveStep curve the scalar path uses,
-            // so the feel matches whether the user is dialling brightness or skipping
-            // through cards.
+            // Wheel never navigates the deck — that's swipe-and-tap-the-pip only. So
+            // on cards with nothing to drive (sensors, actions, non-scalar switches
+            // when the toggle setting is off) the wheel becomes a no-op and we surface
+            // a transient hint so the user learns the new vocabulary.
+            val sign = com.github.itskenny0.r1ha.core.input.WheelInput.applyDirection(
+                dir, appSettings.wheel.invertDirection,
+            )
             val now = event.timestampMillis
             navTimestamps.addLast(now)
             while (navTimestamps.isNotEmpty() && now - navTimestamps.first() > 250L) {
@@ -151,23 +162,19 @@ fun CardStackScreen(
                 accelerate = appSettings.wheel.acceleration,
                 curve = appSettings.wheel.accelerationCurve,
             ).coerceIn(1, 8)
-            val sign = com.github.itskenny0.r1ha.core.input.WheelInput.applyDirection(
-                dir, appSettings.wheel.invertDirection,
-            )
             val navDelta = sign * navStep
             when {
                 active == null -> Unit
-                // Sensors and action cards have no scalar to set — wheel just navigates.
+                // Sensors / actions have nothing to drive — show the hint.
                 active.id.domain.isSensor || active.id.domain.isAction ->
-                    pagerNavRequests.tryEmit(navDelta)
+                    wheelHintAt.longValue = now
                 // Non-scalar entities (locks, covers without position, vacuums, plain
-                // switches) — by default the wheel navigates rather than toggles, so a
-                // brush against the wheel while scrolling past those cards doesn't
-                // accidentally relock a door or send the robot home. Opt back into the
-                // wheel-flips-the-state behaviour via Settings → Behavior → Wheel
-                // toggles switches.
+                // switches) — if the user hasn't opted into wheel-toggles-switches via
+                // Settings, the wheel is a no-op here too (and shows the hint). When
+                // the setting IS on, fall through to the scalar path's setSwitch via
+                // vm.onWheel for the actual toggle.
                 !active.supportsScalar && !appSettings.behavior.wheelTogglesSwitches ->
-                    pagerNavRequests.tryEmit(navDelta)
+                    wheelHintAt.longValue = now
                 // Select entities — wheel cycles through the option list with the same
                 // accelerated step so a fast spin can hop several options at once.
                 active.id.domain.isSelect ->
@@ -292,6 +299,14 @@ fun CardStackScreen(
             onTapCounter = { jumpPickerOpen.value = true },
             solidBackdrop = appSettings.ui.hideCardTailAbove,
         )
+
+        // ── Wheel-no-op hint ────────────────────────────────────────────────────────
+        // When the active card has nothing for the wheel to drive (sensors, actions,
+        // non-scalar switches when the toggle setting is off) the wheel becomes a
+        // no-op. Surface a transient hint so the user learns to swipe or tap the pip
+        // to navigate, rather than wondering why the wheel does nothing. Auto-fades
+        // after 2 s of no fresh wheel events.
+        WheelHintOverlay(triggerAt = wheelHintAt.longValue)
 
         // ── Customize dialog ────────────────────────────────────────────────────────
         // Reuses the favourites-picker's RenameDialog so the customize flow is identical
@@ -728,21 +743,15 @@ private fun ChromeRow(
         // current page. Visually communicates "vertical stack" — wheel of cards going up
         // and down — rather than the horizontal row of dots that read as left/right.
         if (showCounter) {
-            // Tap target wraps the pip so users can open the jump-to-card picker
-            // without hunting for a tiny hit area. 44 dp matches the chrome's
-            // hamburger / gear so the centre cluster lines up vertically.
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .r1Pressable(onTapCounter),
-                contentAlignment = Alignment.Center,
-            ) {
-                VerticalPagePip(
-                    count = cardsCount,
-                    current = currentIndex,
-                )
-            }
+            // The pip carries its own r1Pressable so the tap target follows the
+            // intrinsic pill width — wrapping it in a fixed-size Box clipped the
+            // counter ("1/30") onto multiple lines when the rounded-rect pill ran
+            // out of horizontal room. Tap opens the jump-to-card picker.
+            VerticalPagePip(
+                count = cardsCount,
+                current = currentIndex,
+                onClick = onTapCounter,
+            )
         } else {
             Spacer(Modifier.size(44.dp))
         }
@@ -812,6 +821,51 @@ private fun ChromeRow(
             }
         }
         }  // end right-cluster Row
+    }
+}
+
+/**
+ * Transient hint surfaced on the card stack when the user spins the wheel on a card
+ * that has nothing for the wheel to drive (sensors, actions, non-scalar switches with
+ * wheel-toggles-switches off). Tells them how to actually navigate the deck. The
+ * caller drives visibility via a monotonically-increasing [triggerAt] timestamp; each
+ * new value re-arms the 2-second visibility window so a rapid wheel spin keeps the
+ * hint on screen continuously.
+ */
+@Composable
+private fun BoxScope.WheelHintOverlay(triggerAt: Long) {
+    val visible = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    androidx.compose.runtime.LaunchedEffect(triggerAt) {
+        if (triggerAt > 0L) {
+            visible.value = true
+            kotlinx.coroutines.delay(2_000)
+            visible.value = false
+        }
+    }
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible.value,
+        enter = androidx.compose.animation.fadeIn(),
+        exit = androidx.compose.animation.fadeOut(),
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            // Sit just below the chrome row (~52 dp tall) so the hint reads as
+            // belonging to the current card without overlapping the centre pip.
+            .padding(top = 56.dp, start = 24.dp, end = 24.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(R1.ShapeRound)
+                .background(R1.Bg.copy(alpha = 0.92f))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        ) {
+            Text(
+                text = "WHEEL DOES NOTHING HERE — SWIPE OR TAP THE PIP",
+                style = R1.labelMicro,
+                color = R1.InkSoft,
+            )
+        }
     }
 }
 
@@ -947,7 +1001,7 @@ private fun JumpRow(
  * sits inside a dark pill so it stays legible against the Colourful Cards gradient.
  */
 @Composable
-private fun VerticalPagePip(count: Int, current: Int) {
+private fun VerticalPagePip(count: Int, current: Int, onClick: (() -> Unit)? = null) {
     val trackHeight = 22.dp
     val thumbHeight = 6.dp
     val frac = if (count <= 1) 0f else current.toFloat() / (count - 1).toFloat()
@@ -955,6 +1009,10 @@ private fun VerticalPagePip(count: Int, current: Int) {
         modifier = Modifier
             .clip(R1.ShapeRound)
             .background(R1.Bg.copy(alpha = 0.75f))
+            // Pressable applied on the existing pill rather than a wrapping Box so
+            // the tap target follows the intrinsic width (which contains the counter
+            // text). Wrapping in a fixed Box.size(...) clipped "1/30" to two lines.
+            .let { m -> if (onClick != null) m.r1Pressable(onClick = onClick) else m }
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

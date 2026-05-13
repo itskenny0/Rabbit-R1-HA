@@ -294,6 +294,10 @@ internal fun VerticalTapeMeter(
      *  accent-coloured grow-from-bottom fill. The track then doubles as a colour
      *  reference for the wheel. */
     rainbow: Boolean = false,
+    /** Override the tick-label colour. Defaults to [R1.InkMuted] which reads cleanly
+     *  on the dark theme backgrounds; the Colourful Cards theme passes a near-white
+     *  here because the gradient backdrop renders muted-grey labels invisible. */
+    tickLabelColor: Color = R1.InkMuted,
 ) {
     val fraction = rememberSliderFraction(percent).coerceIn(0f, 1f)
     val labels = tickLabels ?: listOf("100", "75", "50", "25", "0")
@@ -337,7 +341,7 @@ internal fun VerticalTapeMeter(
                 Text(
                     text = tick,
                     style = R1.numeralS,
-                    color = R1.InkMuted,
+                    color = tickLabelColor,
                     modifier = labelMod,
                 )
             }
@@ -382,10 +386,14 @@ internal fun VerticalTapeMeter(
                     }
                 }
         } else Modifier
+        // Outer Box stays wide for the touch-drag hit area (so fingers can scrub
+        // without having to land on a 2 dp hairline) but the inner track / fill /
+        // thumb all align to CenterEnd so the visible bar sits flush against the
+        // right edge — the way it always was before touch scrubbing was added.
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .width(28.dp)
+                .width(24.dp)
                 .then(trackInteractionMod),
         ) {
             if (rainbow) {
@@ -397,7 +405,7 @@ internal fun VerticalTapeMeter(
                     modifier = Modifier
                         .fillMaxHeight()
                         .width(6.dp)
-                        .align(Alignment.Center)
+                        .align(Alignment.CenterEnd)
                         .clip(RoundedCornerShape(3.dp))
                         .background(androidx.compose.ui.graphics.Brush.verticalGradient(rainbowStops())),
                 )
@@ -407,7 +415,7 @@ internal fun VerticalTapeMeter(
                     modifier = Modifier
                         .fillMaxHeight()
                         .width(2.dp)
-                        .align(Alignment.Center)
+                        .align(Alignment.CenterEnd)
                         .background(R1.SurfaceMuted),
                 )
                 // Fill — grows from the bottom up to `fraction` of available height.
@@ -417,20 +425,14 @@ internal fun VerticalTapeMeter(
                     modifier = Modifier
                         .fillMaxHeight(fraction)
                         .width(4.dp)
-                        .align(Alignment.BottomCenter)
+                        .align(Alignment.BottomEnd)
                         .clip(RoundedCornerShape(2.dp))
                         .background(accent),
                 )
             }
-            // Thumb — a 12 dp wide capsule sitting at the top of the fill. In rainbow
-            // mode the thumb is white-bordered so it stays visible against any colour
-            // of the rainbow track.
-            Box(
-                modifier = Modifier.fillMaxHeight(),
-                contentAlignment = Alignment.BottomCenter,
-            ) {
-                Spacer(Modifier.fillMaxHeight(fraction))
-            }
+            // Thumb — a 14 dp wide capsule sitting at the top of the fill, also
+            // pinned to the right edge. Rainbow mode adds a 1 dp dark border so it
+            // stays visible against any colour beneath.
             ThumbCapsule(
                 fraction = fraction,
                 accent = if (rainbow) R1.Ink else accent,
@@ -443,9 +445,13 @@ internal fun VerticalTapeMeter(
 @Composable
 private fun ThumbCapsule(fraction: Float, accent: Color, borderInRainbow: Boolean = false) {
     // BoxWithConstraints lets us compute the absolute thumb Y from `fraction` cheaply —
-    // recomposes only when `fraction` does (post-spring settle).
+    // recomposes only when `fraction` does (post-spring settle). The thumb is pinned to
+    // the right edge (TopEnd alignment + the parent Box is right-aligned) so the visible
+    // slider stays flush against the card's right edge even though the touch-pickup Box
+    // is wider than the bar.
     androidx.compose.foundation.layout.BoxWithConstraints(
         modifier = Modifier.fillMaxHeight(),
+        contentAlignment = Alignment.TopEnd,
     ) {
         val trackH = maxHeight
         val thumbH = 6.dp
