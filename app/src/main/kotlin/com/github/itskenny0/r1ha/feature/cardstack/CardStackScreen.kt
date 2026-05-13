@@ -417,6 +417,7 @@ fun CardStackScreen(
                     pagerScope.launch { pagerState.animateScrollToPage(target) }
                     jumpPickerOpen.value = false
                 },
+                onReorder = { from, to -> vm.reorderFavorite(from, to) },
                 onDismiss = { jumpPickerOpen.value = false },
             )
         }
@@ -882,6 +883,7 @@ private fun JumpToCardSheet(
     cards: List<com.github.itskenny0.r1ha.core.ha.EntityState>,
     currentIndex: Int,
     onPick: (Int) -> Unit,
+    onReorder: (fromIndex: Int, toIndex: Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     androidx.activity.compose.BackHandler(onBack = onDismiss)
@@ -915,29 +917,28 @@ private fun JumpToCardSheet(
                     Text(text = "CLOSE", style = R1.labelMicro, color = R1.InkSoft)
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            val scroll = androidx.compose.foundation.rememberScrollState()
-            // Auto-scroll so the current card is roughly centred — on a 30-card deck
-            // the user would otherwise have to scroll down to find it.
-            androidx.compose.runtime.LaunchedEffect(currentIndex, cards.size) {
-                val rowPx = 56  // approximate row height in dp; close enough for an autoscroll
-                scroll.animateScrollTo((currentIndex * rowPx).coerceAtLeast(0))
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .androidxVerticalScroll(scroll),
-            ) {
-                cards.forEachIndexed { idx, card ->
-                    JumpRow(
-                        index = idx,
-                        name = card.friendlyName,
-                        domainPrefix = card.id.domain.prefix.uppercase(),
-                        isActive = idx == currentIndex,
-                        onClick = { onPick(idx) },
-                    )
-                }
-                Spacer(Modifier.height(20.dp))
+            Text(
+                text = "TAP TO JUMP · LONG-PRESS + DRAG TO REORDER",
+                style = R1.labelMicro,
+                color = R1.InkMuted,
+                modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+            )
+            com.github.itskenny0.r1ha.ui.components.DragReorderColumn(
+                items = cards,
+                keyOf = { it.id.value },
+                onReorder = onReorder,
+                modifier = Modifier.fillMaxSize(),
+            ) { card, dragHandle, isDragging ->
+                val idx = cards.indexOf(card)
+                JumpRow(
+                    index = idx,
+                    name = card.friendlyName,
+                    domainPrefix = card.id.domain.prefix.uppercase(),
+                    isActive = idx == currentIndex,
+                    isDragging = isDragging,
+                    onClick = { onPick(idx) },
+                    dragHandle = dragHandle,
+                )
             }
         }
     }
@@ -955,14 +956,26 @@ private fun JumpRow(
     name: String,
     domainPrefix: String,
     isActive: Boolean,
+    isDragging: Boolean,
     onClick: () -> Unit,
+    dragHandle: Modifier,
 ) {
+    // Drag-handle modifier wraps the whole row so the user can long-press anywhere
+    // on the row to grab it. r1Pressable for the tap-to-jump action sits on top —
+    // single tap fires onClick, long-press promotes to drag.
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
             .clip(R1.ShapeS)
-            .background(if (isActive) R1.AccentWarm else R1.SurfaceMuted)
+            .background(
+                when {
+                    isDragging -> R1.AccentWarm.copy(alpha = 0.65f)
+                    isActive -> R1.AccentWarm
+                    else -> R1.SurfaceMuted
+                },
+            )
+            .then(dragHandle)
             .r1Pressable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {

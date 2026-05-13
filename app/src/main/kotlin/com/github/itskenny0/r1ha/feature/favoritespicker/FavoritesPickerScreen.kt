@@ -102,9 +102,11 @@ fun FavoritesPickerScreen(
                 else -> ChannelList(
                     rows = ui.rows,
                     listState = listState,
+                    isReorderable = ui.filter == PickerFilter.FAVS,
                     onToggle = { vm.toggle(it) },
                     onMoveUp = { vm.moveUp(it) },
                     onMoveDown = { vm.moveDown(it) },
+                    onReorderTo = { entityId, idx -> vm.moveTo(entityId, idx) },
                     onEdit = { vm.startEditing(it) },
                     onPreview = { previewing.value = it },
                 )
@@ -363,31 +365,36 @@ private fun ErrorState(message: String) {
 private fun ChannelList(
     rows: List<FavoritesPickerViewModel.Row>,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    /** True when the active filter is FAVS — turns on long-press-drag reordering of
+     *  rows. The whole-list drag treatment doesn't make sense on category filters
+     *  where most rows aren't favourites and there's no order to preserve. */
+    isReorderable: Boolean,
     onToggle: (String) -> Unit,
     onMoveUp: (String) -> Unit,
     onMoveDown: (String) -> Unit,
+    onReorderTo: (entityId: String, toIndex: Int) -> Unit,
     onEdit: (String) -> Unit,
     onPreview: (com.github.itskenny0.r1ha.core.ha.EntityState) -> Unit,
 ) {
     // favCount used to drive move-arrow enable logic. Pre-computed once per list rather
     // than once per row composition.
     val favCount = rows.count { it.isFavorite }
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 4.dp),
-        // contentType lets Compose recycle row composables across items rather than
-        // throwing away the layout tree for every scroll step. Two contentTypes: one for
-        // favourite rows (have move-arrows) and one for non-favourites (don't). Without
-        // this hint, every row re-composes from scratch on swap.
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 48.dp),
-    ) {
-        items(
+    if (isReorderable) {
+        // FAVS view — long-press a row to grab, drag to reorder, release to drop.
+        // [DragReorderColumn] manages the LazyColumn internally and emits absolute
+        // (from, to) indices on each swap. We map the swap back to the underlying
+        // entityId so the VM persists into the favourites list.
+        com.github.itskenny0.r1ha.ui.components.DragReorderColumn(
             items = rows,
-            key = { it.state.id.value },
-            contentType = { if (it.isFavorite) "fav" else "non-fav" },
-        ) { row ->
+            keyOf = { it.state.id.value },
+            onReorder = { from, to ->
+                val entityId = rows.getOrNull(from)?.state?.id?.value ?: return@DragReorderColumn
+                onReorderTo(entityId, to)
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 4.dp),
+        ) { row, dragHandle, isDragging ->
             ChannelRow(
                 row = row,
                 favCount = favCount,
@@ -396,7 +403,37 @@ private fun ChannelList(
                 onMoveDown = { onMoveDown(row.state.id.value) },
                 onEdit = { onEdit(row.state.id.value) },
                 onLongPress = { onPreview(row.state) },
+                modifier = dragHandle,
+                isDragging = isDragging,
             )
+        }
+    } else {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 4.dp),
+            // contentType lets Compose recycle row composables across items rather than
+            // throwing away the layout tree for every scroll step. Two contentTypes: one
+            // for favourite rows (have move-arrows) and one for non-favourites. Without
+            // this hint, every row re-composes from scratch on swap.
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 48.dp),
+        ) {
+            items(
+                items = rows,
+                key = { it.state.id.value },
+                contentType = { if (it.isFavorite) "fav" else "non-fav" },
+            ) { row ->
+                ChannelRow(
+                    row = row,
+                    favCount = favCount,
+                    onToggle = { onToggle(row.state.id.value) },
+                    onMoveUp = { onMoveUp(row.state.id.value) },
+                    onMoveDown = { onMoveDown(row.state.id.value) },
+                    onEdit = { onEdit(row.state.id.value) },
+                    onLongPress = { onPreview(row.state) },
+                )
+            }
         }
     }
 }
@@ -411,19 +448,30 @@ private fun ChannelRow(
     onEdit: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
+    /** True when this row is currently being long-press-dragged in the reorderable
+     *  FAVS view. Renders with a soft accent fill so the user can see which row is
+     *  in flight, distinct from the row's normal favourite-vs-non-favourite styling. */
+    isDragging: Boolean = false,
 ) {
     val domain = row.state.id.domain
     val domainAccent = domainAccentFor(domain)
     val domainCode = domainLabel(domain)
+    // In the FAVS reorderable view the [DragReorderColumn] owns the long-press
+    // gesture (promoting to a drag); we keep tap-to-toggle but skip our own
+    // long-press detector so the two gesture pipelines don't fight over which one
+    // wins. The drag-handle modifier is composed in via [modifier].
+    val gestureModifier = if (isDragging) {
+        // Dragging — no tap fires until release, the drag-column owns this row.
+        Modifier
+    } else {
+        Modifier.r1RowPressable(onTap = onToggle, onLongPress = onLongPress)
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        // Use the dedicated tap/long-press gesture detector rather than r1Pressable so a
-        // long press can fire the preview without first triggering onToggle. Press
-        // feedback (scale + alpha + haptic) is handled by [r1RowPressable] below to keep
-        // parity with the rest of the picker UI.
         modifier = modifier
             .fillMaxWidth()
-            .r1RowPressable(onTap = onToggle, onLongPress = onLongPress)
+            .background(if (isDragging) R1.AccentWarm.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent)
+            .then(gestureModifier)
             .padding(horizontal = 22.dp, vertical = 12.dp),
     ) {
         // ── Left: domain block (coloured tab) + identity ────────────────────────────

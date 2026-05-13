@@ -419,6 +419,27 @@ class CardStackViewModel(
         viewModelScope.launch { debounced.submit(entityId, clamped) }
     }
 
+    /**
+     * Move a favourite from one index to another. Backs the jump-to-card overlay's
+     * drag-reorder gesture so the user can rearrange the deck without leaving the
+     * card stack. No-op when the indices are equal or out of range; the underlying
+     * settings flow emits the new order and observeFavorites rebuilds the cards
+     * list, so the visible deck reorders within a frame.
+     */
+    fun reorderFavorite(fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex) return
+        viewModelScope.launch {
+            settings.update { cur ->
+                val l = cur.favorites.toMutableList()
+                if (fromIndex !in l.indices) return@update cur
+                val clamped = toIndex.coerceIn(0, l.size - 1)
+                val item = l.removeAt(fromIndex)
+                l.add(clamped, item)
+                cur.copy(favorites = l)
+            }
+        }
+    }
+
     /** Sync the VM's active-card index with the pager's settled page. The wheel/tap handlers
      *  read activeState off of this index, so it has to track whatever page the user has just
      *  paged to. */

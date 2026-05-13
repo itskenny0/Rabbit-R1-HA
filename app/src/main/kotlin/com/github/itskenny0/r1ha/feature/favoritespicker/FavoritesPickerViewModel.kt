@@ -324,6 +324,39 @@ class FavoritesPickerViewModel(
         }
     }
 
+    /**
+     * Absolute reorder — moves [entityId] from its current position to [toIndex].
+     * Backs the drag-reorder gesture in the FAVS view; the up/down arrows still
+     * use [moveUp] / [moveDown] for single-step nudges. The mutation goes through
+     * the same settings.update path so subscribers (the card stack, this picker's
+     * own buildRows pipeline) observe a single coherent emission.
+     */
+    fun moveTo(entityId: String, toIndex: Int) {
+        viewModelScope.launch {
+            var newFavs: List<String> = emptyList()
+            settings.update { cur ->
+                val l = cur.favorites.toMutableList()
+                val fromIdx = l.indexOf(entityId)
+                if (fromIdx < 0) {
+                    newFavs = l
+                    return@update cur
+                }
+                val clamped = toIndex.coerceIn(0, l.size - 1)
+                if (fromIdx == clamped) {
+                    newFavs = l
+                    return@update cur
+                }
+                l.removeAt(fromIdx)
+                l.add(clamped, entityId)
+                newFavs = l
+                cur.copy(favorites = l)
+            }
+            val cur = _ui.value
+            val overrides = settings.settings.first().nameOverrides
+            _ui.value = cur.copy(rows = buildRows(entitiesCache, newFavs, cur.filter, cur.query, overrides))
+        }
+    }
+
     fun moveDown(entityId: String) {
         viewModelScope.launch {
             var newFavs: List<String> = emptyList()
