@@ -4,6 +4,21 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- Needed for the in-app self-update flow: after we download a newer APK from
+         GitHub Releases we fire ACTION_VIEW with a content:// URI, which Android's
+         PackageInstaller honours only when the source app holds this permission.
+         The user still has to confirm the install in the OS prompt — we never
+         silently install. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Resolve other apps that can handle ACTION_VIEW for our APK content URI
+         (i.e. the package installer). On Android 11+ the system requires this
+         declaration before queryIntentActivities returns anything useful. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="application/vnd.android.package-archive"/>
+        </intent>
+    </queries>
 
     <application
         android:name=".App"
@@ -33,5 +48,18 @@
                 <data android:scheme="r1ha" android:host="auth-callback"/>
             </intent-filter>
         </activity>
+        <!-- FileProvider for the in-app update flow — exposes the downloaded APK
+             from cache as a content:// URI that the package installer can read.
+             Authority matches applicationId + ".updates" so it stays unique to
+             this app even if installed alongside another build. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/updates_paths"/>
+        </provider>
     </application>
 </manifest>

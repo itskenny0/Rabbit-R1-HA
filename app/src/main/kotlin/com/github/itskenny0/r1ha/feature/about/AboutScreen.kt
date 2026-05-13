@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.github.itskenny0.r1ha.BuildConfig
 import com.github.itskenny0.r1ha.core.ha.ConnectionState
 import com.github.itskenny0.r1ha.core.ha.HaRepository
@@ -79,6 +80,7 @@ fun AboutScreen(
                     },
                 )
             }
+            item { UpdaterRow() }
 
             item { SectionDivider() }
 
@@ -117,6 +119,125 @@ fun AboutScreen(
             item { Spacer(Modifier.height(48.dp)) }
         }
     }
+}
+
+/**
+ * Self-update row — talks to the GitHub Releases API, compares the latest release's
+ * derived versionCode against [BuildConfig.VERSION_CODE], and surfaces a download +
+ * install flow when there's something newer. State is fully local (no VM needed) —
+ * the row is self-contained and feature-flag-friendly. Status pill changes by
+ * state: IDLE → CHECKING → UP TO DATE | UPDATE AVAILABLE | DOWNLOADING (%) | ERROR.
+ *
+ * Downloads land in cacheDir/updates/ via [com.github.itskenny0.r1ha.core.update.AppUpdater],
+ * which then fires ACTION_VIEW so Android's package installer prompts the user.
+ * No silent installs.
+ */
+@Composable
+private fun UpdaterRow() {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val state = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<UpdaterState>(UpdaterState.Idle)
+    }
+    val updater = androidx.compose.runtime.remember {
+        com.github.itskenny0.r1ha.core.update.AppUpdater(
+            http = okhttp3.OkHttpClient(),
+        )
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 22.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Updates", style = R1.bodyEmph, color = R1.Ink)
+            Spacer(Modifier.weight(1f))
+            val pillText = when (val s = state.value) {
+                UpdaterState.Idle -> "TAP TO CHECK"
+                UpdaterState.Checking -> "CHECKING…"
+                is UpdaterState.UpToDate -> "UP TO DATE"
+                is UpdaterState.Available -> "v${s.info.versionName} AVAILABLE"
+                is UpdaterState.Downloading -> "DOWNLOADING ${(s.fraction * 100).toInt()}%"
+                is UpdaterState.Error -> "ERROR"
+            }
+            val pillColor = when (state.value) {
+                is UpdaterState.Available, is UpdaterState.Downloading -> R1.AccentWarm
+                is UpdaterState.Error -> R1.StatusRed
+                else -> R1.InkSoft
+            }
+            Box(
+                modifier = Modifier
+                    .background(R1.SurfaceMuted, shape = R1.ShapeS)
+                    .r1Pressable(onClick = {
+                        // Tap dispatches based on current state: idle/up-to-date/
+                        // error → re-check; available → start download.
+                        when (val s = state.value) {
+                            is UpdaterState.Available -> {
+                                state.value = UpdaterState.Downloading(s.info, 0f)
+                                scope.launch {
+                                    runCatching {
+                                        updater.downloadAndInstall(context, s.info) { read, total ->
+                                            val frac = if (total > 0) (read.toFloat() / total).coerceIn(0f, 1f) else 0f
+                                            state.value = UpdaterState.Downloading(s.info, frac)
+                                        }
+                                        // Hand-off complete — Android's installer
+                                        // takes over and the user lands back here
+                                        // after the new build starts.
+                                        state.value = UpdaterState.Available(s.info)
+                                    }.onFailure {
+                                        state.value = UpdaterState.Error(it.message ?: "download failed")
+                                    }
+                                }
+                            }
+                            else -> {
+                                state.value = UpdaterState.Checking
+                                scope.launch {
+                                    val info = updater.checkForUpdate()
+                                    state.value = if (info != null) UpdaterState.Available(info)
+                                        else UpdaterState.UpToDate
+                                }
+                            }
+                        }
+                    })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(pillText, style = R1.labelMicro, color = pillColor)
+            }
+        }
+        // Error / release-notes detail. Available + Error reveal additional text
+        // under the row. Notes are truncated to ~6 lines so the about screen
+        // doesn't grow unreasonably for a long changelog.
+        when (val s = state.value) {
+            is UpdaterState.Available -> if (s.info.notes.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = s.info.notes,
+                    style = R1.body,
+                    color = R1.InkSoft,
+                    maxLines = 6,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            is UpdaterState.Error -> {
+                Spacer(Modifier.height(4.dp))
+                Text(s.message, style = R1.labelMicro, color = R1.StatusRed)
+            }
+            else -> Unit
+        }
+    }
+}
+
+/** Local state machine for the updater row's tap flow. */
+private sealed interface UpdaterState {
+    data object Idle : UpdaterState
+    data object Checking : UpdaterState
+    data object UpToDate : UpdaterState
+    data class Available(val info: com.github.itskenny0.r1ha.core.update.UpdateInfo) : UpdaterState
+    data class Downloading(
+        val info: com.github.itskenny0.r1ha.core.update.UpdateInfo,
+        val fraction: Float,
+    ) : UpdaterState
+    data class Error(val message: String) : UpdaterState
 }
 
 @Composable

@@ -51,6 +51,7 @@ import com.github.itskenny0.r1ha.ui.components.R1Button
 import com.github.itskenny0.r1ha.ui.components.SettingsCogGlyph
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.animateScrollBy
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -104,6 +105,19 @@ fun CardStackScreen(
     // inside the chrome-render block) so the LaunchedEffect that observes wheel events
     // can capture it.
     val wheelHintAt = remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    // Hoisted LazyListState for the jump-to-card overlay so the wheel handler can
+    // animateScrollBy it while the overlay is open — without this hoist the wheel
+    // would fall through to the active card's onWheel and adjust e.g. brightness
+    // behind the overlay, which the user noticed and reported.
+    val jumpListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Jump-to-card overlay visibility — tapped open from the chrome counter to let
+    // the user pick a target card by name rather than scrolling through the deck.
+    // Declared here (rather than at the chrome-render site) so the wheel-events
+    // LaunchedEffect can read its value to gate scroll-routing.
+    val jumpPickerOpen = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    val pagerScope = androidx.compose.runtime.rememberCoroutineScope()
     // Pager state hoisted to screen scope so the wheel handler can route navigation
     // requests through pagerNavRequests for read-only / action cards (whose wheel
     // should move between cards rather than mutate state).
@@ -150,6 +164,21 @@ fun CardStackScreen(
             val sign = com.github.itskenny0.r1ha.core.input.WheelInput.applyDirection(
                 dir, appSettings.wheel.invertDirection,
             )
+            // When the jump-to-card overlay is open the wheel should scroll the list
+            // rather than reach past the modal and adjust the card underneath. One
+            // detent ≈ one row of pixel height — same idea as a desktop scroll
+            // wheel scrolling a focused list. Direction inversion is applied via
+            // [sign] above so the user's wheel-direction preference still wins.
+            if (jumpPickerOpen.value) {
+                // 60 px per detent ≈ one row on the R1's default density; lets a
+                // couple-second sustained spin scan a long favourites list end to
+                // end. Sign convention: wheel-down ⇒ user wants to see further-
+                // down items ⇒ animateScrollBy(positive pixels). [sign] is +1 for
+                // UP and -1 for DOWN after invertDirection, so negating it yields
+                // the right scroll direction for both wheel orientations.
+                pagerScope.launch { jumpListState.animateScrollBy(-sign * 60f) }
+                return@collect
+            }
             val now = event.timestampMillis
             navTimestamps.addLast(now)
             while (navTimestamps.isNotEmpty() && now - navTimestamps.first() > 250L) {
@@ -235,13 +264,6 @@ fun CardStackScreen(
     val selectPickerFor = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<com.github.itskenny0.r1ha.core.ha.EntityId?>(null)
     }
-    // Jump-to-card overlay visibility — tapped open from the chrome counter to let the
-    // user pick a target card by name rather than scrolling through the deck. Lifted
-    // to screen scope so it can overlay the chrome and the pager body.
-    val jumpPickerOpen = androidx.compose.runtime.remember {
-        androidx.compose.runtime.mutableStateOf(false)
-    }
-    val pagerScope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.CompositionLocalProvider(
         com.github.itskenny0.r1ha.core.theme.LocalHaRepository provides haRepository,
         com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides appSettings.entityOverrides,
@@ -400,6 +422,7 @@ fun CardStackScreen(
             JumpToCardSheet(
                 cards = cards,
                 currentIndex = state.currentIndex,
+                listState = jumpListState,
                 onPick = { targetIdx ->
                     val current = pagerState.currentPage
                     val target = if (appSettings.ui.infiniteScroll) {
@@ -882,6 +905,9 @@ private fun BoxScope.WheelHintOverlay(triggerAt: Long) {
 private fun JumpToCardSheet(
     cards: List<com.github.itskenny0.r1ha.core.ha.EntityState>,
     currentIndex: Int,
+    /** Hoisted LazyListState so the screen-level wheel handler can scroll the list
+     *  while the overlay is open. */
+    listState: androidx.compose.foundation.lazy.LazyListState,
     onPick: (Int) -> Unit,
     onReorder: (fromIndex: Int, toIndex: Int) -> Unit,
     onDismiss: () -> Unit,
@@ -918,16 +944,24 @@ private fun JumpToCardSheet(
                 }
             }
             Text(
-                text = "TAP TO JUMP · LONG-PRESS + DRAG TO REORDER",
+                text = "TAP TO JUMP · LONG-PRESS + DRAG TO REORDER · WHEEL SCROLLS",
                 style = R1.labelMicro,
                 color = R1.InkMuted,
                 modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
             )
+            // On open, snap the list so the current card is roughly centred — on a
+            // 30-card deck the user would otherwise have to wheel down to find it.
+            // Keyed on currentIndex so a re-open after a deck swap also re-centres.
+            androidx.compose.runtime.LaunchedEffect(currentIndex) {
+                val target = (currentIndex - 2).coerceAtLeast(0)
+                listState.scrollToItem(target)
+            }
             com.github.itskenny0.r1ha.ui.components.DragReorderColumn(
                 items = cards,
                 keyOf = { it.id.value },
                 onReorder = onReorder,
                 modifier = Modifier.fillMaxSize(),
+                listState = listState,
             ) { card, dragHandle, isDragging ->
                 val idx = cards.indexOf(card)
                 JumpRow(

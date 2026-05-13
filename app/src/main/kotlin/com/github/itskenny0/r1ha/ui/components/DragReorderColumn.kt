@@ -45,6 +45,15 @@ fun <T : Any> DragReorderColumn(
     onReorder: (fromIndex: Int, toIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
     /**
+     * Optional caller-owned LazyListState. Lift this when the caller needs to drive
+     * scroll position from outside the list — e.g. hooking the wheel input up to
+     * animateScrollBy so a wheel spin scrolls the picker list rather than reaching
+     * past it to mutate the card underneath the overlay. Null = a list-local state
+     * is allocated, which is the simpler case for self-contained pickers.
+     */
+    listState: androidx.compose.foundation.lazy.LazyListState =
+        androidx.compose.foundation.lazy.rememberLazyListState(),
+    /**
      * Row body. [dragHandle] is the Modifier the consumer applies to the part of the
      * row that initiates the drag (typically the whole row, but it could be just a
      * leading icon). [isDragging] flips true on the row currently in flight so the
@@ -53,7 +62,6 @@ fun <T : Any> DragReorderColumn(
      */
     itemContent: @Composable LazyItemScope.(item: T, dragHandle: Modifier, isDragging: Boolean) -> Unit,
 ) {
-    val listState = rememberLazyListState()
     // Identity of the row being dragged — null when no drag in flight. We track by
     // the consumer's stable key (rather than by index) because the index shifts as
     // swaps land; the key is the only stable handle on the row across reorderings.

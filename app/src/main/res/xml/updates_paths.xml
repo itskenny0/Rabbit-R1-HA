@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider path mapping for the in-app self-update flow. The updater writes
+  the downloaded APK into the app's cache directory (subfolder "updates"); this
+  file lets the FileProvider expose that path as a content:// URI without
+  surfacing any other cache contents.
+-->
+<paths>
+    <cache-path name="updates" path="updates/"/>
+</paths>
