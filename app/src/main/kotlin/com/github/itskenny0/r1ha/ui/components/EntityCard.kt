@@ -62,6 +62,9 @@ fun EntityCard(
         // has to be exhaustive for the when to compile.
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON, Domain.INPUT_BUTTON,
         Domain.SENSOR, Domain.BINARY_SENSOR -> CardRenderModel.Glyph.SWITCH
+        // Select / input_select route to SelectCard before reaching the glyph map.
+        // Glyph itself isn't used there but the when has to be exhaustive.
+        Domain.SELECT, Domain.INPUT_SELECT -> CardRenderModel.Glyph.SWITCH
     }
     val accentRole = when (state.id.domain) {
         Domain.LIGHT -> CardRenderModel.AccentRole.WARM
@@ -93,6 +96,10 @@ fun EntityCard(
         // / unobtrusive"), everything else falls back to neutral.
         Domain.SENSOR -> sensorAccent(state.deviceClass)
         Domain.BINARY_SENSOR -> binarySensorAccent(state.deviceClass)
+        // Select entities get a cool accent — keeps them visually distinct from the
+        // warm-orange action / control crowd in the deck while still reading as
+        // interactive (vs. neutral which conveys read-only).
+        Domain.SELECT, Domain.INPUT_SELECT -> CardRenderModel.AccentRole.COOL
     }
     // When the entity is unavailable, dim the whole card and overlay a "UNAVAILABLE" label so
     // the user doesn't think the card is just at 0%. The themes themselves don't honour
@@ -140,6 +147,20 @@ fun EntityCard(
                 state = state,
                 accent = resolvedAccent,
                 domainLabel = sensorDomainLabel(state.id.domain),
+                showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
+                textSizeSp = perCardOverride.textSizeSp,
+                modifier = Modifier.fillMaxSize().alpha(themeAlpha),
+            )
+        } else if (state.id.domain.isSelect) {
+            // Settable-enum entities (select / input_select). Wheel cycles through
+            // the options; tap opens a full-screen picker overlay similar to the
+            // light-effect picker. Lifted to its own card variant rather than
+            // bolted onto the percent / switch layouts because the value semantics
+            // are fundamentally different (discrete labels, not on/off or 0..100).
+            SelectCard(
+                state = state,
+                accent = resolvedAccent,
+                domainLabel = if (state.id.domain == Domain.INPUT_SELECT) "SELECT" else "SELECT",
                 showArea = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.showAreaLabel,
                 textSizeSp = perCardOverride.textSizeSp,
                 modifier = Modifier.fillMaxSize().alpha(themeAlpha),

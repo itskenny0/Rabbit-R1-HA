@@ -108,6 +108,15 @@ data class ServiceCall(
                     "set_value",
                     buildJsonObject { put("value", JsonPrimitive(clamped)) },
                 )
+                // Select / input_select don't go through setPercent — the wheel handler
+                // routes them to setSelectOption directly. Defensive no-op: dispatching
+                // `select_option` without a known option string would fail anyway, so we
+                // emit a homeassistant.update_entity which is harmless.
+                Domain.SELECT, Domain.INPUT_SELECT -> ServiceCall(
+                    target,
+                    "update_entity",
+                    JsonObject(emptyMap()),
+                )
             }
         }
 
@@ -206,6 +215,19 @@ data class ServiceCall(
                 },
             )
 
+        /**
+         * Select an option on a `select.*` / `input_select.*` entity. HA's service is
+         * `<domain>.select_option` with `{option: "<value>"}`. The option string must
+         * be present in the entity's `options` attribute; HA rejects unknown options
+         * with a 4xx and the caller's service-failure path surfaces a toast.
+         */
+        fun setSelectOption(target: EntityId, option: String): ServiceCall =
+            ServiceCall(
+                target,
+                "select_option",
+                buildJsonObject { put("option", JsonPrimitive(option)) },
+            )
+
         fun setNumberValue(target: EntityId, value: Double): ServiceCall {
             val rounded = (Math.round(value * 100.0) / 100.0)
             return ServiceCall(
@@ -272,6 +294,14 @@ data class ServiceCall(
                 "update_entity",
                 JsonObject(emptyMap()),
             )
+            // Select entities — tap on the card opens the picker rather than calling
+            // a service. Defensive no-op refresh keeps the dispatch path safe if any
+            // caller ever hits this branch.
+            Domain.SELECT, Domain.INPUT_SELECT -> ServiceCall(
+                target,
+                "update_entity",
+                JsonObject(emptyMap()),
+            )
         }
 
         /**
@@ -324,6 +354,12 @@ data class ServiceCall(
             Domain.BUTTON, Domain.INPUT_BUTTON -> ServiceCall(target, "press", JsonObject(emptyMap()))
             // Sensors are read-only — defensive update_entity no-op.
             Domain.SENSOR, Domain.BINARY_SENSOR -> ServiceCall(
+                target,
+                "update_entity",
+                JsonObject(emptyMap()),
+            )
+            // Select — no on/off concept. Defensive no-op refresh.
+            Domain.SELECT, Domain.INPUT_SELECT -> ServiceCall(
                 target,
                 "update_entity",
                 JsonObject(emptyMap()),

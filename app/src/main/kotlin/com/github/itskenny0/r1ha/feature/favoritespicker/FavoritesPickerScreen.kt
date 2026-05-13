@@ -587,7 +587,7 @@ private fun domainAccentFor(domain: Domain): Color = when (domain) {
     Domain.FAN, Domain.SCENE, Domain.VACUUM -> R1.AccentGreen
     Domain.COVER, Domain.LOCK -> R1.AccentNeutral
     Domain.MEDIA_PLAYER, Domain.HUMIDIFIER, Domain.SCRIPT, Domain.SENSOR,
-    Domain.VALVE -> R1.AccentCool
+    Domain.VALVE, Domain.SELECT, Domain.INPUT_SELECT -> R1.AccentCool
     Domain.BINARY_SENSOR -> R1.AccentNeutral
 }
 
@@ -613,4 +613,6 @@ private fun domainLabel(domain: Domain): String = when (domain) {
     Domain.VALVE -> "VALVE"
     Domain.VACUUM -> "VACUUM"
     Domain.WATER_HEATER -> "HEATER"
+    Domain.SELECT -> "SELECT"
+    Domain.INPUT_SELECT -> "SELECT"
 }

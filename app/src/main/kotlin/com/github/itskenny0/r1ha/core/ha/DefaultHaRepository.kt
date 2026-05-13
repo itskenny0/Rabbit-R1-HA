@@ -385,6 +385,10 @@ class DefaultHaRepository(
             Domain.VACUUM -> raw.state.equals("cleaning", ignoreCase = true) ||
                 raw.state.equals("returning", ignoreCase = true) ||
                 raw.state.equals("on", ignoreCase = true)
+            // Select / input_select have no on/off — they're settable enums. Pin
+            // isOn to false so tap-toggle doesn't try to flip them; the dedicated
+            // picker overlay is the only way to change the option.
+            Domain.SELECT, Domain.INPUT_SELECT -> false
         }
         val available = raw.state != "unavailable" && raw.state != "unknown"
         val pct = computePercentWithState(id.domain, raw.attributes, raw.state)
@@ -432,6 +436,9 @@ class DefaultHaRepository(
             effectList = if (id.domain == Domain.LIGHT) extractEffectList(raw.attributes) else emptyList(),
             effect = if (id.domain == Domain.LIGHT) raw.attributes["effect"].asString()?.takeIf { it != "None" } else null,
             attributesJson = raw.attributes,
+            // Select-domain bits — options list + current option track via state.
+            selectOptions = if (id.domain.isSelect) extractStringList(raw.attributes["options"]) else emptyList(),
+            currentOption = if (id.domain.isSelect) raw.state.takeIf { it.isNotBlank() && it != "unknown" && it != "unavailable" } else null,
         )
         cache.update { it + (id to newState) }
     }
@@ -488,7 +495,8 @@ class DefaultHaRepository(
         // No scalar — pure on/off / read-only / action.
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON, Domain.INPUT_BUTTON,
-        Domain.SENSOR, Domain.BINARY_SENSOR -> null
+        Domain.SENSOR, Domain.BINARY_SENSOR,
+        Domain.SELECT, Domain.INPUT_SELECT -> null
     }
 
     /**
@@ -508,6 +516,17 @@ class DefaultHaRepository(
      */
     private fun extractEffectList(attrs: kotlinx.serialization.json.JsonObject): List<String> {
         val arr = attrs["effect_list"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+        return arr.mapNotNull { (it as? JsonPrimitive)?.content }
+    }
+
+    /**
+     * Generic JSON-array-of-strings extractor — used for the `options` attribute on
+     * select / input_select entities and any future attribute that ships as a flat
+     * string array. Non-string elements are silently dropped rather than throwing so
+     * a malformed HA payload doesn't lose the whole entity.
+     */
+    private fun extractStringList(el: kotlinx.serialization.json.JsonElement?): List<String> {
+        val arr = el as? kotlinx.serialization.json.JsonArray ?: return emptyList()
         return arr.mapNotNull { (it as? JsonPrimitive)?.content }
     }
 
@@ -552,7 +571,8 @@ class DefaultHaRepository(
         Domain.CLIMATE, Domain.WATER_HEATER -> climateTargetTemp(attrs)
         Domain.SWITCH, Domain.INPUT_BOOLEAN, Domain.AUTOMATION, Domain.LOCK,
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON, Domain.INPUT_BUTTON,
-        Domain.BINARY_SENSOR, Domain.VACUUM -> null
+        Domain.BINARY_SENSOR, Domain.VACUUM,
+        Domain.SELECT, Domain.INPUT_SELECT -> null
         // For plain sensors the *state* IS the reading — there's no attribute to read from.
         // The SensorCard renders the rawState string directly; we don't try to coerce it
         // into a Number here because that loses precision (e.g. "21.7" → 21) and locale
@@ -633,6 +653,10 @@ class DefaultHaRepository(
         Domain.SCENE, Domain.SCRIPT, Domain.BUTTON, Domain.INPUT_BUTTON -> false
         // Sensors are read-only — rendered as SensorCard, no wheel.
         Domain.SENSOR, Domain.BINARY_SENSOR -> false
+        // Select entities — settable but the value is a discrete option, not a 0..100
+        // scalar. Returning false routes them away from the percent / switch paths into
+        // the dedicated SelectCard.
+        Domain.SELECT, Domain.INPUT_SELECT -> false
     }
 
     override fun observe(entities: Set<EntityId>): Flow<Map<EntityId, EntityState>> =
@@ -737,6 +761,8 @@ class DefaultHaRepository(
                         Domain.VACUUM -> stateStr.equals("cleaning", ignoreCase = true) ||
                             stateStr.equals("returning", ignoreCase = true) ||
                             stateStr.equals("on", ignoreCase = true)
+                        // Settable enums — no on/off concept.
+                        Domain.SELECT, Domain.INPUT_SELECT -> false
                     },
                     percent = pct,
                     raw = rawNum,
@@ -769,6 +795,11 @@ class DefaultHaRepository(
                     effectList = if (id.domain == Domain.LIGHT) extractEffectList(attrs) else emptyList(),
                     effect = if (id.domain == Domain.LIGHT) attrs["effect"].asString()?.takeIf { it != "None" } else null,
                     attributesJson = attrs,
+                    // Select / input_select — options list from `options` attribute,
+                    // current option is just the state string. Empty / null for
+                    // other domains.
+                    selectOptions = if (id.domain.isSelect) extractStringList(attrs["options"]) else emptyList(),
+                    currentOption = if (id.domain.isSelect) stateStr.takeIf { it.isNotBlank() && it != "unknown" && it != "unavailable" } else null,
                 )
             }
         }

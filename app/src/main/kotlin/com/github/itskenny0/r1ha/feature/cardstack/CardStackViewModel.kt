@@ -498,6 +498,41 @@ class CardStackViewModel(
     }
 
     /**
+     * Cycle through a select-entity's [EntityState.selectOptions] by [delta] (positive
+     * moves forward, negative moves backward). Surfaced from the wheel handler in
+     * CardStackScreen — each wheel detent moves the selection one option. Wraps both
+     * ways so a fast spin lands somewhere sane regardless of starting position. Skips
+     * when the entity has no options or only one (nothing to choose).
+     */
+    fun cycleSelectOption(entityId: EntityId, delta: Int) {
+        val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
+        if (!entity.id.domain.isSelect) return
+        val options = entity.selectOptions
+        if (options.size < 2) return
+        val curIdx = options.indexOf(entity.currentOption).let { if (it == -1) 0 else it }
+        val nextIdx = ((curIdx + delta) % options.size + options.size) % options.size
+        val next = options[nextIdx]
+        R1Log.i("CardStack.cycleSelect", "$entityId: ${entity.currentOption ?: "?"} → $next")
+        // No optimistic update because select state IS the entity state (no separate
+        // attribute to nudge); the next state_changed will arrive within a couple
+        // hundred ms and re-render the card.
+        viewModelScope.launch {
+            haRepository.call(com.github.itskenny0.r1ha.core.ha.ServiceCall.setSelectOption(entityId, next))
+        }
+    }
+
+    /** Apply a specific option to a select-entity. Used by the picker overlay. */
+    fun setSelectOption(entityId: EntityId, option: String) {
+        val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
+        if (!entity.id.domain.isSelect) return
+        if (option !in entity.selectOptions) return
+        R1Log.i("CardStack.setSelect", "$entityId: ${entity.currentOption ?: "?"} → $option")
+        viewModelScope.launch {
+            haRepository.call(com.github.itskenny0.r1ha.core.ha.ServiceCall.setSelectOption(entityId, option))
+        }
+    }
+
+    /**
      * Fire a media-player transport / volume action — play/pause, next, prev, vol+, vol-,
      * mute. Surfaced by the media_player card's [MediaControlsRow]. Each tap is a
      * one-shot service call with no payload; the volume wheel is still the primary way

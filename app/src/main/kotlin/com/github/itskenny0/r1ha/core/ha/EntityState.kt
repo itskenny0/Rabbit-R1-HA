@@ -99,6 +99,17 @@ data class EntityState(
      * a source JSON object (e.g. in tests).
      */
     val attributesJson: kotlinx.serialization.json.JsonObject? = null,
+    /**
+     * Select / input_select-only: the full list of available options from HA's
+     * `options` attribute. Empty for non-select entities. The wheel cycles through
+     * these and the picker overlay lists them all for one-tap selection.
+     */
+    val selectOptions: List<String> = emptyList(),
+    /**
+     * Select / input_select-only: the currently-selected option, equal to HA's `state`
+     * for these domains. Null only when the state is unknown/unavailable.
+     */
+    val currentOption: String? = null,
 ) {
     companion object {
         fun normaliseLightBrightness(raw: Int): Int = ((raw.coerceIn(0, 255)) * 100.0 / 255.0).roundToInt()

@@ -46,6 +46,9 @@ enum class PickerFilter(val label: String, val matches: (Domain) -> Boolean) {
     // because no chip filtered for them.
     NUMBERS("NUMBERS", { it == Domain.NUMBER || it == Domain.INPUT_NUMBER }),
     VACUUMS("VACUUMS", { it == Domain.VACUUM }),
+    // Settable-enum entities — select / input_select. Useful for fan-mode selectors,
+    // operating-mode pickers, room-target selectors for vacuums, etc.
+    SELECTS("SELECTS", { it.isSelect }),
 }
 
 class FavoritesPickerViewModel(

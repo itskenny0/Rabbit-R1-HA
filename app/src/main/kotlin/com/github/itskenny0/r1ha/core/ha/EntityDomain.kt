@@ -82,6 +82,16 @@ enum class Domain(val prefix: String) {
      * water_heater.turn_off. Reuses the climate dispatch path.
      */
     WATER_HEATER("water_heater"),
+    /**
+     * `select` entities — a settable enum from HA's `options` attribute (e.g. fan mode
+     * controllers offering auto/manual, mode switchers offering eco/normal/turbo).
+     * State is the currently-selected option string; service is `select.select_option`
+     * with `{option: "<value>"}`. Rendered as a dedicated card variant where the wheel
+     * cycles through options and tap opens a full-screen picker overlay.
+     */
+    SELECT("select"),
+    /** Helper-domain twin of [SELECT] — `input_select.*` shares the same service shape. */
+    INPUT_SELECT("input_select"),
     ;
 
     /** Action-only domains — UI renders them as fire-and-forget ActionCard tiles. */
@@ -90,6 +100,10 @@ enum class Domain(val prefix: String) {
 
     /** Read-only sensor domains — UI renders them as SensorCard. No wheel, no tap. */
     val isSensor: Boolean get() = this == SENSOR || this == BINARY_SENSOR
+
+    /** Settable-enum domains — UI renders them as SelectCard. Wheel cycles options;
+     *  tap opens a full-screen picker. */
+    val isSelect: Boolean get() = this == SELECT || this == INPUT_SELECT
 
     companion object {
         private val byPrefix = entries.associateBy { it.prefix }

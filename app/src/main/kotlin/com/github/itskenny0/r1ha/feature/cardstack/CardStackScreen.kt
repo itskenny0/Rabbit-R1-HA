@@ -131,6 +131,15 @@ fun CardStackScreen(
                 // jiggles, and the tap affordance is already the obvious way to fire.)
                 active.id.domain.isSensor || active.id.domain.isAction ->
                     pagerNavRequests.tryEmit(dir)
+                // Select entities — wheel cycles through the option list. UP = prev,
+                // DOWN = next, with wrap-around so a fast spin always lands cleanly.
+                active.id.domain.isSelect -> {
+                    val delta = when (dir) {
+                        com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.UP -> -1
+                        com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.DOWN -> +1
+                    }
+                    vm.cycleSelectOption(active.id, delta)
+                }
                 else -> vm.onWheel(event)
             }
         }
@@ -181,6 +190,12 @@ fun CardStackScreen(
     val effectPickerFor = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<com.github.itskenny0.r1ha.core.ha.EntityId?>(null)
     }
+    // Parallel state for the select-option picker overlay (Server Fan Mode = auto /
+    // manual, etc.). Same screen-scope hoisting as the effect picker so it can use the
+    // full display rather than being clipped to the card body.
+    val selectPickerFor = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<com.github.itskenny0.r1ha.core.ha.EntityId?>(null)
+    }
     androidx.compose.runtime.CompositionLocalProvider(
         com.github.itskenny0.r1ha.core.theme.LocalHaRepository provides haRepository,
         com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides appSettings.entityOverrides,
@@ -190,6 +205,8 @@ fun CardStackScreen(
         com.github.itskenny0.r1ha.core.theme.LocalOnSetLightEffect provides { id, effect -> vm.setLightEffect(id, effect) },
         com.github.itskenny0.r1ha.core.theme.LocalOnOpenEffectPicker provides { id -> effectPickerFor.value = id },
         com.github.itskenny0.r1ha.core.theme.LocalOnMediaTransport provides { id, action -> vm.mediaTransport(id, action) },
+        com.github.itskenny0.r1ha.core.theme.LocalOnOpenSelectPicker provides { id -> selectPickerFor.value = id },
+        com.github.itskenny0.r1ha.core.theme.LocalOnSetSelectOption provides { id, option -> vm.setSelectOption(id, option) },
     ) {
     Box(modifier = Modifier.fillMaxSize().background(R1.Bg)) {
         // displayedCards = cards with optimistic overrides applied per entity. Binding the
@@ -286,6 +303,33 @@ fun CardStackScreen(
                 )
             } else {
                 effectPickerFor.value = null
+            }
+        }
+
+        // ── Select-option picker overlay ────────────────────────────────────────────
+        // Same shape as the effect picker — fullscreen list, tap to apply, system-back
+        // / CLOSE chip to dismiss. Mirrors the effect-picker pattern rather than
+        // building a second variant; the only difference at render time is the source
+        // of the list (entity.selectOptions vs. entity.effectList) and the apply
+        // callback. The picker sheet is reused as-is via [SelectPickerSheet].
+        val selectId = selectPickerFor.value
+        if (selectId != null) {
+            val entity = state.displayedCards.firstOrNull { it.id == selectId }
+                ?: state.cards.firstOrNull { it.id == selectId }
+            if (entity != null && entity.selectOptions.isNotEmpty()) {
+                com.github.itskenny0.r1ha.core.theme.SelectPickerSheet(
+                    entityId = selectId,
+                    current = entity.currentOption,
+                    options = entity.selectOptions,
+                    accent = com.github.itskenny0.r1ha.core.theme.R1.AccentCool,
+                    onPick = { option ->
+                        vm.setSelectOption(selectId, option)
+                        selectPickerFor.value = null
+                    },
+                    onDismiss = { selectPickerFor.value = null },
+                )
+            } else {
+                selectPickerFor.value = null
             }
         }
     }

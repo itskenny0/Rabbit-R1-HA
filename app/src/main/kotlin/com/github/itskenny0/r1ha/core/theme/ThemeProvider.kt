@@ -99,6 +99,20 @@ val LocalOnMediaTransport = staticCompositionLocalOf<
     ((com.github.itskenny0.r1ha.core.ha.EntityId, com.github.itskenny0.r1ha.core.ha.MediaTransport) -> Unit)?
 > { null }
 
+/**
+ * Request the screen-level select-option picker overlay for [entityId]. SelectCard
+ * calls this from its CHOOSE button; CardStackScreen owns the visibility state and
+ * renders the actual sheet at the top of its layer stack so it's truly fullscreen.
+ */
+val LocalOnOpenSelectPicker = staticCompositionLocalOf<
+    ((com.github.itskenny0.r1ha.core.ha.EntityId) -> Unit)?
+> { null }
+
+/** Direct setter for a select-entity's current option (by string value). */
+val LocalOnSetSelectOption = staticCompositionLocalOf<
+    ((com.github.itskenny0.r1ha.core.ha.EntityId, String) -> Unit)?
+> { null }
+
 @Composable
 fun R1ThemeHost(themeId: ThemeId, content: @Composable () -> Unit) {
     val theme = when (themeId) {
