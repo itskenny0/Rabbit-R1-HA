@@ -159,18 +159,25 @@ fun gitSha(): String = try {
 } catch (_: Exception) { "dev" }
 
 /**
- * Default for local dev: minutes since 2020-01-01 UTC. Strictly monotonic with wall-
- * clock time so successive builds on the same calendar day produce strictly larger
- * versionCodes (Android's installer rejects same-or-lower versionCode on update). The
- * 2020 baseline keeps the number comfortably inside Int range — ~3M minutes today,
- * runway to ~2160 before overflow. The CI workflow overrides this via APP_VERSION_CODE
- * derived from the tag's date + time so the released APK is deterministic from the tag.
+ * Default for local dev: a fixed 100M floor + minutes since 2020-01-01 UTC. The 100M
+ * floor exists purely so this scheme produces versionCodes that are strictly larger
+ * than every previously-shipped legacy YYYYMMDD-as-Int value (a 2026 release was
+ * 20_260_513; ten-million-range vs. one-hundred-million-range means upgrade-on-top-of
+ * never trips Android's "version code is older or same" rejection, which the OS
+ * surfaces as the confusing "App not installed as package appears to be invalid"
+ * message). Floor + minutes-since-epoch stays strictly monotonic with wall-clock
+ * time and fits inside Int range until roughly year 4000 — plenty of runway.
  */
 fun defaultVersionCode(): String {
+    // 100M floor (see comment above) + minutes since 2020-01-01 UTC. Every legacy
+    // YYYYMMDD-as-Int we ever shipped fits well below 100M (max plausible:
+    // 99_991_231 in year 9999), so adding this floor guarantees strict monotonic
+    // upgrade no matter which scheme was used for the previously-installed APK.
+    val floor = 100_000_000L
     val epoch = LocalDateTime.of(2020, 1, 1, 0, 0)
     val now = LocalDateTime.now(ZoneOffset.UTC)
     val minutes = Duration.between(epoch, now).toMinutes()
-    return minutes.coerceAtLeast(1).toString()
+    return (floor + minutes).coerceAtLeast(1).toString()
 }
 
 /**

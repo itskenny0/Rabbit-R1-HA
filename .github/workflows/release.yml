@@ -43,10 +43,16 @@ jobs:
           HH="${HHMM:0:2}"
           MIN="${HHMM:2:2}"
           # Compute minutes since 2020-01-01 UTC using `date -d` so the math is
-          # locale-safe; subtract the epoch from the tag's UTC moment.
+          # locale-safe; subtract the epoch from the tag's UTC moment. Add a 100M
+          # floor so the result stays strictly above every legacy YYYYMMDD-as-Int
+          # value we ever shipped — without that floor, the new scheme (~3.3M for
+          # mid-2026) would land BELOW the previous date-as-int (~20.2M) and
+          # Android would refuse the upgrade with "App not installed as package
+          # appears to be invalid" (which is its generic message for downgrade).
           EPOCH_S=$(date -u -d '2020-01-01 00:00:00' +%s)
           TAG_S=$(date -u -d "${YYYY}-${MM}-${DD} ${HH}:${MIN}:00" +%s)
-          VERSION_CODE=$(( (TAG_S - EPOCH_S) / 60 ))
+          MINUTES=$(( (TAG_S - EPOCH_S) / 60 ))
+          VERSION_CODE=$(( 100000000 + MINUTES ))
           VERSION_NAME="${YYYY}.${MM}.${DD}.${HHMM}"
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
