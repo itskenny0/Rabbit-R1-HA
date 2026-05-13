@@ -273,8 +273,9 @@ fun SettingsScreen(
             item {
                 SwitchRow(
                     label = "Wheel toggles switches",
-                    subtitle = "Off (default): wheel navigates past locks, covers, vacuums, " +
-                        "plain switches. On: wheel-up turns them on, wheel-down turns them off.",
+                    subtitle = "On (default): wheel-up turns locks, covers, vacuums, plain " +
+                        "switches on; wheel-down turns them off. Off: wheel does nothing on " +
+                        "those cards — useful if a casual brush is accidentally relocking your door.",
                     checked = s.behavior.wheelTogglesSwitches,
                     onCheckedChange = { vm.setWheelTogglesSwitches(it) },
                 )

@@ -206,7 +206,7 @@ class SettingsRepository private constructor(
                     keepScreenOn = p[K.behaviorKeepOn] ?: true,
                     tapToToggle = p[K.behaviorTapToggle] ?: true,
                     hideStatusBar = p[K.behaviorHideStatus] ?: false,
-                    wheelTogglesSwitches = p[K.behaviorWheelTogglesSwitches] ?: false,
+                    wheelTogglesSwitches = p[K.behaviorWheelTogglesSwitches] ?: true,
                 ),
                 theme = p[K.theme]?.let { runCatching { ThemeId.valueOf(it) }.getOrNull() } ?: ThemeId.PRAGMATIC_HYBRID,
                 nameOverrides = decodeNameOverrides(p[K.nameOverrides]),
