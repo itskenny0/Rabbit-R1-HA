@@ -62,6 +62,16 @@ data class EntityOverride(
      * a no-op and harmless.
      */
     val lightButtonsHidden: Set<LightCardButton> = emptySet(),
+    /**
+     * Per-card override for the [Behavior.tapToToggle] setting. Three-state:
+     *  - null: inherit the global setting (default).
+     *  - true: tap-to-toggle is ENABLED on this card regardless of the global.
+     *  - false: tap-to-toggle is DISABLED on this card regardless of the global.
+     * Users surface this from the customize dialog as 'Inherit / On / Off' chips.
+     * Useful when one specific card keeps getting toggled accidentally (e.g. a
+     * smart-plug behind a thin chrome strip) without having to flip the global.
+     */
+    val tapToToggle: Boolean? = null,
 ) {
     companion object {
         /** Curated CT presets surfaced in the customize dialog. */

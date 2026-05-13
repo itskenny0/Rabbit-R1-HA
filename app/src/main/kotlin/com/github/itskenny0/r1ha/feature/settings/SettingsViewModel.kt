@@ -58,6 +58,18 @@ class SettingsViewModel(
     fun setWheelTogglesSwitches(enabled: Boolean) =
         update { it.copy(behavior = it.behavior.copy(wheelTogglesSwitches = enabled)) }
 
+    fun setToastLogLevel(level: com.github.itskenny0.r1ha.core.prefs.ToastLogLevel) =
+        update { it.copy(behavior = it.behavior.copy(toastLogLevel = level)) }
+
+    /**
+     * Generic mutator for the [AdvancedSettings] sub-struct. The dev-menu screen
+     * uses this to update fields one at a time without each field needing its own
+     * VM method — there are roughly two dozen advanced toggles and writing a setter
+     * per knob would dwarf the rest of the VM.
+     */
+    fun updateAdvanced(transform: (com.github.itskenny0.r1ha.core.prefs.AdvancedSettings) -> com.github.itskenny0.r1ha.core.prefs.AdvancedSettings) =
+        update { it.copy(advanced = transform(it.advanced)) }
+
     // ── Appearance ──────────────────────────────────────────────────────────
 
     fun setTheme(themeId: ThemeId) = update { it.copy(theme = themeId) }

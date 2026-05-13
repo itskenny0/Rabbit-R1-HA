@@ -80,8 +80,11 @@ class EntityOverrideCodecTest {
         )
         val encoded = encodeEntityOverrides_visibleForTesting(map)
         // Codes are stored sorted alphabetically (F before W) so the encoded blob is
-        // stable regardless of Set iteration order.
-        assertThat(encoded).endsWith("|FW")
+        // stable regardless of Set iteration order. Test by splitting on `|` and
+        // checking the buttons slot directly — keeps the assertion robust to new
+        // fields being appended to the encoded form in future schema changes.
+        val buttonsSlot = encoded.substringAfter('=').split('|').getOrNull(7)
+        assertThat(buttonsSlot).isEqualTo("FW")
         val decoded = decodeEntityOverrides_visibleForTesting(encoded)
         assertThat(decoded["light.kitchen"]?.lightButtonsHidden)
             .isEqualTo(setOf(LightCardButton.WHITE, LightCardButton.EFFECTS))

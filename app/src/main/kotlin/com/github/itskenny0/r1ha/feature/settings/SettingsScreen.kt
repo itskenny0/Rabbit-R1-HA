@@ -1,6 +1,8 @@
 package com.github.itskenny0.r1ha.feature.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -257,7 +259,9 @@ fun SettingsScreen(
             item {
                 SwitchRow(
                     label = "Tap to toggle",
-                    subtitle = "Tap the card to flip the entity on/off",
+                    subtitle = "Off (default): the whole-card tap is inert so a miss " +
+                        "while aiming for the chrome buttons doesn't accidentally turn " +
+                        "the entity on. On: tap anywhere on the card to flip it.",
                     checked = s.behavior.tapToToggle,
                     onCheckedChange = { vm.setTapToToggle(it) },
                 )
@@ -280,6 +284,7 @@ fun SettingsScreen(
                     onCheckedChange = { vm.setWheelTogglesSwitches(it) },
                 )
             }
+            item { ToastLogLevelRow(current = s.behavior.toastLogLevel, onSelect = { vm.setToastLogLevel(it) }) }
 
             item { SectionDivider() }
 
@@ -331,6 +336,57 @@ private fun Section(title: String) {
 @Composable
 private fun SectionDivider() {
     Spacer(Modifier.height(2.dp))
+}
+
+/**
+ * Horizontal-scroll chip row selecting the in-app toast log threshold. OFF is the
+ * default (no diagnostic toasts); WARN is the friendly diagnostic level (failures
+ * + decoder drops). Tap a chip to switch.
+ */
+@Composable
+private fun ToastLogLevelRow(
+    current: com.github.itskenny0.r1ha.core.prefs.ToastLogLevel,
+    onSelect: (com.github.itskenny0.r1ha.core.prefs.ToastLogLevel) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 22.dp, vertical = 10.dp),
+    ) {
+        Text("Toast log level", style = R1.bodyEmph, color = R1.Ink)
+        Text(
+            text = "Off (default): no diagnostic toasts. Warn: surface failures and " +
+                "decoder drops as tappable expanding toasts — useful for 'where's my " +
+                "entity?' on devices without adb. Debug: everything R1Log emits.",
+            style = R1.body,
+            color = R1.InkMuted,
+            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+        )
+        val scroll = rememberScrollState()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(scroll),
+        ) {
+            com.github.itskenny0.r1ha.core.prefs.ToastLogLevel.entries.forEach { level ->
+                val active = level == current
+                Box(
+                    modifier = Modifier
+                        .padding(end = 6.dp)
+                        .clip(R1.ShapeS)
+                        .background(if (active) R1.AccentWarm else R1.SurfaceMuted)
+                        .r1Pressable({ onSelect(level) })
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = level.name,
+                        style = R1.labelMicro,
+                        color = if (active) R1.Bg else R1.InkSoft,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

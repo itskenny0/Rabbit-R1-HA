@@ -117,7 +117,18 @@ class CardStackViewModel(
 
     private val debounced = DebouncedCaller<EntityId, Int>(
         scope = viewModelScope,
-        debounceMillis = 250L,
+        // Trailing window — short so a quick tap-tap dialled by the user fires the
+        // wire call almost as fast as the optimistic UI updates. Used to be 250 ms
+        // which felt like 'state commits on release' for any in-flight gesture.
+        debounceMillis = 60L,
+        // Force-fire after 150 ms of continuous events on the same entity so a
+        // sustained wheel spin or touch drag still flushes mid-gesture rather than
+        // waiting for the user to pause. The repo's own debouncer (60 ms there too)
+        // adds a thin second layer of coalescing; in practice this means HA sees
+        // ~5-8 service calls per second during a continuous gesture, the optimistic
+        // UI tracks every wheel detent instantly, and they reconcile via state_changed
+        // within a frame of HA echoing the final value back.
+        maxIntervalMillis = 150L,
     ) { entityId, pct ->
         // Look up the entity's current state to pick the right service shape: scalar entities
         // get setPercent (turn_on with brightness_pct, set_percentage, set_cover_position,

@@ -276,6 +276,21 @@ fun RenameDialog(
                 }
             }
 
+            // ── TAP-TO-TOGGLE (per-card override) ────────────────────────────────────
+            SectionHeader("TAP TO TOGGLE")
+            Text(
+                text = "Override the global Behaviour setting for this card. INHERIT follows " +
+                    "the Settings switch; ON forces tap-to-toggle on regardless of the global; " +
+                    "OFF forces it off (so a casual tap doesn't fire the entity).",
+                style = R1.body,
+                color = R1.InkMuted,
+            )
+            Spacer(Modifier.height(6.dp))
+            TapToToggleRow(
+                selected = override.tapToToggle,
+                onSelect = { override = override.copy(tapToToggle = it) },
+            )
+
             // ── GESTURE ──────────────────────────────────────────────────────────────
             SectionHeader("GESTURE")
             Text(
@@ -542,6 +557,47 @@ private fun ctApproxColor(kelvin: Int): androidx.compose.ui.graphics.Color = whe
     kelvin <= 4500 -> androidx.compose.ui.graphics.Color(0xFFFFE3B6)
     kelvin <= 5800 -> androidx.compose.ui.graphics.Color(0xFFE8EEF7)
     else -> androidx.compose.ui.graphics.Color(0xFFB6CCF0)
+}
+
+/**
+ * Tri-state row for the per-card [EntityOverride.tapToToggle] override. Three chips:
+ * INHERIT (null — follow the global Behaviour setting), ON (true — force the gesture
+ * on regardless), OFF (false — force it off so a casual tap doesn't fire the card).
+ */
+@Composable
+private fun TapToToggleRow(
+    selected: Boolean?,
+    onSelect: (Boolean?) -> Unit,
+) {
+    val options: List<Pair<String, Boolean?>> = listOf(
+        "INHERIT" to null,
+        "ON" to true,
+        "OFF" to false,
+    )
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        options.forEachIndexed { idx, (label, value) ->
+            val active = selected == value
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(R1.ShapeS)
+                    .background(if (active) R1.AccentWarm else R1.Bg)
+                    .let { m ->
+                        if (active) m else m.border(1.dp, R1.Hairline, R1.ShapeS)
+                    }
+                    .r1Pressable({ onSelect(value) })
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    style = R1.labelMicro,
+                    color = if (active) R1.Bg else R1.InkSoft,
+                )
+            }
+            if (idx < options.lastIndex) Spacer(Modifier.width(4.dp))
+        }
+    }
 }
 
 /**

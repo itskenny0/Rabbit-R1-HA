@@ -25,5 +25,11 @@ internal object Toaster {
         mainHandler.post {
             Toast.makeText(ctx, message, duration).show()
         }
+        // Also push to the in-app R1Toast bus at WARN — user-facing toasts are
+        // typically failure feedback (call rejected, settings save failed) and the
+        // user might want to tap them open for the full text on the R1's tiny
+        // display. Pushed unconditionally; R1Toast's own enabled / minLevel gates
+        // whether the host actually surfaces it.
+        R1Toast.push(R1Toast.Level.WARN, "ui", message, message)
     }
 }

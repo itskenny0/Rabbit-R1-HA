@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import com.github.itskenny0.r1ha.ui.components.ToastHost
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -94,16 +95,43 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // Apply the toast-log level setting whenever it changes. R1Toast is a
+            // process-scope object so we just update its flags; the bus host
+            // composable reads them at push time. Off → toast UI is silent;
+            // ERROR/WARN/INFO/DEBUG raise the threshold progressively.
+            androidx.compose.runtime.LaunchedEffect(settings.behavior.toastLogLevel) {
+                val level = settings.behavior.toastLogLevel
+                com.github.itskenny0.r1ha.core.util.R1Toast.enabled =
+                    level != com.github.itskenny0.r1ha.core.prefs.ToastLogLevel.OFF
+                com.github.itskenny0.r1ha.core.util.R1Toast.minLevel = when (level) {
+                    com.github.itskenny0.r1ha.core.prefs.ToastLogLevel.OFF,
+                    com.github.itskenny0.r1ha.core.prefs.ToastLogLevel.ERROR ->
+                        com.github.itskenny0.r1ha.core.util.R1Toast.Level.ERROR
+                    com.github.itskenny0.r1ha.core.prefs.ToastLogLevel.WARN ->
+                        com.github.itskenny0.r1ha.core.util.R1Toast.Level.WARN
+                    com.github.itskenny0.r1ha.core.prefs.ToastLogLevel.INFO ->
+                        com.github.itskenny0.r1ha.core.util.R1Toast.Level.INFO
+                    com.github.itskenny0.r1ha.core.prefs.ToastLogLevel.DEBUG ->
+                        com.github.itskenny0.r1ha.core.util.R1Toast.Level.DEBUG
+                }
+            }
             R1ThemeHost(themeId = settings.theme) {
                 CompositionLocalProvider(LocalUiOptions provides settings.ui) {
-                    AppNavGraph(
-                        navController = navController,
-                        startDestination = startDestination,
-                        haRepository = graph.haRepository,
-                        settings = graph.settings,
-                        tokens = graph.tokens,
-                        wheelInput = graph.wheelInput,
-                    )
+                    // Wrap the nav graph in a Box so the in-app ToastHost can
+                    // overlay every navigated screen. The toast bus is process-
+                    // scoped (see R1Toast); the host just renders whatever event
+                    // it last received as long as the toast feature is enabled.
+                    Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+                        AppNavGraph(
+                            navController = navController,
+                            startDestination = startDestination,
+                            haRepository = graph.haRepository,
+                            settings = graph.settings,
+                            tokens = graph.tokens,
+                            wheelInput = graph.wheelInput,
+                        )
+                        ToastHost()
+                    }
                 }
             }
         }

@@ -44,6 +44,7 @@ fun AboutScreen(
     haRepository: HaRepository,
     settings: SettingsRepository,
     wheelInput: WheelInput,
+    onOpenDevMenu: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -94,6 +95,7 @@ fun AboutScreen(
                 )
             }
             item { InfoRow("Favourites", appSettings.favorites.size.toString(), mono = true) }
+            item { EntitiesDiagnosticRow(haRepository) }
 
             item { SectionDivider() }
 
@@ -116,7 +118,160 @@ fun AboutScreen(
                     modifier = Modifier.padding(horizontal = 22.dp, vertical = 6.dp),
                 )
             }
+            item { SectionDivider() }
+            // ── Dev menu ───────────────────────────────────────────────────────────
+            item { Section("DEVELOPER") }
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .r1Pressable(onClick = onOpenDevMenu)
+                        .padding(horizontal = 22.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Dev menu", style = R1.bodyEmph, color = R1.Ink)
+                        Text(
+                            text = "Advanced tunables, behaviour flags, in-app log viewer.",
+                            style = R1.body,
+                            color = R1.InkMuted,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(text = "→", style = R1.bodyEmph, color = R1.InkSoft)
+                }
+            }
             item { Spacer(Modifier.height(48.dp)) }
+        }
+    }
+}
+
+/**
+ * Diagnostic row — fetches /api/states once on tap, groups the returned entities by
+ * domain, and renders both per-domain counts and the underlying entity_id list so the
+ * user can see exactly what HA shipped back. Designed for the 'where are my X
+ * entities?' case where logcat isn't reachable: each domain row expands inline to
+ * show every entity_id in that bucket. If `media_player` shows 0 here when the user
+ * expects it, the issue is either upstream (HA permissions, entity-level
+ * visibility) or in the decoder. If it shows a non-zero count, the issue is
+ * downstream and we can debug from there.
+ */
+@Composable
+private fun EntitiesDiagnosticRow(haRepository: HaRepository) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val byDomain = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<Map<String, List<String>>?>(null)
+    }
+    val loading = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    val expandedDomain = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
+    val error = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Entities", style = R1.bodyEmph, color = R1.Ink)
+            Spacer(Modifier.weight(1f))
+            val pillText = when {
+                loading.value -> "FETCHING…"
+                error.value != null -> "ERROR"
+                byDomain.value != null -> "${byDomain.value!!.values.sumOf { it.size }} TOTAL"
+                else -> "TAP TO PROBE HA"
+            }
+            Box(
+                modifier = Modifier
+                    .background(R1.SurfaceMuted, shape = R1.ShapeS)
+                    .r1Pressable(onClick = {
+                        if (loading.value) return@r1Pressable
+                        loading.value = true
+                        error.value = null
+                        scope.launch {
+                            haRepository.listAllEntities().fold(
+                                onSuccess = { list ->
+                                    byDomain.value = list
+                                        .groupBy { it.id.domain.prefix }
+                                        .mapValues { (_, l) -> l.map { it.id.value } }
+                                        .toSortedMap()
+                                },
+                                onFailure = { error.value = it.message ?: "fetch failed" },
+                            )
+                            loading.value = false
+                        }
+                    })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = pillText,
+                    style = R1.labelMicro,
+                    color = when {
+                        error.value != null -> R1.StatusRed
+                        byDomain.value != null -> R1.AccentWarm
+                        else -> R1.InkSoft
+                    },
+                )
+            }
+        }
+        // Per-domain count list. Tapping a row expands to show the entity_ids in
+        // that domain inline — useful when the user wants to verify a specific
+        // entity_id reached the app.
+        byDomain.value?.let { domains ->
+            domains.forEach { (domain, ids) ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .r1Pressable(onClick = {
+                                expandedDomain.value = if (expandedDomain.value == domain) null else domain
+                            })
+                            .padding(horizontal = 22.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (expandedDomain.value == domain) "▼ " else "▶ ",
+                            style = R1.labelMicro,
+                            color = R1.InkMuted,
+                        )
+                        Text(
+                            text = domain,
+                            style = R1.body.copy(fontFamily = FontFamily.Monospace),
+                            color = R1.Ink,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            text = ids.size.toString(),
+                            style = R1.body.copy(fontFamily = FontFamily.Monospace),
+                            color = R1.InkSoft,
+                        )
+                    }
+                    if (expandedDomain.value == domain) {
+                        ids.forEach { eid ->
+                            Text(
+                                text = eid,
+                                style = R1.labelMicro.copy(fontFamily = FontFamily.Monospace),
+                                color = R1.InkMuted,
+                                modifier = Modifier.padding(start = 44.dp, end = 22.dp, top = 2.dp, bottom = 2.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        error.value?.let { msg ->
+            Text(
+                text = msg,
+                style = R1.labelMicro,
+                color = R1.StatusRed,
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 4.dp),
+            )
         }
     }
 }

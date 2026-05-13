@@ -92,6 +92,17 @@ fun AppNavGraph(
                 haRepository = haRepository,
                 settings = settings,
                 wheelInput = wheelInput,
+                onOpenDevMenu = {
+                    navController.navigate(Routes.DEV_MENU) { launchSingleTop = true }
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.DEV_MENU) {
+            com.github.itskenny0.r1ha.feature.devmenu.DevMenuScreen(
+                settings = settings,
+                tokens = tokens,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }

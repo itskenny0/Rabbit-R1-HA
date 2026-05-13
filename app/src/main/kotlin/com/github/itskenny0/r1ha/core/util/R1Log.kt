@@ -11,13 +11,33 @@ import android.util.Log
 internal object R1Log {
     private const val TAG = "R1HA"
 
-    fun v(where: String, msg: String) { Log.v(TAG, "$where: $msg") }
-    fun d(where: String, msg: String) { Log.d(TAG, "$where: $msg") }
-    fun i(where: String, msg: String) { Log.i(TAG, "$where: $msg") }
+    fun v(where: String, msg: String) {
+        Log.v(TAG, "$where: $msg")
+        // Verbose maps to DEBUG on the in-app bus — the bus only ships three named
+        // levels above NONE so verbose folds in with the noisiest setting.
+        R1Toast.push(R1Toast.Level.DEBUG, where, msg)
+        R1LogBuffer.append(R1LogBuffer.Level.D, where, msg)
+    }
+    fun d(where: String, msg: String) {
+        Log.d(TAG, "$where: $msg")
+        R1Toast.push(R1Toast.Level.DEBUG, where, msg)
+        R1LogBuffer.append(R1LogBuffer.Level.D, where, msg)
+    }
+    fun i(where: String, msg: String) {
+        Log.i(TAG, "$where: $msg")
+        R1Toast.push(R1Toast.Level.INFO, where, msg)
+        R1LogBuffer.append(R1LogBuffer.Level.I, where, msg)
+    }
     fun w(where: String, msg: String, t: Throwable? = null) {
         if (t != null) Log.w(TAG, "$where: $msg", t) else Log.w(TAG, "$where: $msg")
+        val full = if (t != null) "$msg\n\n${t.stackTraceToString()}" else msg
+        R1Toast.push(R1Toast.Level.WARN, where, msg, full)
+        R1LogBuffer.append(R1LogBuffer.Level.W, where, msg, t)
     }
     fun e(where: String, msg: String, t: Throwable? = null) {
         if (t != null) Log.e(TAG, "$where: $msg", t) else Log.e(TAG, "$where: $msg")
+        val full = if (t != null) "$msg\n\n${t.stackTraceToString()}" else msg
+        R1Toast.push(R1Toast.Level.ERROR, where, msg, full)
+        R1LogBuffer.append(R1LogBuffer.Level.E, where, msg, t)
     }
 }

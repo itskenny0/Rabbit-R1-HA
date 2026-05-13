@@ -58,6 +58,14 @@ class SettingsRepository private constructor(
     private val shadow: SharedPreferences,
 ) {
 
+    // Single JSON instance for AdvancedSettings persistence. Lenient + ignoring
+    // unknown keys so older saves (with fewer fields) and newer saves (with extra
+    // fields the running build doesn't know about yet) both decode cleanly.
+    private val advancedJson = kotlinx.serialization.json.Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
+
     /**
      * Tick channel that fires whenever the shadow store is written. Combined with
      * `store.data` so the public `settings` Flow re-emits even when a write only landed
@@ -124,6 +132,8 @@ class SettingsRepository private constructor(
         val behaviorTapToggle = booleanPreferencesKey("behavior.tap_toggle")
         val behaviorHideStatus = booleanPreferencesKey("behavior.hide_status_bar")
         val behaviorWheelTogglesSwitches = booleanPreferencesKey("behavior.wheel_toggles_switches")
+        val behaviorToastLogLevel = stringPreferencesKey("behavior.toast_log_level")
+        val advancedJson = stringPreferencesKey("advanced.json")
         val uiTextHistoryLen = intPreferencesKey("ui.text_history_length")
         val uiHideCardTail = booleanPreferencesKey("ui.hide_card_tail")
         val uiMaxDecimals = intPreferencesKey("ui.max_decimals")
@@ -204,13 +214,23 @@ class SettingsRepository private constructor(
                 behavior = Behavior(
                     haptics = p[K.behaviorHaptics] ?: true,
                     keepScreenOn = p[K.behaviorKeepOn] ?: true,
-                    tapToToggle = p[K.behaviorTapToggle] ?: true,
+                    tapToToggle = p[K.behaviorTapToggle] ?: false,
                     hideStatusBar = p[K.behaviorHideStatus] ?: false,
                     wheelTogglesSwitches = p[K.behaviorWheelTogglesSwitches] ?: true,
+                    toastLogLevel = p[K.behaviorToastLogLevel]
+                        ?.let { runCatching { ToastLogLevel.valueOf(it) }.getOrNull() }
+                        ?: ToastLogLevel.OFF,
                 ),
                 theme = p[K.theme]?.let { runCatching { ThemeId.valueOf(it) }.getOrNull() } ?: ThemeId.PRAGMATIC_HYBRID,
                 nameOverrides = decodeNameOverrides(p[K.nameOverrides]),
                 entityOverrides = decodeEntityOverrides(p[K.entityOverrides]),
+                advanced = p[K.advancedJson]
+                    ?.let {
+                        runCatching {
+                            advancedJson.decodeFromString(AdvancedSettings.serializer(), it)
+                        }.getOrNull()
+                    }
+                    ?: AdvancedSettings(),
             )
         }
         .onEach { s ->
@@ -251,6 +271,7 @@ class SettingsRepository private constructor(
                 p[K.behaviorTapToggle] = next.behavior.tapToToggle
                 p[K.behaviorHideStatus] = next.behavior.hideStatusBar
                 p[K.behaviorWheelTogglesSwitches] = next.behavior.wheelTogglesSwitches
+                p[K.behaviorToastLogLevel] = next.behavior.toastLogLevel.name
                 p[K.uiTextHistoryLen] = next.ui.textHistoryLength
                 p[K.uiHideCardTail] = next.ui.hideCardTailAbove
                 p[K.uiMaxDecimals] = next.ui.maxDecimalPlaces
@@ -259,6 +280,10 @@ class SettingsRepository private constructor(
                 p[K.theme] = next.theme.name
                 p[K.nameOverrides] = encodeNameOverrides(next.nameOverrides)
                 p[K.entityOverrides] = encodeEntityOverrides(next.entityOverrides)
+                p[K.advancedJson] = advancedJson.encodeToString(
+                    AdvancedSettings.serializer(),
+                    next.advanced,
+                )
             }
             R1Log.i("SettingsRepo.update", "DataStore edit completed; next.server=${next.server?.url ?: "null"}")
         } catch (t: Throwable) {
@@ -361,7 +386,9 @@ private fun encodeEntityOverrides(map: Map<String, EntityOverride>): String {
         // hidden button. Empty = nothing hidden (all supported buttons visible).
         val btnsStr = if (o.lightButtonsHidden.isEmpty()) ""
             else o.lightButtonsHidden.map { it.code }.sorted().joinToString("")
-        "$idEnc=$sizeStr|$pillStr|$areaStr|$lpEnc|$decStr|$accStr|$ctStr|$btnsStr"
+        // Per-card tap-to-toggle override. Same tri-state encoding as pill/area.
+        val tapStr = when (o.tapToToggle) { true -> "1"; false -> "0"; null -> "?" }
+        "$idEnc=$sizeStr|$pillStr|$areaStr|$lpEnc|$decStr|$accStr|$ctStr|$btnsStr|$tapStr"
     }
 }
 
@@ -403,6 +430,7 @@ private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
             val btnsBlob = parts.getOrNull(7).orEmpty()
             val buttons = if (btnsBlob.isBlank()) emptySet()
                 else btnsBlob.mapNotNull { com.github.itskenny0.r1ha.core.prefs.LightCardButton.fromCode(it) }.toSet()
+            val tap = when (parts.getOrNull(8)) { "1" -> true; "0" -> false; else -> null }
             id to EntityOverride(
                 textSizeSp = size,
                 showOnOffPill = pill,
@@ -412,6 +440,7 @@ private fun decodeEntityOverrides(raw: String?): Map<String, EntityOverride> {
                 accentColor = acc,
                 lightColorTempK = ct,
                 lightButtonsHidden = buttons,
+                tapToToggle = tap,
             )
         }.getOrNull()
     }.toMap()

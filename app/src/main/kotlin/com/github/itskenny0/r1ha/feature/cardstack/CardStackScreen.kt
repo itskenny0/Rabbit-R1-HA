@@ -1,6 +1,7 @@
 package com.github.itskenny0.r1ha.feature.cardstack
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -747,6 +748,18 @@ private fun ChromeRow(
             // keeps the deck-overlap aesthetic where the user can see the preceding
             // card peeking under the chrome.
             .then(if (solidBackdrop) Modifier.background(R1.Bg) else Modifier)
+            // Consume any tap that lands in the chrome strip but misses one of the
+            // explicit buttons (hamburger / pip / pencil / gear). Without this, a
+            // tap in the SpaceBetween gaps falls through to the pager content below,
+            // which extends UP into the contentPadding zone — the user reported
+            // 'top-left corner of cards turns them on' because that's where the gap
+            // between hamburger and pip sits. Empty-onClick clickable with no
+            // indication / interactionSource so the chrome doesn't paint a ripple.
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = {},
+            )
             .statusBarsPadding()
             .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,

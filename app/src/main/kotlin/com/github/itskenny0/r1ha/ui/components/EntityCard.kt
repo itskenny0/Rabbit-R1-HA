@@ -124,11 +124,18 @@ fun EntityCard(
     // accidentally relock a door or run a scene). Scalar cards have no dedicated
     // on/off button — the wheel sets brightness and tap-to-toggle is the obvious way
     // to flip the bulb on / off — so they keep the gesture.
+    //
+    // Per-card override (perCardOverride.tapToToggle) can force the gesture on or off
+    // independent of the global setting, so a single problematic card can be tamed
+    // without flipping behaviour for the whole deck.
     val hasExplicitActivationButton = state.id.domain.isAction ||
         state.id.domain.isSelect ||
         !state.supportsScalar
+    val perCardOverridePulledEarly = com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides
+        .current[state.id.value]
+    val effectiveTapToToggle = perCardOverridePulledEarly?.tapToToggle ?: tapToToggleEnabled
     val tapModifier = when {
-        !tapToToggleEnabled || !state.isAvailable -> Modifier
+        !effectiveTapToToggle || !state.isAvailable -> Modifier
         state.id.domain.isSensor -> Modifier
         hasExplicitActivationButton -> Modifier
         onLongPress != null -> Modifier.r1RowPressable(onTap = onTapToggle, onLongPress = onLongPress)
