@@ -720,6 +720,21 @@ class DefaultHaRepository(
                 it.entity_id.substringBefore('.', missingDelimiterValue = "")
             }.eachCount()
             R1Log.i("HaRepo.listAll", "decoded ${rows.size} rows; by domain=$countsByDomain")
+            // Diagnostic — when a user reports missing entities of a particular kind,
+            // log raw vs decoded counts per domain so the offender pops out of logcat
+            // immediately. The raw count is from the JSON array elements that name
+            // a supported domain; the decoded count is what survived per-row decode.
+            val rawByDomain = rowsJson.groupingBy {
+                val obj = it as? kotlinx.serialization.json.JsonObject
+                val eid = (obj?.get("entity_id") as? JsonPrimitive)?.content.orEmpty()
+                eid.substringBefore('.', missingDelimiterValue = "")
+            }.eachCount()
+            val rawSupported = rawByDomain.filterKeys { Domain.isSupportedPrefix(it) }
+            val deltas = rawSupported.mapValues { (d, raw) -> raw - (countsByDomain[d] ?: 0) }
+                .filterValues { it > 0 }
+            if (deltas.isNotEmpty()) {
+                R1Log.w("HaRepo.listAll", "decoder dropped per-row: $deltas (raw=$rawSupported)")
+            }
             // Log unsupported domains separately so users investigating "where's my
             // entity?" can run `adb logcat -s HaRepo.listAll` and see exactly which
             // domain prefixes we're dropping (with counts). The supported set is
@@ -731,6 +746,12 @@ class DefaultHaRepository(
             rows.mapNotNull { row ->
                 val prefix = row.entity_id.substringBefore('.', missingDelimiterValue = "")
                 if (!Domain.isSupportedPrefix(prefix)) return@mapNotNull null
+                // Wrap the whole EntityState construction in a try/catch so one weird
+                // row (a media_player whose `volume_level` is a JsonArray instead of a
+                // primitive, a climate with malformed `min_temp`, etc.) doesn't drop
+                // the entire entity. Log the offender so users can find it via
+                // `adb logcat -s HaRepo.listAll`.
+                runCatching {
                 val id = EntityId(row.entity_id)
                 val stateStr = row.stateStr
                 val attrs = row.attrsObj
@@ -801,6 +822,10 @@ class DefaultHaRepository(
                     selectOptions = if (id.domain.isSelect) extractStringList(attrs["options"]) else emptyList(),
                     currentOption = if (id.domain.isSelect) stateStr.takeIf { it.isNotBlank() && it != "unknown" && it != "unavailable" } else null,
                 )
+                }.getOrElse { t ->
+                    R1Log.w("HaRepo.listAll", "construction failed for ${row.entity_id}: ${t.message}")
+                    null
+                }
             }
         }
     }

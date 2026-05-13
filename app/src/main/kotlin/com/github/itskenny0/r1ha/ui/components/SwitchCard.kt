@@ -131,6 +131,22 @@ fun SwitchCard(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        // Media-player extras — when a media_player lands on the SwitchCard path
+        // (no VOLUME_SET feature / null volume_level), it would otherwise have no
+        // transport at all. Render the same MediaControlsRow as the scalar path so
+        // play/pause/next/prev/vol± still work end-to-end. The volume buttons here
+        // call `media_player.volume_up` / `volume_down`, which HA accepts on most
+        // players that report any volume_step capability — distinct from the
+        // VOLUME_SET requirement that gated the scalar path.
+        if (state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.MEDIA_PLAYER) {
+            Spacer(Modifier.height(14.dp))
+            com.github.itskenny0.r1ha.core.theme.MediaControlsRow(
+                entityId = state.id,
+                isPlaying = state.isOn,
+                accent = accent,
+            )
+        }
+
         Spacer(Modifier.weight(1f))
     }
 }
