@@ -1,5 +1,8 @@
 import java.util.Properties
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 plugins {
@@ -119,6 +122,10 @@ dependencies {
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
+    // Explicit compose.foundation — material3 used to pull it in transitively but
+    // we now reach into the gesture-detector / pointer-input API surface for the
+    // touch-drag slider on the vertical tape meter, which lives in foundation only.
+    implementation(libs.compose.foundation)
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
@@ -151,8 +158,26 @@ fun gitSha(): String = try {
     proc.inputStream.bufferedReader().readText().trim().ifEmpty { "dev" }
 } catch (_: Exception) { "dev" }
 
-/** Default for local dev: YYYYMMDD as an Int (e.g. 20260511). */
-fun defaultVersionCode(): String = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
+/**
+ * Default for local dev: minutes since 2020-01-01 UTC. Strictly monotonic with wall-
+ * clock time so successive builds on the same calendar day produce strictly larger
+ * versionCodes (Android's installer rejects same-or-lower versionCode on update). The
+ * 2020 baseline keeps the number comfortably inside Int range — ~3M minutes today,
+ * runway to ~2160 before overflow. The CI workflow overrides this via APP_VERSION_CODE
+ * derived from the tag's date + time so the released APK is deterministic from the tag.
+ */
+fun defaultVersionCode(): String {
+    val epoch = LocalDateTime.of(2020, 1, 1, 0, 0)
+    val now = LocalDateTime.now(ZoneOffset.UTC)
+    val minutes = Duration.between(epoch, now).toMinutes()
+    return minutes.coerceAtLeast(1).toString()
+}
 
-/** Default for local dev: YYYY.MM.DD (human-friendly). */
-fun defaultVersionName(): String = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy.MM.dd"))
+/**
+ * Default for local dev: `YYYY.MM.DD.HHmm` in UTC. Same-day reships then display
+ * distinct, human-readable versions (2026.05.13.1430 vs 2026.05.13.1820) instead of
+ * Android adding a transparent letter suffix when two installs collide.
+ */
+fun defaultVersionName(): String =
+    LocalDateTime.now(ZoneOffset.UTC)
+        .format(DateTimeFormatter.ofPattern("yyyy.MM.dd.HHmm"))

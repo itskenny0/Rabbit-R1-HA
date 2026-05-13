@@ -3,7 +3,11 @@ name: Release
 on:
   push:
     tags:
+      # Accept either the legacy date-only form (r1ha-YYYYMMDD) or the new
+      # date + UTC time-of-day form (r1ha-YYYYMMDD-HHmm) so same-day reships
+      # produce strictly distinct versionNames / versionCodes.
       - 'r1ha-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+      - 'r1ha-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]'
 
 jobs:
   release:
@@ -19,13 +23,33 @@ jobs:
       - name: Parse version from tag
         id: version
         run: |
+          # Tag forms: r1ha-YYYYMMDD or r1ha-YYYYMMDD-HHmm. We always parse a
+          # date AND a time; the legacy date-only form defaults to 0000 UTC so
+          # the resulting versionName / versionCode are stable across the
+          # one-tag-per-day historical regime. The versionCode is minutes-since-
+          # 2020-01-01-UTC — strictly monotonic with wall-clock time so any
+          # reship within the same day produces a higher code than the previous.
           TAG="${GITHUB_REF_NAME}"
-          YYYYMMDD="${TAG#r1ha-}"
+          REST="${TAG#r1ha-}"
+          YYYYMMDD="${REST:0:8}"
+          if [ "${#REST}" -ge 13 ] && [ "${REST:8:1}" = "-" ]; then
+            HHMM="${REST:9:4}"
+          else
+            HHMM="0000"
+          fi
           YYYY="${YYYYMMDD:0:4}"
           MM="${YYYYMMDD:4:2}"
           DD="${YYYYMMDD:6:2}"
-          echo "version_code=${YYYYMMDD}" >> "$GITHUB_OUTPUT"
-          echo "version_name=${YYYY}.${MM}.${DD}" >> "$GITHUB_OUTPUT"
+          HH="${HHMM:0:2}"
+          MIN="${HHMM:2:2}"
+          # Compute minutes since 2020-01-01 UTC using `date -d` so the math is
+          # locale-safe; subtract the epoch from the tag's UTC moment.
+          EPOCH_S=$(date -u -d '2020-01-01 00:00:00' +%s)
+          TAG_S=$(date -u -d "${YYYY}-${MM}-${DD} ${HH}:${MIN}:00" +%s)
+          VERSION_CODE=$(( (TAG_S - EPOCH_S) / 60 ))
+          VERSION_NAME="${YYYY}.${MM}.${DD}.${HHMM}"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4

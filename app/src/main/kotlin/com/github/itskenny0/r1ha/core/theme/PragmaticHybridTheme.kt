@@ -2,6 +2,10 @@ package com.github.itskenny0.r1ha.core.theme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -150,6 +154,7 @@ object PragmaticHybridTheme : R1Theme {
             // ── Vertical tape meter — inset from the right edge, ~200 dp tall ───────
             Spacer(Modifier.width(20.dp))
             VerticalTapeMeter(
+                entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
                 percent = model.percent,
                 accent = accent,
                 tickLabels = model.meterLabels,
@@ -274,6 +279,11 @@ internal fun BigReadout(
  */
 @Composable
 internal fun VerticalTapeMeter(
+    /** Entity this meter is for — used by the touch-drag and tick-tap callbacks so
+     *  they target the right card even when (in theory) two meters are visible at
+     *  once during a swipe. Themes/previews without a real entity can pass a synthetic
+     *  EntityId; the setter callback gracefully ignores unknown ids. */
+    entityId: com.github.itskenny0.r1ha.core.ha.EntityId,
     percent: Int,
     accent: Color,
     /** Top→bottom tick labels. Null = the default 0..100 percent labels. Climate /
@@ -287,27 +297,96 @@ internal fun VerticalTapeMeter(
 ) {
     val fraction = rememberSliderFraction(percent).coerceIn(0f, 1f)
     val labels = tickLabels ?: listOf("100", "75", "50", "25", "0")
+    // Touch-drag + tick-tap setter — wired by the screen layer to VM.setEntityPercent.
+    // When unavailable (previews) the meter still renders cleanly but the gestures are
+    // no-ops; we skip wrapping the modifier so non-interactive consumers don't pick up
+    // a useless pointerInput.
+    val onSetPercent = com.github.itskenny0.r1ha.core.theme.LocalOnSetEntityPercent.current
+    val interactive = onSetPercent != null
     // Tick row labels — at fixed Y positions, monospace tiny text on the inside edge.
     Row(
         modifier = Modifier.fillMaxHeight(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Tick labels — vertically distributed alongside the track. List is top→bottom.
+        // Each label is its own clickable jump-to-value: the first label (e.g. "100")
+        // sets the meter to 100%, the last ("0") to 0%, evenly spaced in between. With
+        // five labels by convention the increments land on 25 / 50 / 75. Domain meters
+        // (climate min..max) use the same mapping so the user can tap a temperature
+        // string to jump straight to that setpoint.
         Column(
             modifier = Modifier.fillMaxHeight(),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.End,
         ) {
-            labels.forEach { tick ->
-                Text(text = tick, style = R1.numeralS, color = R1.InkMuted)
+            labels.forEachIndexed { idx, tick ->
+                // Convert the label index into a target percent. Top label = 100, bottom
+                // = 0; evenly spaced.
+                val targetPct = if (labels.size <= 1) 100
+                    else (100f * (labels.size - 1 - idx) / (labels.size - 1)).toInt()
+                val labelMod = if (interactive) {
+                    Modifier
+                        .clip(R1.ShapeS)
+                        .r1Pressable(onClick = { onSetPercent?.invoke(entityId, targetPct) })
+                        // Generous padding both makes the tap target finger-friendly on
+                        // the R1's narrow display and visually keeps the label in the
+                        // same place — we trim the padding so the column's even
+                        // distribution still feels honest.
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                } else Modifier
+                Text(
+                    text = tick,
+                    style = R1.numeralS,
+                    color = R1.InkMuted,
+                    modifier = labelMod,
+                )
             }
         }
         Spacer(Modifier.width(6.dp))
         // Track + fill + thumb. Anchor to BottomCenter so the fill grows upward.
+        // The track itself is touch-draggable: press at any Y to jump there, drag to
+        // scrub. We compute fraction = 1 - (Y / trackHeight) inside detectDragGestures
+        // because pointer Y is in pixels-from-the-top while the meter conceptually fills
+        // from the bottom. The pointerInput modifier consumes the touch so the
+        // surrounding card-level tap-to-toggle doesn't also fire when the user just
+        // wanted to scrub. Skipped entirely when there's no setter (preview mode).
+        val trackHeightPx = androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
+        val trackInteractionMod = if (interactive) {
+            Modifier
+                .onSizeChanged { trackHeightPx.floatValue = it.height.coerceAtLeast(1).toFloat() }
+                .pointerInput(entityId) {
+                    // Manual gesture loop — awaitEachGesture / awaitFirstDown live in
+                    // androidx.compose.ui.input.pointer (the Compose-UI surface that's
+                    // always on the classpath) so this path doesn't pull in any extra
+                    // foundation-gesture symbols. Behaviour matches detectVerticalDrag-
+                    // Gestures: initial touch is treated as a tap-to-set, subsequent
+                    // movement events scrub continuously, and every change is consumed
+                    // so the surrounding card-tap doesn't also fire.
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val initial = (1f - down.position.y / trackHeightPx.floatValue)
+                            .coerceIn(0f, 1f)
+                        onSetPercent?.invoke(entityId, (initial * 100f).toInt().coerceIn(0, 100))
+                        down.consume()
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                            if (change == null || !change.pressed) break
+                            if (change.position != change.previousPosition) {
+                                val frac = (1f - change.position.y / trackHeightPx.floatValue)
+                                    .coerceIn(0f, 1f)
+                                onSetPercent?.invoke(entityId, (frac * 100f).toInt().coerceIn(0, 100))
+                            }
+                            change.consume()
+                        }
+                    }
+                }
+        } else Modifier
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .width(12.dp),
+                .width(28.dp)
+                .then(trackInteractionMod),
         ) {
             if (rainbow) {
                 // Rainbow track — full-height vertical gradient covering the hue

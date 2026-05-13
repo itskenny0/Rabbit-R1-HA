@@ -207,6 +207,7 @@ fun CardStackScreen(
         com.github.itskenny0.r1ha.core.theme.LocalOnMediaTransport provides { id, action -> vm.mediaTransport(id, action) },
         com.github.itskenny0.r1ha.core.theme.LocalOnOpenSelectPicker provides { id -> selectPickerFor.value = id },
         com.github.itskenny0.r1ha.core.theme.LocalOnSetSelectOption provides { id, option -> vm.setSelectOption(id, option) },
+        com.github.itskenny0.r1ha.core.theme.LocalOnSetEntityPercent provides { id, pct -> vm.setEntityPercent(id, pct) },
     ) {
     Box(modifier = Modifier.fillMaxSize().background(R1.Bg)) {
         // displayedCards = cards with optimistic overrides applied per entity. Binding the

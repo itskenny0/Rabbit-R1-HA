@@ -113,6 +113,16 @@ val LocalOnSetSelectOption = staticCompositionLocalOf<
     ((com.github.itskenny0.r1ha.core.ha.EntityId, String) -> Unit)?
 > { null }
 
+/**
+ * Direct setter for a card's scalar percent (0..100) — wired by themes from touch
+ * drag / tap interactions on the vertical tape meter. Lets the user adjust brightness
+ * / volume / temperature with a finger as quickly as the wheel can, without leaving
+ * the card. Null = previews / non-card contexts.
+ */
+val LocalOnSetEntityPercent = staticCompositionLocalOf<
+    ((com.github.itskenny0.r1ha.core.ha.EntityId, Int) -> Unit)?
+> { null }
+
 @Composable
 fun R1ThemeHost(themeId: ThemeId, content: @Composable () -> Unit) {
     val theme = when (themeId) {

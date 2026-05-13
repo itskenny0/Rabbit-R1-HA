@@ -394,6 +394,31 @@ class CardStackViewModel(
         viewModelScope.launch { debounced.submit(activeState.id, newPct) }
     }
 
+    /**
+     * Set a card's percent to an absolute value (0..100) — used by the touch-drag and
+     * tick-tap affordances on the right-edge slider. Reuses the same optimistic-then-
+     * debounce path as [onWheel] so a finger drag feels identical to a fast wheel spin
+     * end-to-end (instant UI update, single service-call after the user settles).
+     *
+     * Validation mirrors onWheel: refuse on unavailable entities, action / sensor
+     * domains, and non-scalar entities (those use the on/off setSwitch path). For
+     * scalar entities the value is clamped to 0..100 — the VM doesn't try to convert
+     * it into a native unit; setPercent / the climate-temp dispatch downstream handle
+     * that mapping.
+     */
+    fun setEntityPercent(entityId: EntityId, pct: Int) {
+        val card = _state.value.cards.firstOrNull { it.id == entityId } ?: return
+        if (!card.isAvailable) return
+        if (card.id.domain.isAction || card.id.domain.isSensor) return
+        if (!card.supportsScalar) return
+        val clamped = pct.coerceIn(0, 100)
+        R1Log.d("CardStack.setPercent", "$entityId → $clamped (touch)")
+        _state.value = _state.value.copy(
+            optimisticPercents = _state.value.optimisticPercents + (entityId to clamped),
+        )
+        viewModelScope.launch { debounced.submit(entityId, clamped) }
+    }
+
     /** Sync the VM's active-card index with the pager's settled page. The wheel/tap handlers
      *  read activeState off of this index, so it has to track whatever page the user has just
      *  paged to. */

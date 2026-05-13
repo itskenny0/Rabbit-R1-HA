@@ -1,14 +1,12 @@
 package com.github.itskenny0.r1ha.core.theme
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,10 +24,13 @@ import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.ThemeId
 
 /**
- * "Colourful Cards" — a per-entity gradient sky behind the same Mission-Control layout. The
- * slider keeps the new horizontal tape position but draws on white for contrast against the
- * gradient. Background palettes are hashed by entity id so each card has a stable, recognisable
- * colour identity.
+ * "Colourful Cards" — a per-entity gradient sky behind the same Mission-Control
+ * layout. Each card gets a stable palette hashed from its entity_id so two lights
+ * named "kitchen" and "lounge" always read distinctly. Reuses the shared
+ * [PragmaticHybridTheme] building blocks ([BigReadout], [LightControlsRow],
+ * [MediaControlsRow], [VerticalTapeMeter]) so the theme is fully featured rather than
+ * just a pretty wrapper; the distinct identity here is the gradient backdrop and the
+ * always-white ink/accent.
  */
 object ColorfulCardsTheme : R1Theme {
     override val id = ThemeId.COLORFUL_CARDS
@@ -65,6 +66,10 @@ object ColorfulCardsTheme : R1Theme {
     override fun Card(model: CardRenderModel, modifier: Modifier, onTapToggle: () -> Unit) {
         val pal = paletteFor(model.entityIdText)
         val ui = LocalUiOptions.current
+        // Accent is white for body text + slider, with a per-card override (from
+        // EntityOverride.accentColor) winning when set. The gradient backdrop already
+        // carries the colour identity so we don't need a coloured accent on top.
+        val accent = model.accentOverride ?: Color.White
 
         Row(
             modifier = modifier
@@ -108,8 +113,34 @@ object ColorfulCardsTheme : R1Theme {
                 BigReadout(
                     percent = model.percent,
                     showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
-                    accent = Color.White,
+                    accent = accent,
+                    overrideText = model.displayValue,
+                    overrideUnit = model.displayUnit,
+                    textSizeSp = model.textSizeSp,
+                    lightEntityId = if (model.lightWheelMode != null) com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText) else null,
+                    lightWheelMode = model.lightWheelMode,
                 )
+                if (model.lightAvailableModes.size > 1 || model.lightEffectListSize > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    LightControlsRow(
+                        entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
+                        currentMode = model.lightWheelMode
+                            ?: com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS,
+                        availableModes = model.lightAvailableModes,
+                        currentEffect = model.lightEffect,
+                        effectList = model.lightEffectList,
+                        accent = accent,
+                        hidden = model.lightButtonsHidden,
+                    )
+                }
+                if (model.domainGlyph == CardRenderModel.Glyph.MEDIA_PLAYER) {
+                    Spacer(Modifier.height(8.dp))
+                    MediaControlsRow(
+                        entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
+                        isPlaying = model.isOn,
+                        accent = accent,
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 if (ui.showOnOffPill) {
                     Box(
@@ -127,34 +158,17 @@ object ColorfulCardsTheme : R1Theme {
                 }
             }
             Spacer(Modifier.width(20.dp))
-            // Chunky white vertical slider, distinct from the other themes.
-            ColorfulVerticalSlider(percent = model.percent)
+            // Shared meter — touch-drag + clickable ticks. The accent passed here is
+            // white, which reads cleanly against the gradient backdrop. Climate /
+            // number cards still show their domain-native range via meterLabels; light
+            // HUE mode still renders the rainbow track.
+            VerticalTapeMeter(
+                entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
+                percent = model.percent,
+                accent = accent,
+                tickLabels = model.meterLabels,
+                rainbow = model.lightWheelMode == com.github.itskenny0.r1ha.core.ha.LightWheelMode.HUE,
+            )
         }
-    }
-}
-
-@Composable
-private fun ColorfulVerticalSlider(percent: Int) {
-    val fraction = rememberSliderFraction(percent).coerceIn(0f, 1f)
-    Box(
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(14.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(14.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .background(Color.Black.copy(alpha = 0.22f)),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxHeight(fraction)
-                .width(14.dp)
-                .align(Alignment.BottomCenter)
-                .clip(RoundedCornerShape(7.dp))
-                .background(Color.White),
-        )
     }
 }
