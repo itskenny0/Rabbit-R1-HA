@@ -71,6 +71,17 @@ data class Behavior(
      * bar competes with our chrome row for the precious top 24 dp.
      */
     val hideStatusBar: Boolean = false,
+    /**
+     * When on, scrolling the wheel on a non-scalar card (lock, cover-without-position,
+     * vacuum, plain switch) flips it on/off — wheel-up = on, wheel-down = off. Off by
+     * default because the previous wheel-toggles-switches behaviour produced too many
+     * accidental fires for users who just wanted to scroll past those cards: a brush
+     * against the wheel while navigating to the next card was enough to relock a door
+     * or send the vacuum home. With this off, the wheel on those cards navigates the
+     * deck like it does on sensors and actions; tap on the SwitchCard's ON / OFF labels
+     * (or anywhere on the card if [tapToToggle] is on) still toggles them.
+     */
+    val wheelTogglesSwitches: Boolean = false,
 )
 
 data class ServerConfig(

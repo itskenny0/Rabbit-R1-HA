@@ -49,7 +49,9 @@ import com.github.itskenny0.r1ha.ui.components.HamburgerGlyph
 import com.github.itskenny0.r1ha.ui.components.R1Button
 import com.github.itskenny0.r1ha.ui.components.SettingsCogGlyph
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 @Composable
 fun CardStackScreen(
@@ -78,12 +80,21 @@ fun CardStackScreen(
     // to card-stack navigation instead — wheel up = previous card, wheel down = next.
     // The pager state lives inside VerticalCardPager so we publish a navigation
     // request through this MutableSharedFlow which the pager observes.
+    // Signed delta — positive = forward (next card), negative = back. Carrying the
+    // delta (rather than a Direction enum) lets the wheel handler scale it up on fast
+    // spins: a sustained spin at 12 events/sec on a 30-card deck can move 3-4 cards
+    // per detent so the user reaches the far end in a couple of seconds, while a
+    // gentle tap-tap still moves exactly one card per event.
     val pagerNavRequests = remember {
-        kotlinx.coroutines.flow.MutableSharedFlow<com.github.itskenny0.r1ha.core.input.WheelEvent.Direction>(
+        kotlinx.coroutines.flow.MutableSharedFlow<Int>(
             extraBufferCapacity = 4,
             onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
         )
     }
+    // Sliding-window of wheel timestamps for the nav acceleration ramp. Mirrors the
+    // VM's own deque (which accelerates scalar percent steps) but lives at the screen
+    // layer because navigation is a screen concern, not a per-card one.
+    val navTimestamps = remember { ArrayDeque<Long>() }
     // Pager state hoisted to screen scope so the wheel handler can route navigation
     // requests through pagerNavRequests for read-only / action cards (whose wheel
     // should move between cards rather than mutate state).
@@ -123,23 +134,44 @@ fun CardStackScreen(
         wheelInput.events.collect { event ->
             val active = vm.state.value.activeState
             val dir = event.direction
+            // Compute the nav delta with acceleration: 1 card per detent at slow
+            // speed, scaling up to several cards per detent during a sustained spin.
+            // Same rate-window + WheelInput.effectiveStep curve the scalar path uses,
+            // so the feel matches whether the user is dialling brightness or skipping
+            // through cards.
+            val now = event.timestampMillis
+            navTimestamps.addLast(now)
+            while (navTimestamps.isNotEmpty() && now - navTimestamps.first() > 250L) {
+                navTimestamps.removeFirst()
+            }
+            val ratePerSec = navTimestamps.size * (1000.0 / 250L)
+            val navStep = com.github.itskenny0.r1ha.core.input.WheelInput.effectiveStep(
+                base = 1,
+                ratePerSec = ratePerSec,
+                accelerate = appSettings.wheel.acceleration,
+                curve = appSettings.wheel.accelerationCurve,
+            ).coerceIn(1, 8)
+            val sign = com.github.itskenny0.r1ha.core.input.WheelInput.applyDirection(
+                dir, appSettings.wheel.invertDirection,
+            )
+            val navDelta = sign * navStep
             when {
                 active == null -> Unit
                 // Sensors and action cards have no scalar to set — wheel just navigates.
-                // (Tap fires action cards; the previous "overscroll up to fire" gesture
-                // was removed because it triggered too easily from incidental wheel
-                // jiggles, and the tap affordance is already the obvious way to fire.)
                 active.id.domain.isSensor || active.id.domain.isAction ->
-                    pagerNavRequests.tryEmit(dir)
-                // Select entities — wheel cycles through the option list. UP = prev,
-                // DOWN = next, with wrap-around so a fast spin always lands cleanly.
-                active.id.domain.isSelect -> {
-                    val delta = when (dir) {
-                        com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.UP -> -1
-                        com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.DOWN -> +1
-                    }
-                    vm.cycleSelectOption(active.id, delta)
-                }
+                    pagerNavRequests.tryEmit(navDelta)
+                // Non-scalar entities (locks, covers without position, vacuums, plain
+                // switches) — by default the wheel navigates rather than toggles, so a
+                // brush against the wheel while scrolling past those cards doesn't
+                // accidentally relock a door or send the robot home. Opt back into the
+                // wheel-flips-the-state behaviour via Settings → Behavior → Wheel
+                // toggles switches.
+                !active.supportsScalar && !appSettings.behavior.wheelTogglesSwitches ->
+                    pagerNavRequests.tryEmit(navDelta)
+                // Select entities — wheel cycles through the option list with the same
+                // accelerated step so a fast spin can hop several options at once.
+                active.id.domain.isSelect ->
+                    vm.cycleSelectOption(active.id, navDelta)
                 else -> vm.onWheel(event)
             }
         }
@@ -196,6 +228,13 @@ fun CardStackScreen(
     val selectPickerFor = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<com.github.itskenny0.r1ha.core.ha.EntityId?>(null)
     }
+    // Jump-to-card overlay visibility — tapped open from the chrome counter to let the
+    // user pick a target card by name rather than scrolling through the deck. Lifted
+    // to screen scope so it can overlay the chrome and the pager body.
+    val jumpPickerOpen = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    val pagerScope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.CompositionLocalProvider(
         com.github.itskenny0.r1ha.core.theme.LocalHaRepository provides haRepository,
         com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides appSettings.entityOverrides,
@@ -250,6 +289,7 @@ fun CardStackScreen(
                 // is a no-op.
                 state.activeState?.let { customizingId.value = it.id.value }
             },
+            onTapCounter = { jumpPickerOpen.value = true },
             solidBackdrop = appSettings.ui.hideCardTailAbove,
         )
 
@@ -333,6 +373,38 @@ fun CardStackScreen(
                 selectPickerFor.value = null
             }
         }
+
+        // ── Jump-to-card overlay ────────────────────────────────────────────────────
+        // Opens from a tap on the chrome's position pip — lists every card in the
+        // deck by friendly name so the user can hop straight to an entity by name
+        // instead of scrolling. In infinite-scroll mode we land on the nearest
+        // virtual page that maps to the chosen index (relative to current page) so
+        // the wrap-around scroll stays seamless; in finite mode we just animate to
+        // that page directly.
+        if (jumpPickerOpen.value && cards.size > 1) {
+            JumpToCardSheet(
+                cards = cards,
+                currentIndex = state.currentIndex,
+                onPick = { targetIdx ->
+                    val current = pagerState.currentPage
+                    val target = if (appSettings.ui.infiniteScroll) {
+                        // Find the nearest virtual page whose mod == targetIdx so the
+                        // pager glides the shortest distance rather than zooming back
+                        // toward the MIDDLE anchor.
+                        val curIdx = ((current % cards.size) + cards.size) % cards.size
+                        var diff = targetIdx - curIdx
+                        if (diff > cards.size / 2) diff -= cards.size
+                        if (diff < -cards.size / 2) diff += cards.size
+                        (current + diff).coerceIn(0, INFINITE_PAGER_VIRTUAL_PAGES - 1)
+                    } else {
+                        targetIdx.coerceIn(0, cards.lastIndex)
+                    }
+                    pagerScope.launch { pagerState.animateScrollToPage(target) }
+                    jumpPickerOpen.value = false
+                },
+                onDismiss = { jumpPickerOpen.value = false },
+            )
+        }
     }
     }
 }
@@ -342,7 +414,7 @@ private fun VerticalCardPager(
     cards: List<com.github.itskenny0.r1ha.core.ha.EntityState>,
     vm: CardStackViewModel,
     appSettings: AppSettings,
-    navRequests: kotlinx.coroutines.flow.SharedFlow<com.github.itskenny0.r1ha.core.input.WheelEvent.Direction>,
+    navRequests: kotlinx.coroutines.flow.SharedFlow<Int>,
     pagerState: androidx.compose.foundation.pager.PagerState,
     lightWheelModes: Map<com.github.itskenny0.r1ha.core.ha.EntityId, com.github.itskenny0.r1ha.core.ha.LightWheelMode>,
 ) {
@@ -366,13 +438,9 @@ private fun VerticalCardPager(
     // make the pager skip from page 199_999 back to 0 with a huge animateScroll instead
     // of a single-page glide.) In finite mode we clamp to [0, lastIndex].
     LaunchedEffect(pagerState, navRequests, appSettings.ui.infiniteScroll) {
-        navRequests.collect { dir ->
-            if (cards.isEmpty()) return@collect
+        navRequests.collect { delta ->
+            if (cards.isEmpty() || delta == 0) return@collect
             val current = pagerState.currentPage
-            val delta = when (dir) {
-                com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.UP -> -1
-                com.github.itskenny0.r1ha.core.input.WheelEvent.Direction.DOWN -> +1
-            }
             val target = if (appSettings.ui.infiniteScroll) {
                 (current + delta).coerceIn(0, INFINITE_PAGER_VIRTUAL_PAGES - 1)
             } else {
@@ -626,6 +694,10 @@ private fun ChromeRow(
     onOpenFavoritesPicker: () -> Unit,
     onOpenSettings: () -> Unit,
     onEditActive: () -> Unit = {},
+    /** Tap on the position pip / counter opens the jump-to-card picker. Null in
+     *  previews; defaults to a no-op so the pip becomes inert when there's no
+     *  picker to open. */
+    onTapCounter: () -> Unit = {},
     solidBackdrop: Boolean = true,
 ) {
     Row(
@@ -656,10 +728,21 @@ private fun ChromeRow(
         // current page. Visually communicates "vertical stack" — wheel of cards going up
         // and down — rather than the horizontal row of dots that read as left/right.
         if (showCounter) {
-            VerticalPagePip(
-                count = cardsCount,
-                current = currentIndex,
-            )
+            // Tap target wraps the pip so users can open the jump-to-card picker
+            // without hunting for a tiny hit area. 44 dp matches the chrome's
+            // hamburger / gear so the centre cluster lines up vertically.
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .r1Pressable(onTapCounter),
+                contentAlignment = Alignment.Center,
+            ) {
+                VerticalPagePip(
+                    count = cardsCount,
+                    current = currentIndex,
+                )
+            }
         } else {
             Spacer(Modifier.size(44.dp))
         }
@@ -729,6 +812,132 @@ private fun ChromeRow(
             }
         }
         }  // end right-cluster Row
+    }
+}
+
+/**
+ * Fullscreen jump-to-card list — opens from a tap on the chrome's position pip and
+ * lets the user pick a card by friendly name instead of scrolling through the deck.
+ * Mirrors the visual shape of [EffectPickerSheet] / [SelectPickerSheet] so the user
+ * only has to learn one picker convention. The current card is highlighted; tapping
+ * any row dispatches an animateScrollToPage that handles infinite-scroll's
+ * virtual-page math at the call site.
+ */
+@Composable
+private fun JumpToCardSheet(
+    cards: List<com.github.itskenny0.r1ha.core.ha.EntityState>,
+    currentIndex: Int,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.activity.compose.BackHandler(onBack = onDismiss)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(R1.Bg.copy(alpha = 0.96f))
+            .r1Pressable(onClick = onDismiss),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "JUMP TO", style = R1.sectionHeader, color = R1.Ink)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "${currentIndex + 1} / ${cards.size}",
+                    style = R1.labelMicro,
+                    color = R1.InkMuted,
+                )
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.SurfaceMuted)
+                        .r1Pressable(onClick = onDismiss)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(text = "CLOSE", style = R1.labelMicro, color = R1.InkSoft)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            val scroll = androidx.compose.foundation.rememberScrollState()
+            // Auto-scroll so the current card is roughly centred — on a 30-card deck
+            // the user would otherwise have to scroll down to find it.
+            androidx.compose.runtime.LaunchedEffect(currentIndex, cards.size) {
+                val rowPx = 56  // approximate row height in dp; close enough for an autoscroll
+                scroll.animateScrollTo((currentIndex * rowPx).coerceAtLeast(0))
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .androidxVerticalScroll(scroll),
+            ) {
+                cards.forEachIndexed { idx, card ->
+                    JumpRow(
+                        index = idx,
+                        name = card.friendlyName,
+                        domainPrefix = card.id.domain.prefix.uppercase(),
+                        isActive = idx == currentIndex,
+                        onClick = { onPick(idx) },
+                    )
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+        }
+    }
+}
+
+/** Local alias for the foundation verticalScroll modifier so the picker call site
+ *  reads cleanly without a fully-qualified Modifier.then() dance. */
+private fun Modifier.androidxVerticalScroll(
+    state: androidx.compose.foundation.ScrollState,
+): Modifier = this.then(verticalScroll(state))
+
+@Composable
+private fun JumpRow(
+    index: Int,
+    name: String,
+    domainPrefix: String,
+    isActive: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clip(R1.ShapeS)
+            .background(if (isActive) R1.AccentWarm else R1.SurfaceMuted)
+            .r1Pressable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Position number on the left so the user can see their currentIndex in
+            // context (and scan for a specific one).
+            Text(
+                text = "%2d".format(index + 1),
+                style = R1.labelMicro,
+                color = if (isActive) R1.Bg else R1.InkMuted,
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = R1.body,
+                    color = if (isActive) R1.Bg else R1.Ink,
+                    maxLines = 2,
+                )
+                Text(
+                    text = domainPrefix,
+                    style = R1.labelMicro,
+                    color = if (isActive) R1.Bg.copy(alpha = 0.7f) else R1.InkSoft,
+                )
+            }
+            if (isActive) {
+                Text(text = "●", style = R1.labelMicro, color = R1.Bg)
+            }
+        }
     }
 }
 

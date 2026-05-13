@@ -270,6 +270,15 @@ fun SettingsScreen(
                     onCheckedChange = { vm.setHideStatusBar(it) },
                 )
             }
+            item {
+                SwitchRow(
+                    label = "Wheel toggles switches",
+                    subtitle = "Off (default): wheel navigates past locks, covers, vacuums, " +
+                        "plain switches. On: wheel-up turns them on, wheel-down turns them off.",
+                    checked = s.behavior.wheelTogglesSwitches,
+                    onCheckedChange = { vm.setWheelTogglesSwitches(it) },
+                )
+            }
 
             item { SectionDivider() }
 

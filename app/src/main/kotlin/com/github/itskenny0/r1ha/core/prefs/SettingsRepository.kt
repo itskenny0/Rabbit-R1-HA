@@ -123,6 +123,7 @@ class SettingsRepository private constructor(
         val behaviorKeepOn = booleanPreferencesKey("behavior.keep_on")
         val behaviorTapToggle = booleanPreferencesKey("behavior.tap_toggle")
         val behaviorHideStatus = booleanPreferencesKey("behavior.hide_status_bar")
+        val behaviorWheelTogglesSwitches = booleanPreferencesKey("behavior.wheel_toggles_switches")
         val uiTextHistoryLen = intPreferencesKey("ui.text_history_length")
         val uiHideCardTail = booleanPreferencesKey("ui.hide_card_tail")
         val uiMaxDecimals = intPreferencesKey("ui.max_decimals")
@@ -205,6 +206,7 @@ class SettingsRepository private constructor(
                     keepScreenOn = p[K.behaviorKeepOn] ?: true,
                     tapToToggle = p[K.behaviorTapToggle] ?: true,
                     hideStatusBar = p[K.behaviorHideStatus] ?: false,
+                    wheelTogglesSwitches = p[K.behaviorWheelTogglesSwitches] ?: false,
                 ),
                 theme = p[K.theme]?.let { runCatching { ThemeId.valueOf(it) }.getOrNull() } ?: ThemeId.PRAGMATIC_HYBRID,
                 nameOverrides = decodeNameOverrides(p[K.nameOverrides]),
@@ -248,6 +250,7 @@ class SettingsRepository private constructor(
                 p[K.behaviorKeepOn] = next.behavior.keepScreenOn
                 p[K.behaviorTapToggle] = next.behavior.tapToToggle
                 p[K.behaviorHideStatus] = next.behavior.hideStatusBar
+                p[K.behaviorWheelTogglesSwitches] = next.behavior.wheelTogglesSwitches
                 p[K.uiTextHistoryLen] = next.ui.textHistoryLength
                 p[K.uiHideCardTail] = next.ui.hideCardTailAbove
                 p[K.uiMaxDecimals] = next.ui.maxDecimalPlaces

@@ -115,8 +115,22 @@ fun EntityCard(
     // wires tap. Either way: sensors and unavailable entities don't get a gesture
     // surface at all — pressing them shouldn't even dip the card visually because
     // nothing will happen.
+    // Card-level tap-to-toggle is only applied to variants WITHOUT an explicit
+    // activation button on the card body itself. ActionCard has a big ACTIVATE button,
+    // SwitchCard has clickable ON / OFF labels, SelectCard has a CHOOSE button — any
+    // of those already cover the "fire this entity" intent with an intentional tap on
+    // a labelled target, so the card-level wrapper would be redundant at best and
+    // destructive at worst (a tap meant to scroll past an unrelated UI element would
+    // accidentally relock a door or run a scene). Scalar cards have no dedicated
+    // on/off button — the wheel sets brightness and tap-to-toggle is the obvious way
+    // to flip the bulb on / off — so they keep the gesture.
+    val hasExplicitActivationButton = state.id.domain.isAction ||
+        state.id.domain.isSelect ||
+        !state.supportsScalar
     val tapModifier = when {
-        !tapToToggleEnabled || !state.isAvailable || state.id.domain.isSensor -> Modifier
+        !tapToToggleEnabled || !state.isAvailable -> Modifier
+        state.id.domain.isSensor -> Modifier
+        hasExplicitActivationButton -> Modifier
         onLongPress != null -> Modifier.r1RowPressable(onTap = onTapToggle, onLongPress = onLongPress)
         else -> Modifier.r1Pressable(onClick = onTapToggle, hapticOnClick = false)
     }
