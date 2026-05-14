@@ -382,17 +382,20 @@ fun CardStackScreen(
                 androidx.compose.foundation.pager.HorizontalPager(
                     state = horizontalPagerState,
                     modifier = Modifier.fillMaxSize(),
-                    // Pre-compose one page on each side of the visible one so a
-                    // swipe between tabs feels instant — without this, the
-                    // neighbouring PageDeck composes from scratch during the
-                    // swipe and the user briefly sees a placeholder/empty
-                    // strip before the cards paint. With 1 page peek, both
-                    // neighbours are warm and the swipe reveals fully-
-                    // rendered content. Memory cost is modest: each PageDeck
-                    // is roughly one VerticalPager + its visible cards, and
-                    // most users have ≤ 3 pages so 'all warm' is the common
-                    // case anyway.
-                    beyondViewportPageCount = 1,
+                    // beyondViewportPageCount=1 was pre-composing the
+                    // neighbour PageDecks so swipes felt instant. Disabled
+                    // temporarily — the user reports a reproducible crash
+                    // when scrolling on the top card, and pre-composing two
+                    // pager states simultaneously was a suspect: each
+                    // PageDeck creates its own internal PagerState, and
+                    // two states racing during a swipe could surface
+                    // edge-case behaviour we haven't seen in tests. With
+                    // value 0 only the visible page is composed; the swipe
+                    // briefly shows an empty frame as the next page warms
+                    // up, which is the tradeoff worth taking until the
+                    // crash is diagnosed via the new LAST CRASH dev menu
+                    // affordance.
+                    beyondViewportPageCount = 0,
                 ) { pageIdx ->
                     val page = state.pages.getOrNull(pageIdx) ?: return@HorizontalPager
                     val pageCardsRaw = state.cardsByPage[page.id].orEmpty()
@@ -1874,39 +1877,15 @@ private fun ChromeRow(
                     label = "conn-dot-color",
                 )
                 // While the connection is amber (Idle/Connecting/Authenticating) the
-                // dot pulses to signal 'work in progress'. Disconnected/red stays
-                // solid because a steady red is the right 'something is wrong' tone.
-                val isWorking = connection is ConnectionState.Connecting ||
-                    connection is ConnectionState.Authenticating ||
-                    connection == ConnectionState.Idle
-                // Infinite-pulse alpha while connecting / authenticating. Built
-                // via rememberInfiniteTransition + animateFloat so the pulse
-                // is genuinely repeating (animateFloatAsState animates once and
-                // settles). When the connection is steady-bad (red) we skip
-                // the pulse and render at full alpha — a steady red reads as
-                // 'something is wrong, not in flight'.
-                val transition = androidx.compose.animation.core.rememberInfiniteTransition(
-                    label = "conn-dot-pulse",
-                )
-                val pulse by transition.animateFloat(
-                    initialValue = 0.4f,
-                    targetValue = 1f,
-                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                        animation = androidx.compose.animation.core.tween(
-                            durationMillis = 750,
-                            easing = androidx.compose.animation.core.FastOutSlowInEasing,
-                        ),
-                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
-                    ),
-                    label = "conn-dot-pulse-alpha",
-                )
+                // Pulse animation temporarily reverted — InfiniteTransition
+                // running unconditionally inside an AnimatedVisibility was a
+                // suspect for the reported scroll-up crash. Plain solid dot
+                // until the trace from LAST CRASH narrows things down.
                 Box(
                     modifier = Modifier
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(
-                            animatedColor.copy(alpha = if (isWorking) pulse else 1f),
-                        ),
+                        .background(animatedColor),
                 )
             }
         }
