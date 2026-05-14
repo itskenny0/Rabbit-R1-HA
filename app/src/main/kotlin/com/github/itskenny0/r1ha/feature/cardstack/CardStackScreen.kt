@@ -335,15 +335,27 @@ fun CardStackScreen(
                 // Sync horizontal pager → activePageId: when the user swipes to a
                 // different page, push the new active id back into the VM so the
                 // tab strip's active highlight follows and wheel routing targets
-                // the visible deck.
+                // the visible deck. Fires a CLOCK_TICK haptic on settle when the
+                // user's "Haptic feedback" setting is on, giving the swipe a
+                // tactile end-state to match the wheel and card-swipe haptics.
+                // Skips the first emission so opening the screen doesn't fire
+                // a phantom haptic for the initial-page settle.
                 androidx.compose.runtime.LaunchedEffect(horizontalPagerState, pageIds) {
+                    var firstSettle = true
                     snapshotFlow { horizontalPagerState.settledPage }
                         .distinctUntilChanged()
                         .collect { idx ->
                             val pageId = state.pages.getOrNull(idx)?.id
                             if (pageId != null && pageId != state.activePageId) {
                                 vm.setActivePage(pageId)
+                                if (!firstSettle && appSettings.behavior.haptics) {
+                                    @Suppress("DEPRECATION")
+                                    view.performHapticFeedback(
+                                        android.view.HapticFeedbackConstants.CLOCK_TICK,
+                                    )
+                                }
                             }
+                            firstSettle = false
                         }
                 }
                 androidx.compose.foundation.pager.HorizontalPager(

@@ -42,6 +42,7 @@ import com.github.itskenny0.r1ha.ui.components.r1Pressable
 fun SettingsScreen(
     settings: SettingsRepository,
     tokens: TokenStore,
+    haRepository: com.github.itskenny0.r1ha.core.ha.HaRepository,
     wheelInput: WheelInput,
     onOpenThemePicker: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -133,6 +134,29 @@ fun SettingsScreen(
             }
             item {
                 s.server?.haVersion?.let { InfoRow(label = "HA version", value = it, mono = true) }
+            }
+            // RECONNECT NOW — force-flush the WS + re-fetch fresh state without
+            // touching tokens. Useful when the connection has gone stale (HA
+            // restarted, Wi-Fi dropped briefly, etc.) and the user wants live
+            // updates back without going through the full sign-out cycle.
+            // Outlined variant so it visually pairs with the destructive
+            // SIGN-OUT below but doesn't compete for primary attention.
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp, vertical = 6.dp),
+                ) {
+                    com.github.itskenny0.r1ha.ui.components.R1Button(
+                        text = "RECONNECT NOW",
+                        onClick = {
+                            haRepository.reconnectNow()
+                            com.github.itskenny0.r1ha.core.util.Toaster.show("Reconnecting…")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+                    )
+                }
             }
             item {
                 Box(

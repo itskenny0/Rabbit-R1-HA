@@ -1,5 +1,7 @@
 package com.github.itskenny0.r1ha.core.prefs
 
+import androidx.compose.runtime.Stable
+
 enum class ThemeId { MINIMAL_DARK, PRAGMATIC_HYBRID, COLORFUL_CARDS }
 
 enum class DisplayMode { PERCENT, RAW }
@@ -32,6 +34,7 @@ enum class AccelerationCurve { SUBTLE, MEDIUM, AGGRESSIVE }
  */
 enum class ToastLogLevel { OFF, ERROR, WARN, INFO, DEBUG }
 
+@Stable
 data class WheelSettings(
     val stepPercent: Int = 2,           // 1, 2, 5, or 10
     val acceleration: Boolean = true,
@@ -41,6 +44,7 @@ data class WheelSettings(
     val accelerationCurve: AccelerationCurve = AccelerationCurve.MEDIUM,
 )
 
+@Stable
 data class UiOptions(
     val displayMode: DisplayMode = DisplayMode.PERCENT,
     val showOnOffPill: Boolean = true,
@@ -69,6 +73,7 @@ data class UiOptions(
     val infiniteScroll: Boolean = false,
 )
 
+@Stable
 data class Behavior(
     val haptics: Boolean = true,
     val keepScreenOn: Boolean = true,
@@ -177,6 +182,7 @@ data class AdvancedSettings(
     val showDebugStripOnCards: Boolean = false,
 )
 
+@Stable
 data class ServerConfig(
     val url: String,
     val haVersion: String? = null,
@@ -201,6 +207,15 @@ data class FavoritePage(
     val favorites: List<String> = emptyList(),
 )
 
+/**
+ * @Stable: every field is `val` and the nested data classes are themselves
+ * @Stable. Tells Compose to use equals() for recomposition skipping rather
+ * than the conservative default that treats the Map fields as unstable.
+ * Without this, every screen reading `appSettings by collectAsStateWithLifecycle`
+ * was force-recomposing on every settings flow emission even when its slice
+ * (e.g. just `appSettings.wheel.acceleration`) hadn't changed.
+ */
+@Stable
 data class AppSettings(
     val server: ServerConfig? = null,
     /**

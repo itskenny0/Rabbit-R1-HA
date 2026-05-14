@@ -64,6 +64,7 @@ fun AppNavGraph(
             SettingsScreen(
                 settings = settings,
                 tokens = tokens,
+                haRepository = haRepository,
                 wheelInput = wheelInput,
                 onOpenThemePicker = {
                     navController.navigate(Routes.THEME_PICKER) { launchSingleTop = true }
