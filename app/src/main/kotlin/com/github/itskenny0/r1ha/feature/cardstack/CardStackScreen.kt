@@ -60,6 +60,7 @@ import com.github.itskenny0.r1ha.ui.components.r1Pressable
 import com.github.itskenny0.r1ha.ui.components.r1RowPressable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -1602,11 +1603,40 @@ private fun ChromeRow(
                     targetValue = statusColor ?: R1.StatusAmber,
                     label = "conn-dot-color",
                 )
+                // While the connection is amber (Idle/Connecting/Authenticating) the
+                // dot pulses to signal 'work in progress'. Disconnected/red stays
+                // solid because a steady red is the right 'something is wrong' tone.
+                val isWorking = connection is ConnectionState.Connecting ||
+                    connection is ConnectionState.Authenticating ||
+                    connection == ConnectionState.Idle
+                // Infinite-pulse alpha while connecting / authenticating. Built
+                // via rememberInfiniteTransition + animateFloat so the pulse
+                // is genuinely repeating (animateFloatAsState animates once and
+                // settles). When the connection is steady-bad (red) we skip
+                // the pulse and render at full alpha — a steady red reads as
+                // 'something is wrong, not in flight'.
+                val transition = androidx.compose.animation.core.rememberInfiniteTransition(
+                    label = "conn-dot-pulse",
+                )
+                val pulse by transition.animateFloat(
+                    initialValue = 0.4f,
+                    targetValue = 1f,
+                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                        animation = androidx.compose.animation.core.tween(
+                            durationMillis = 750,
+                            easing = androidx.compose.animation.core.FastOutSlowInEasing,
+                        ),
+                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+                    ),
+                    label = "conn-dot-pulse-alpha",
+                )
                 Box(
                     modifier = Modifier
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(animatedColor),
+                        .background(
+                            animatedColor.copy(alpha = if (isWorking) pulse else 1f),
+                        ),
                 )
             }
         }
