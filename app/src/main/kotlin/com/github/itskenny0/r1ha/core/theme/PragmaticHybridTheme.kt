@@ -103,18 +103,27 @@ object PragmaticHybridTheme : R1Theme {
                     maxLines = 2,
                 )
                 Spacer(Modifier.height(20.dp))
-                BigReadout(
-                    percent = model.percent,
-                    showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
-                    accent = accent,
-                    // For entities that surface a domain-native value (climate "21 °C"),
-                    // displayValue/displayUnit replace the percent number + "%" suffix.
-                    overrideText = model.displayValue,
-                    overrideUnit = model.displayUnit,
-                    textSizeSp = model.textSizeSp,
-                    lightEntityId = if (model.lightWheelMode != null) com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText) else null,
-                    lightWheelMode = model.lightWheelMode,
-                )
+                // Hide the giant percent readout on media_player cards that are
+                // currently playing — the now-playing block + the right-side meter
+                // already convey volume, so a 72 sp '100 %' on top of that
+                // squeezed the now-playing block into a thumbnail-sized strip.
+                val hideBigReadoutForMedia = model.domainGlyph ==
+                    CardRenderModel.Glyph.MEDIA_PLAYER &&
+                    (!model.mediaTitle.isNullOrBlank() || !model.mediaPicture.isNullOrBlank())
+                if (!hideBigReadoutForMedia) {
+                    BigReadout(
+                        percent = model.percent,
+                        showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
+                        accent = accent,
+                        // For entities that surface a domain-native value (climate "21 °C"),
+                        // displayValue/displayUnit replace the percent number + "%" suffix.
+                        overrideText = model.displayValue,
+                        overrideUnit = model.displayUnit,
+                        textSizeSp = model.textSizeSp,
+                        lightEntityId = if (model.lightWheelMode != null) com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText) else null,
+                        lightWheelMode = model.lightWheelMode,
+                    )
+                }
                 // Light controls — segmented mode buttons (BRIGHT / WHITE / COLOUR) +
                 // an EFFECTS button. The mode buttons surface only the modes the bulb
                 // actually supports; the EFFECTS button is hidden when effect_list is
@@ -624,14 +633,14 @@ internal fun MediaControlsRow(
     accent: Color,
 ) {
     val onTransport = com.github.itskenny0.r1ha.core.theme.LocalOnMediaTransport.current
-    // Single row — BACK / PLAY-PAUSE / NEXT / MUTE. Vol± dropped because the slider
-    // already covers volume; doubling the affordance just used vertical space and
-    // confused the layout. MUTE keeps its own slot because the slider can't
-    // express "muted at any volume level".
+    // Glyph-only row — ⏮ / ⏯ / ⏭ / ∅. Previous version paired each glyph with a
+    // 4-char text label, but on the R1's narrow card area each button's slot is
+    // ~50 px wide and the labels wrapped mid-word (BAC/K, PAU/SE, NEX/T, MUT/E).
+    // The music-control glyphs are universal and read better without the text.
+    // Vol± buttons were dropped earlier since the slider covers volume.
     Row(modifier = Modifier.fillMaxWidth()) {
         MediaButton(
-            glyph = "◀",
-            label = "BACK",
+            glyph = "⏮",
             onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PREVIOUS) },
             accent = accent,
             modifier = Modifier.weight(1f),
@@ -639,7 +648,6 @@ internal fun MediaControlsRow(
         Spacer(Modifier.width(4.dp))
         MediaButton(
             glyph = if (isPlaying) "⏸" else "▶",
-            label = if (isPlaying) "PAUSE" else "PLAY",
             onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PLAY_PAUSE) },
             accent = accent,
             emphasis = true,
@@ -647,8 +655,7 @@ internal fun MediaControlsRow(
         )
         Spacer(Modifier.width(4.dp))
         MediaButton(
-            glyph = "▶",
-            label = "NEXT",
+            glyph = "⏭",
             onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.NEXT) },
             accent = accent,
             modifier = Modifier.weight(1f),
@@ -656,7 +663,6 @@ internal fun MediaControlsRow(
         Spacer(Modifier.width(4.dp))
         MediaButton(
             glyph = "∅",
-            label = "MUTE",
             onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.MUTE_TOGGLE) },
             accent = accent,
             modifier = Modifier.weight(1f),
@@ -666,15 +672,15 @@ internal fun MediaControlsRow(
 
 
 /**
- * Single media-control button — glyph on the left, small uppercase label on the
- * right. The emphasis flag fills with accent (used on play/pause so it's the
- * obvious primary action of the row); the others are surface-muted with the accent
- * glyph as a hint that the button is interactive.
+ * Single media-control button — just the glyph, centred. The emphasis flag fills
+ * with accent (used on play/pause so it's the obvious primary action of the row);
+ * the others are surface-muted with the accent glyph as a hint that the button is
+ * interactive. Tall enough (~36 dp) for a comfortable tap target without crowding
+ * the rest of the card.
  */
 @Composable
 private fun MediaButton(
     glyph: String,
-    label: String,
     onClick: () -> Unit,
     accent: Color,
     modifier: Modifier = Modifier,
@@ -685,22 +691,14 @@ private fun MediaButton(
             .clip(R1.ShapeS)
             .background(if (emphasis) accent else R1.SurfaceMuted)
             .r1Pressable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = glyph,
-                style = R1.numeralM,
-                color = if (emphasis) R1.Bg else accent,
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = label,
-                style = R1.labelMicro,
-                color = if (emphasis) R1.Bg else R1.InkSoft,
-            )
-        }
+        Text(
+            text = glyph,
+            style = R1.numeralM,
+            color = if (emphasis) R1.Bg else accent,
+        )
     }
 }
 
