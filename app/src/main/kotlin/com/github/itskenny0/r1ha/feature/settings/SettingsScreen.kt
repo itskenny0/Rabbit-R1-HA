@@ -50,6 +50,7 @@ fun SettingsScreen(
     onOpenScenes: () -> Unit,
     onOpenLogbook: () -> Unit,
     onOpenTemplate: () -> Unit,
+    onOpenServiceCaller: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -533,6 +534,13 @@ fun SettingsScreen(
             // you're already holding the R1.
             item {
                 NavRow(label = "Templates", value = "Jinja2 evaluator", onClick = onOpenTemplate)
+            }
+
+            // Service caller — POST /api/services/<domain>/<service>. Lets
+            // power users fire arbitrary services (reload, check_config,
+            // notify, etc.) that don't fit the per-entity WS path.
+            item {
+                NavRow(label = "Service Caller", value = "Fire any service", onClick = onOpenServiceCaller)
             }
 
             item { SectionDivider() }

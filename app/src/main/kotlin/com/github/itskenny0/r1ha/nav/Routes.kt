@@ -13,4 +13,5 @@ object Routes {
     const val SCENES = "scenes"
     const val LOGBOOK = "logbook"
     const val TEMPLATE = "template"
+    const val SERVICE_CALLER = "service_caller"
 }

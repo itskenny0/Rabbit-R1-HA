@@ -77,6 +77,21 @@ interface HaRepository {
      * the R1 for users who don't have a laptop nearby.
      */
     suspend fun renderTemplate(template: String): Result<String>
+
+    /**
+     * Fire an arbitrary HA service by domain + service name — POSTs to
+     * `/api/services/<domain>/<service>` with the given JSON [data]
+     * body. Distinct from [call] because [call] dispatches via the
+     * WebSocket call_service path and requires an [EntityId] target,
+     * whereas many services don't need one (homeassistant.restart,
+     * automation.reload, persistent_notification.create). Powers the
+     * Service Caller power-user surface.
+     */
+    suspend fun callRawService(
+        domain: String,
+        service: String,
+        data: kotlinx.serialization.json.JsonObject,
+    ): Result<String>
     suspend fun start()
     suspend fun stop()
 

@@ -1241,6 +1241,64 @@ class DefaultHaRepository(
         coerceInputValues = true
     }
 
+    override suspend fun callRawService(
+        domain: String,
+        service: String,
+        data: kotlinx.serialization.json.JsonObject,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(domain.matches(Regex("[a-z0-9_]+"))) { "Invalid service domain: '$domain'" }
+            require(service.matches(Regex("[a-z0-9_]+"))) { "Invalid service name: '$service'" }
+            val s = settings.settings.first()
+            val server = s.server ?: error("Server URL not configured.")
+            refresher?.ensureFresh()
+            val url = "${server.url.trimEnd('/')}/api/services/$domain/$service"
+            val body = serviceCallRawBody(url, data) ?: run {
+                if (refresher?.forceRefresh() == true) {
+                    R1Log.i("HaRepo.svc", "401 → refreshed; retrying once")
+                    serviceCallRawBody(url, data)
+                        ?: error("Home Assistant returned HTTP 401 for /api/services after refresh.")
+                } else {
+                    error("Home Assistant returned HTTP 401 for /api/services.")
+                }
+            }
+            // /api/services/<d>/<s> returns a JSON array of the state changes
+            // it produced. We forward it verbatim so the user can see what
+            // HA actually did — empty array = no state mutated (still a
+            // success on HA's side, often what you want for fire-and-forget
+            // services like `automation.reload`).
+            body
+        }.onFailure { t ->
+            R1Log.w("HaRepo.svc", "$domain.$service failed: ${t.message}")
+        }
+    }
+
+    /** POST to /api/services/<domain>/<service>. Returns null on HTTP 401
+     *  for the refresh + retry pattern; HTTP 400 surfaces HA's error body
+     *  as an exception so the Service Caller screen can show it. */
+    private suspend fun serviceCallRawBody(
+        url: String,
+        payload: kotlinx.serialization.json.JsonObject,
+    ): String? = withContext(Dispatchers.IO) {
+        val t = tokens.load()
+            ?: error("Authentication tokens missing — sign out & reconnect from Settings.")
+        val mediaType = "application/json".toMediaTypeOrNull()
+        val req = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer ${t.accessToken}")
+            .post(payload.toString().toRequestBody(mediaType))
+            .build()
+        http.newCall(req).execute().use { resp ->
+            if (resp.code == 401) return@withContext null
+            val responseBody = resp.body?.string().orEmpty()
+            require(resp.isSuccessful) {
+                if (responseBody.isNotBlank()) responseBody.trim()
+                else "Home Assistant returned HTTP ${resp.code} for the service call"
+            }
+            responseBody
+        }
+    }
+
     override suspend fun renderTemplate(template: String): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
