@@ -56,7 +56,7 @@ fun OAuthWebView(
                         } else {
                             val msg = error?.let { "Redirect had error=$it" } ?: "Redirect had no code"
                             R1Log.w("OAuthWebView", msg)
-                            Toaster.show(msg, long = true)
+                            Toaster.error(msg)
                             currentOnMissing.value.invoke(error)
                         }
                         return true
@@ -79,7 +79,7 @@ fun OAuthWebView(
                     if (url.scheme == "r1ha") return
                     val desc = runCatching { error.description?.toString() }.getOrNull() ?: "error"
                     R1Log.w("OAuthWebView", "main-frame load error: $desc ($url)")
-                    Toaster.show("WebView: $desc", long = true)
+                    Toaster.error("WebView: $desc")
                 }
             }
             loadUrl(authorizeUrl)

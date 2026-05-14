@@ -158,7 +158,7 @@ class MainActivity : ComponentActivity() {
             Toaster.show("Deep-link delivered OAuth code (WebView should have caught this)", long = true)
         } else {
             R1Log.w("MainActivity.handleOAuth", "deep-link with no code; error=$error")
-            Toaster.show("Deep-link with no code: error=$error", long = true)
+            Toaster.error("Deep-link with no code: error=$error")
         }
     }
 

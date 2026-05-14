@@ -150,7 +150,7 @@ class FavoritesPickerViewModel(
                 },
                 onFailure = {
                     R1Log.e("FavoritesPicker.refresh", "fetch failed", it)
-                    Toaster.show("Fetch failed: ${it.message}", long = true)
+                    Toaster.error("Fetch failed: ${it.message}")
                     _ui.value = UiState(loading = false, error = it.message)
                 },
             )

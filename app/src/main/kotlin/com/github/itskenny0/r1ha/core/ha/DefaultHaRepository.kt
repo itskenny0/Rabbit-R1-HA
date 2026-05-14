@@ -133,7 +133,7 @@ class DefaultHaRepository(
             // entity_id + service line gives a copy-paste handle for diagnosing
             // missing features (the most common cause of validation errors on
             // media_player integrations).
-            com.github.itskenny0.r1ha.core.util.Toaster.showExpandable(
+            com.github.itskenny0.r1ha.core.util.Toaster.errorExpandable(
                 shortText = "${call.target.objectId}: $shortMsg",
                 fullText = buildString {
                     append(call.target.value).append('\n')
@@ -310,9 +310,8 @@ class DefaultHaRepository(
             // longer be decrypted. Without this signal the UI would sit on "Idle" forever; tell
             // the user explicitly to re-auth from Settings.
             R1Log.w("HaRepo.connect", "tokens.load() returned null even though server is set; user needs to re-auth")
-            com.github.itskenny0.r1ha.core.util.Toaster.show(
+            com.github.itskenny0.r1ha.core.util.Toaster.error(
                 "Authentication tokens missing — open Settings → Sign out & reconnect",
-                long = true,
             )
             return
         }
@@ -1007,7 +1006,7 @@ class DefaultHaRepository(
         }
         val msg = lastError?.message ?: "unknown error"
         R1Log.e("HaRepo.seed", "all retries failed: $msg", lastError)
-        com.github.itskenny0.r1ha.core.util.Toaster.show("Couldn't load entities: $msg", long = true)
+        com.github.itskenny0.r1ha.core.util.Toaster.error("Couldn't load entities: $msg")
     }
 
     /** Single Json instance for /api/states deserialisation to avoid the per-call allocation lint. */

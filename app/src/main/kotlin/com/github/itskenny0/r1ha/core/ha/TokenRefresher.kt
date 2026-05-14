@@ -103,7 +103,7 @@ class TokenRefresher(
             // Failure path still goes through Toaster.show (which is now the
             // force-show user-facing route) — a failed refresh is something the
             // user needs to know about because the next HA call may 401.
-            Toaster.show("Couldn't refresh session: ${t.message ?: "error"} — sign out & reconnect", long = true)
+            Toaster.error("Couldn't refresh session: ${t.message ?: "error"} — sign out & reconnect")
             false
         }
     }

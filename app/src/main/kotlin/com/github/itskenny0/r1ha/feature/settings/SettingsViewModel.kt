@@ -136,7 +136,7 @@ class SettingsViewModel(
                 },
                 onFailure = { t ->
                     R1Log.w("Settings.importBackup", "parse failed: ${t.message}")
-                    Toaster.showExpandable(
+                    Toaster.errorExpandable(
                         shortText = "Restore failed: ${t.message?.take(28) ?: "bad JSON"}",
                         fullText = "Couldn't parse backup file.\n\n${t.message ?: t.toString()}",
                     )

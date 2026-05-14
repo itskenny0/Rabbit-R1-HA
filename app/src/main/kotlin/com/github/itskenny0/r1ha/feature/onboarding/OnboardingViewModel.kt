@@ -70,7 +70,7 @@ class OnboardingViewModel(
         val baseUrl = normalizeUrl(rawUrl)
         if (baseUrl.isBlank()) {
             _state.value = State.Error("Please enter your Home Assistant URL.")
-            Toaster.show("Empty URL")
+            Toaster.error("Empty URL")
             return
         }
         R1Log.i("Onboarding.probe", "start baseUrl=$baseUrl")
@@ -94,7 +94,7 @@ class OnboardingViewModel(
                 _state.value = State.ReadyToAuth(authorizeUrl = authorizeUrl, baseUrl = baseUrl)
             } catch (e: Exception) {
                 R1Log.e("Onboarding.probe", "failed", e)
-                Toaster.show("Probe failed: ${e.message}", long = true)
+                Toaster.error("Probe failed: ${e.message}")
                 _state.value = State.Error("Cannot reach server: ${e.message}")
             }
         }
@@ -107,7 +107,7 @@ class OnboardingViewModel(
             // Defensive: if the WebView screen couldn't extract a serverUrl, bail loudly rather
             // than POST to "/auth/token" (no host) and fail with a vague error.
             _state.value = State.Error("Lost server URL during login; please retry.")
-            Toaster.show("Lost server URL", long = true)
+            Toaster.error("Lost server URL")
             return
         }
         _state.value = State.Exchanging
@@ -153,7 +153,7 @@ class OnboardingViewModel(
                 Toaster.show("Sign-in complete")
             } catch (e: Exception) {
                 R1Log.e("Onboarding.exchange", "failed", e)
-                Toaster.show("Token exchange FAILED: ${e.message}", long = true)
+                Toaster.error("Token exchange FAILED: ${e.message}")
                 _state.value = State.Error("Token exchange failed: ${e.message}")
             }
         }

@@ -84,7 +84,7 @@ fun SettingsScreen(
             com.github.itskenny0.r1ha.core.util.R1Log.w(
                 "Settings.exportBackup", "write failed: ${t.message}",
             )
-            com.github.itskenny0.r1ha.core.util.Toaster.showExpandable(
+            com.github.itskenny0.r1ha.core.util.Toaster.errorExpandable(
                 shortText = "Backup save failed",
                 fullText = "Couldn't write the backup file.\n\n${t.message ?: t.toString()}",
             )
@@ -104,7 +104,7 @@ fun SettingsScreen(
                 com.github.itskenny0.r1ha.core.util.R1Log.w(
                     "Settings.importBackup", "read failed: ${t.message}",
                 )
-                com.github.itskenny0.r1ha.core.util.Toaster.showExpandable(
+                com.github.itskenny0.r1ha.core.util.Toaster.errorExpandable(
                     shortText = "Backup read failed",
                     fullText = "Couldn't read the backup file.\n\n${t.message ?: t.toString()}",
                 )

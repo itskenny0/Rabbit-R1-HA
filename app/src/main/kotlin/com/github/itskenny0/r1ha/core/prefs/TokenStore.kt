@@ -111,7 +111,7 @@ class TokenStore(
             .commit()
         R1Log.i("TokenStore.save", "shadow commit=$shadowOk")
         if (!shadowOk) {
-            Toaster.show("Tokens couldn't save to fallback storage", long = true)
+            Toaster.error("Tokens couldn't save to fallback storage")
         }
 
         try {
@@ -124,7 +124,7 @@ class TokenStore(
         } catch (t: Throwable) {
             R1Log.e("TokenStore.save", "DataStore edit threw; shadow has the value", t)
             if (!shadowOk) {
-                Toaster.show("Tokens couldn't save anywhere", long = true)
+                Toaster.error("Tokens couldn't save anywhere")
             }
         }
     }
@@ -171,7 +171,7 @@ class TokenStore(
             )
         } catch (t: Throwable) {
             R1Log.e("TokenStore.load", "decrypt failed; key likely lost. Returning null to force re-auth.", t)
-            Toaster.show("Token decrypt failed — re-authenticate", long = true)
+            Toaster.error("Token decrypt failed — re-authenticate")
             null
         }
     }

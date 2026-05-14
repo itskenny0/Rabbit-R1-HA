@@ -881,7 +881,7 @@ class CardStackViewModel(
         val targetId = runCatching { EntityId(target) }.getOrNull()
         if (targetId == null) {
             R1Log.w("CardStack.longPress", "ignoring invalid target '$target'")
-            com.github.itskenny0.r1ha.core.util.Toaster.show(
+            com.github.itskenny0.r1ha.core.util.Toaster.error(
                 "Long-press target '$target' isn't a recognised entity",
             )
             return
