@@ -74,6 +74,10 @@ fun CardStackScreen(
     wheelInput: WheelInput,
     onOpenFavoritesPicker: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** Surfaced from the QuickActions sheet (long-press hamburger →
+     *  TODAY). Lets the user jump to the at-a-glance dashboard without
+     *  going through Settings. */
+    onOpenDashboard: () -> Unit = {},
 ) {
     val vm: CardStackViewModel = viewModel(
         factory = CardStackViewModel.factory(
@@ -836,6 +840,10 @@ fun CardStackScreen(
                     ?: "this page",
                 cardCount = state.cards.size,
                 playingMediaCount = playingMediaCount,
+                onOpenDashboard = {
+                    quickActionsOpen.value = false
+                    onOpenDashboard()
+                },
                 onAllOn = {
                     vm.turnOnActivePage()
                     quickActionsOpen.value = false
@@ -1940,6 +1948,7 @@ private fun QuickActionsSheet(
     activePageName: String,
     cardCount: Int,
     playingMediaCount: Int,
+    onOpenDashboard: () -> Unit,
     onAllOn: () -> Unit,
     onAllOff: () -> Unit,
     onPauseMedia: () -> Unit,
@@ -1981,6 +1990,17 @@ private fun QuickActionsSheet(
                 color = R1.InkSoft,
             )
             Spacer(Modifier.height(14.dp))
+            // 'TODAY' — opens the at-a-glance dashboard (weather, people,
+            // next event, alerts). Lifted above turn-all-on so it reads
+            // as the awareness action, separate from the change-state
+            // actions below.
+            R1Button(
+                text = "TODAY · DASHBOARD",
+                onClick = onOpenDashboard,
+                modifier = Modifier.fillMaxWidth(),
+                variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+            )
+            Spacer(Modifier.height(8.dp))
             // 'Turn all on' — one-tap fire. Lights/switches/fans coming on
             // accidentally is recoverable (re-tap the card or the all-off
             // route), so the safety bar can be lower than for turn-off.

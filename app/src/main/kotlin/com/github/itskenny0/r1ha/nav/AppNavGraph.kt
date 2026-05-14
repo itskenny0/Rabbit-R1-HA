@@ -50,6 +50,9 @@ fun AppNavGraph(
                 onOpenSettings = {
                     navController.navigate(Routes.SETTINGS) { launchSingleTop = true }
                 },
+                onOpenDashboard = {
+                    navController.navigate(Routes.DASHBOARD) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.FAVORITES_PICKER) {
