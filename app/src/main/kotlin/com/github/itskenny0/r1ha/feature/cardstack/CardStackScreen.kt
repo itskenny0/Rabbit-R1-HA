@@ -671,17 +671,30 @@ fun CardStackScreen(
             if (ctxCard == null) {
                 cardContextMenuIdx.value = null
             } else {
+                val ctxContext = androidx.compose.ui.platform.LocalContext.current
                 CardContextMenu(
                     entityName = ctxCard.friendlyName,
                     entityId = ctxCard.id.value,
                     pages = appSettings.pages,
                     sourcePageId = appSettings.activePageId,
+                    haServerUrl = appSettings.server?.url,
                     onMove = { targetPageId ->
                         vm.moveFavoriteToPage(ctxCard.id.value, targetPageId)
                         cardContextMenuIdx.value = null
                     },
                     onRemove = {
                         vm.removeFavorite(ctxCard.id.value)
+                        cardContextMenuIdx.value = null
+                    },
+                    onOpenInHa = { url ->
+                        runCatching {
+                            ctxContext.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(url),
+                                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
                         cardContextMenuIdx.value = null
                     },
                     onDismiss = { cardContextMenuIdx.value = null },
@@ -1696,8 +1709,12 @@ private fun CardContextMenu(
     entityId: String,
     pages: List<com.github.itskenny0.r1ha.core.prefs.FavoritePage>,
     sourcePageId: String,
+    /** HA server URL — used to build the deep-link for the 'Open in HA' button.
+     *  Null when the user isn't signed in (the button is then hidden). */
+    haServerUrl: String?,
     onMove: (targetPageId: String) -> Unit,
     onRemove: () -> Unit,
+    onOpenInHa: (url: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     androidx.activity.compose.BackHandler(onBack = onDismiss)
@@ -1763,6 +1780,20 @@ private fun CardContextMenu(
                 }
             }
             Spacer(Modifier.height(14.dp))
+            // Open in HA — deep-link to the entity's history page in the HA
+            // web UI. Useful when the user wants to see HA's full sensor
+            // history / device controls / configure automations. Hidden
+            // when the user isn't signed in.
+            if (!haServerUrl.isNullOrBlank()) {
+                val url = "${haServerUrl.trimEnd('/')}/history?entity_id=$entityId"
+                R1Button(
+                    text = "OPEN IN HA",
+                    onClick = { onOpenInHa(url) },
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             // Remove from this page — same destructive action surfaced via the
             // inline '✕' chip. Duplicated here so the long-press menu is a
             // complete 'manage this card' surface; a user who long-pressed
