@@ -96,6 +96,32 @@ fun DashboardScreen(
             ) {
                 ui.weather?.let { WeatherCard(it, onClick = onOpenWeather) }
                 ui.sun?.let { SunCard(it) }
+                if (ui.media.isNotEmpty()) {
+                    Text(text = "NOW PLAYING", style = R1.labelMicro, color = R1.InkSoft)
+                    for (m in ui.media) {
+                        MediaCard(
+                            media = m,
+                            onPlayPause = {
+                                vm.mediaTransport(
+                                    m.entityId,
+                                    com.github.itskenny0.r1ha.core.ha.MediaTransport.PLAY_PAUSE,
+                                )
+                            },
+                            onNext = {
+                                vm.mediaTransport(
+                                    m.entityId,
+                                    com.github.itskenny0.r1ha.core.ha.MediaTransport.NEXT,
+                                )
+                            },
+                            onPrev = {
+                                vm.mediaTransport(
+                                    m.entityId,
+                                    com.github.itskenny0.r1ha.core.ha.MediaTransport.PREVIOUS,
+                                )
+                            },
+                        )
+                    }
+                }
                 ui.persons?.let { PersonsCard(it, onClick = onOpenPersons) }
                 ui.nextEvent?.let { CalendarCard(it, onClick = onOpenCalendars) }
                 MetricsRow(
@@ -205,6 +231,86 @@ private fun SunCard(s: DashboardViewModel.SunSummary) {
                 RelativeTimeLabel(at = s.nextSetting, color = R1.AccentCool, style = R1.labelMicro)
             }
         }
+    }
+}
+
+@Composable
+private fun MediaCard(
+    media: DashboardViewModel.MediaSummary,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+) {
+    val playing = media.state == "playing"
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(if (playing) R1.AccentGreen.copy(alpha = 0.22f) else R1.SurfaceMuted)
+                    .padding(horizontal = 6.dp, vertical = 1.dp),
+            ) {
+                Text(
+                    text = if (playing) "PLAYING" else media.state.uppercase(),
+                    style = R1.labelMicro,
+                    color = if (playing) R1.AccentGreen else R1.InkSoft,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = media.name,
+                style = R1.body,
+                color = R1.Ink,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+            )
+        }
+        val titleLine = listOfNotNull(media.title, media.artist).joinToString(" · ")
+        if (titleLine.isNotBlank()) {
+            Text(text = titleLine, style = R1.labelMicro, color = R1.InkSoft, maxLines = 2)
+        }
+        // Transport row — prev / play-pause / next.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            TransportButton(label = "◄◄", onClick = onPrev, modifier = Modifier.weight(1f))
+            TransportButton(
+                label = if (playing) "❚❚" else "▶",
+                onClick = onPlayPause,
+                modifier = Modifier.weight(1f),
+                accent = R1.AccentWarm,
+            )
+            TransportButton(label = "►►", onClick = onNext, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun TransportButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    accent: androidx.compose.ui.graphics.Color = R1.InkSoft,
+) {
+    Box(
+        modifier = modifier
+            .clip(R1.ShapeS)
+            .background(R1.Bg)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .r1Pressable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = label, style = R1.body, color = accent)
     }
 }
 

@@ -63,6 +63,15 @@ class DashboardViewModel(
     )
 
     @androidx.compose.runtime.Stable
+    data class MediaSummary(
+        val entityId: String,
+        val name: String,
+        val state: String,
+        val title: String?,
+        val artist: String?,
+    )
+
+    @androidx.compose.runtime.Stable
     data class UiState(
         val loading: Boolean = true,
         val weather: WeatherSummary? = null,
@@ -71,6 +80,9 @@ class DashboardViewModel(
         val sun: SunSummary? = null,
         val cameraCount: Int = 0,
         val notifications: List<PersistentNotification> = emptyList(),
+        /** Currently-playing or paused media players. Limited to 3 on
+         *  the dashboard to keep the surface scannable. */
+        val media: List<MediaSummary> = emptyList(),
         val error: String? = null,
     )
 
@@ -87,7 +99,8 @@ class DashboardViewModel(
                 val cameraJob = async { haRepository.listRawEntitiesByDomain("camera") }
                 val notifJob = async { haRepository.listPersistentNotifications() }
                 val sunJob = async { haRepository.listRawEntitiesByDomain("sun") }
-                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob)
+                val mediaJob = async { haRepository.listRawEntitiesByDomain("media_player") }
+                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob, mediaJob)
                 val weather = weatherJob.await().getOrNull()?.firstOrNull()?.let { row ->
                     WeatherSummary(
                         name = row.friendlyName,
@@ -128,6 +141,20 @@ class DashboardViewModel(
                 }
                 val cameras = cameraJob.await().getOrNull().orEmpty()
                 val notifs = notifJob.await().getOrNull().orEmpty()
+                val media = mediaJob.await().getOrNull()
+                    ?.filter { it.state in setOf("playing", "paused", "buffering") }
+                    ?.map { row ->
+                        MediaSummary(
+                            entityId = row.entityId,
+                            name = row.friendlyName,
+                            state = row.state,
+                            title = (row.attributes["media_title"] as? JsonPrimitive)?.content,
+                            artist = (row.attributes["media_artist"] as? JsonPrimitive)?.content,
+                        )
+                    }
+                    ?.sortedByDescending { it.state == "playing" }
+                    ?.take(3)
+                    .orEmpty()
                 val sun = sunJob.await().getOrNull()?.firstOrNull()?.let { row ->
                     SunSummary(
                         state = row.state,
@@ -151,12 +178,31 @@ class DashboardViewModel(
                     sun = sun,
                     cameraCount = cameras.size,
                     notifications = notifs,
+                    media = media,
                     error = null,
                 )
             } catch (t: Throwable) {
                 R1Log.w("Dashboard", "refresh failed: ${t.message}")
                 _ui.value = _ui.value.copy(loading = false, error = t.message)
             }
+        }
+    }
+
+    /** Transport dispatch for the on-dashboard media card. Uses the
+     *  existing ServiceCall.mediaTransport helper + haRepository.call
+     *  WS path so the dispatch is debounced + coalesced like every
+     *  other service call in the app. */
+    fun mediaTransport(
+        entityId: String,
+        action: com.github.itskenny0.r1ha.core.ha.MediaTransport,
+    ) {
+        viewModelScope.launch {
+            val target = runCatching {
+                com.github.itskenny0.r1ha.core.ha.EntityId(entityId)
+            }.getOrNull() ?: return@launch
+            haRepository.call(
+                com.github.itskenny0.r1ha.core.ha.ServiceCall.mediaTransport(target, action),
+            )
         }
     }
 
