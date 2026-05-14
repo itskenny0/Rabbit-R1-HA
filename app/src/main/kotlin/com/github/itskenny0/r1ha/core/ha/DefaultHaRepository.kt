@@ -1327,6 +1327,66 @@ class DefaultHaRepository(
         }
     }
 
+    override suspend fun fetchCalendarEvents(
+        entityId: String,
+        fromDaysBack: Int,
+        toDaysAhead: Int,
+    ): Result<List<CalendarEvent>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val s = settings.settings.first()
+            val server = s.server ?: error("Server URL not configured.")
+            refresher?.ensureFresh()
+            val now = Instant.now()
+            val start = now.minusSeconds(fromDaysBack.toLong() * 86_400L)
+            val end = now.plusSeconds(toDaysAhead.toLong() * 86_400L)
+            val url = "${server.url.trimEnd('/')}/api/calendars/$entityId" +
+                "?start=${start.toString()}&end=${end.toString()}"
+            val body = simpleAuthedGet(url) ?: run {
+                if (refresher?.forceRefresh() == true) {
+                    simpleAuthedGet(url)
+                        ?: error("Home Assistant returned HTTP 401 for /api/calendars after refresh.")
+                } else {
+                    error("Home Assistant returned HTTP 401 for /api/calendars.")
+                }
+            }
+            val arr = listStatesJson.decodeFromString<kotlinx.serialization.json.JsonArray>(body)
+            arr.mapNotNull { el ->
+                val obj = el as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                val summary = (obj["summary"] as? JsonPrimitive)?.content ?: return@mapNotNull null
+                val startEl = obj["start"]
+                val endEl = obj["end"]
+                val (startInstant, isAllDay) = parseCalDate(startEl)
+                val (endInstant, _) = parseCalDate(endEl)
+                CalendarEvent(
+                    summary = summary,
+                    start = startInstant,
+                    end = endInstant,
+                    allDay = isAllDay,
+                    location = (obj["location"] as? JsonPrimitive)?.content,
+                    description = (obj["description"] as? JsonPrimitive)?.content,
+                )
+            }.sortedBy { it.start ?: Instant.MAX }
+        }.onFailure { t ->
+            R1Log.w("HaRepo.calendar", "$entityId fetch failed: ${t.message}")
+        }
+    }
+
+    /** HA's event boundary shapes:
+     *   { dateTime: "2026-05-14T18:00:00+02:00" } — timed event
+     *   { date: "2026-05-14" }                   — all-day event
+     *  Returns the parsed [Instant] (UTC midnight for all-day) and the
+     *  all-day flag for the UI to render appropriately. */
+    private fun parseCalDate(el: kotlinx.serialization.json.JsonElement?): Pair<Instant?, Boolean> {
+        val obj = el as? kotlinx.serialization.json.JsonObject ?: return null to false
+        (obj["dateTime"] as? JsonPrimitive)?.content?.let { dt ->
+            return runCatching { Instant.parse(dt) }.getOrNull() to false
+        }
+        (obj["date"] as? JsonPrimitive)?.content?.let { date ->
+            return runCatching { Instant.parse(date + "T00:00:00Z") }.getOrNull() to true
+        }
+        return null to false
+    }
+
     override suspend fun fetchErrorLog(): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val s = settings.settings.first()

@@ -133,6 +133,17 @@ interface HaRepository {
      * R1's renderer wants the whole thing in memory anyway.
      */
     suspend fun fetchErrorLog(): Result<String>
+
+    /**
+     * GET `/api/calendars/<entity_id>?start=<iso>&end=<iso>` — events
+     * for a single calendar in a given window. Used by the calendar
+     * drill-down screen to show "what else is on the agenda this week".
+     */
+    suspend fun fetchCalendarEvents(
+        entityId: String,
+        fromDaysBack: Int = 0,
+        toDaysAhead: Int = 14,
+    ): Result<List<CalendarEvent>>
     suspend fun start()
     suspend fun stop()
 

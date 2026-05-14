@@ -55,7 +55,16 @@ fun DashboardScreen(
 ) {
     val vm: DashboardViewModel = viewModel(factory = DashboardViewModel.factory(haRepository))
     val ui by vm.ui.collectAsState()
-    LaunchedEffect(Unit) { vm.refresh() }
+    // Auto-refresh while the screen is composed — 60 s is the sweet spot
+    // between "stale enough to notice" and "polling /api/states 6× per
+    // minute". LaunchedEffect cancellation on screen exit kills the loop
+    // cleanly so backing out doesn't leak the work.
+    LaunchedEffect(Unit) {
+        while (true) {
+            vm.refresh()
+            kotlinx.coroutines.delay(60_000L)
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()

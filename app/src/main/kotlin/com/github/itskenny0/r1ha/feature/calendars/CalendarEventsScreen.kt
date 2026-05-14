@@ -29,59 +29,96 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.github.itskenny0.r1ha.core.ha.CalendarEvent
 import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.core.util.R1Log
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
-import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import java.time.Instant
 
 /**
- * Calendars surface — shows each `calendar.*` entity HA exposes with
- * its currently-on / next-up event preview. NOW pill prefixes events
- * that are happening right now (HA state == "on"); the rest show a
- * relative "in 2 h" timestamp.
+ * Calendar drill-down — fetches the next ~2 weeks of events for a
+ * single calendar entity via HA's `/api/calendars/<id>?start=&end=`
+ * endpoint and renders them as a chronological list.
  *
- * Doesn't drill into the full event list — that's a follow-up using
- * the dedicated `/api/calendars/<id>?start=...&end=...` endpoint.
- * This surface is the at-a-glance "what's next?" view that fits the
- * R1's small display.
+ * Unlike the parent CalendarsScreen which only shows the next event
+ * from each calendar's attributes, this drill-down lists every event
+ * in the window — useful for "what's on my agenda this week".
  */
+class CalendarEventsViewModel(
+    private val haRepository: HaRepository,
+    private val entityId: String,
+) : ViewModel() {
+
+    @androidx.compose.runtime.Stable
+    data class UiState(
+        val loading: Boolean = true,
+        val events: List<CalendarEvent> = emptyList(),
+        val error: String? = null,
+    )
+
+    private val _ui = MutableStateFlow(UiState())
+    val ui: StateFlow<UiState> = _ui
+
+    fun refresh() {
+        viewModelScope.launch {
+            _ui.value = _ui.value.copy(loading = true, error = null)
+            haRepository.fetchCalendarEvents(entityId, fromDaysBack = 0, toDaysAhead = 14).fold(
+                onSuccess = { events ->
+                    R1Log.i("CalendarEvents", "$entityId loaded ${events.size}")
+                    _ui.value = _ui.value.copy(loading = false, events = events, error = null)
+                },
+                onFailure = { t ->
+                    R1Log.w("CalendarEvents", "$entityId failed: ${t.message}")
+                    _ui.value = _ui.value.copy(loading = false, error = t.message)
+                },
+            )
+        }
+    }
+
+    companion object {
+        fun factory(haRepository: HaRepository, entityId: String) = viewModelFactory {
+            initializer { CalendarEventsViewModel(haRepository, entityId) }
+        }
+    }
+}
+
 @Composable
-fun CalendarsScreen(
+fun CalendarEventsScreen(
     haRepository: HaRepository,
     settings: SettingsRepository,
     wheelInput: WheelInput,
+    entityId: String,
+    calendarName: String,
     onBack: () -> Unit,
 ) {
-    val vm: CalendarsViewModel = viewModel(factory = CalendarsViewModel.factory(haRepository))
+    val vm: CalendarEventsViewModel = viewModel(
+        key = entityId,
+        factory = CalendarEventsViewModel.factory(haRepository, entityId),
+    )
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
-    LaunchedEffect(Unit) { vm.refresh() }
-    var drillingInto by remember { mutableStateOf<CalendarsViewModel.Calendar?>(null) }
-    val drillTarget = drillingInto
-    if (drillTarget != null) {
-        CalendarEventsScreen(
-            haRepository = haRepository,
-            settings = settings,
-            wheelInput = wheelInput,
-            entityId = drillTarget.entityId,
-            calendarName = drillTarget.name,
-            onBack = { drillingInto = null },
-        )
-        return
-    }
+    LaunchedEffect(entityId) { vm.refresh() }
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(R1.Bg)
             .systemBarsPadding(),
     ) {
-        R1TopBar(title = "CALENDARS", onBack = onBack)
+        R1TopBar(title = calendarName.uppercase().take(20), onBack = onBack)
         when {
             ui.loading -> Box(
                 modifier = Modifier.fillMaxSize(),
@@ -93,12 +130,18 @@ fun CalendarsScreen(
                     color = R1.AccentWarm,
                 )
             }
-            ui.calendars.isEmpty() -> Box(
+            ui.error != null && ui.events.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = ui.error ?: "Error", style = R1.body, color = R1.StatusRed)
+            }
+            ui.events.isEmpty() -> Box(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "No calendar entities in HA — add a calendar integration to see them here.",
+                    text = "No events in the next 14 days.",
                     style = R1.body,
                     color = R1.InkMuted,
                 )
@@ -116,8 +159,10 @@ fun CalendarsScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    items(items = ui.calendars, key = { it.entityId }) { c ->
-                        CalendarRow(c, onTap = { drillingInto = c })
+                    val now = Instant.now()
+                    items(items = ui.events, key = { "${it.summary}|${it.start?.toEpochMilli()}" }) { e ->
+                        EventRow(e, isHappeningNow = e.start != null && e.end != null &&
+                            now.isAfter(e.start) && now.isBefore(e.end))
                     }
                 }
             }
@@ -126,20 +171,17 @@ fun CalendarsScreen(
 }
 
 @Composable
-private fun CalendarRow(c: CalendarsViewModel.Calendar, onTap: () -> Unit) {
+private fun EventRow(e: CalendarEvent, isHappeningNow: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(R1.ShapeS)
             .background(R1.SurfaceMuted)
             .border(1.dp, R1.Hairline, R1.ShapeS)
-            .r1Pressable(onClick = onTap)
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (c.state == "on") {
-                // NOW pill — pulled to the front of the line so the user
-                // sees "this is happening right now" at a glance.
+            if (isHappeningNow) {
                 Box(
                     modifier = Modifier
                         .clip(R1.ShapeS)
@@ -150,35 +192,28 @@ private fun CalendarRow(c: CalendarsViewModel.Calendar, onTap: () -> Unit) {
                 }
                 Spacer(Modifier.width(8.dp))
             }
-            Text(
-                text = c.name,
-                style = R1.body,
-                color = R1.Ink,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-            )
-            // Relative timestamp for the next event (or current event end
-            // if NOW). Same ticker as the rest of the app.
-            val ts = if (c.state == "on") c.eventEnd else c.eventStart
-            RelativeTimeLabel(at = ts, color = R1.InkMuted, style = R1.labelMicro)
+            if (e.allDay) {
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.AccentCool.copy(alpha = 0.22f))
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                ) {
+                    Text(text = "ALL-DAY", style = R1.labelMicro, color = R1.AccentCool)
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(text = e.summary, style = R1.body, color = R1.Ink, maxLines = 2, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            RelativeTimeLabel(at = e.start, color = R1.InkMuted, style = R1.labelMicro)
         }
-        if (!c.eventMessage.isNullOrBlank()) {
-            Spacer(Modifier.size(4.dp))
-            Text(
-                text = c.eventMessage,
-                style = R1.body,
-                color = R1.InkSoft,
-                maxLines = 2,
-            )
-        }
-        if (!c.eventLocation.isNullOrBlank()) {
+        if (!e.location.isNullOrBlank()) {
             Spacer(Modifier.size(2.dp))
-            Text(
-                text = "@ ${c.eventLocation}",
-                style = R1.labelMicro,
-                color = R1.InkMuted,
-                maxLines = 1,
-            )
+            Text(text = "@ ${e.location}", style = R1.labelMicro, color = R1.InkSoft, maxLines = 1)
+        }
+        if (!e.description.isNullOrBlank()) {
+            Spacer(Modifier.size(2.dp))
+            Text(text = e.description, style = R1.labelMicro, color = R1.InkMuted, maxLines = 3)
         }
     }
 }
