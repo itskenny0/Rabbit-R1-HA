@@ -162,25 +162,54 @@ fun SensorCard(
         Spacer(Modifier.height(14.dp))
 
         // ── History block — chart for numeric sensors, recent-changes list for everything
-        // else (binary sensors, enum sensors, weather strings, etc.). Fetched once per
-        // entity-id change via LaunchedEffect; degraded gracefully when no repository is
-        // provided through CompositionLocal (e.g. the rename-dialog's PreviewOverlay) or
-        // when HA's history endpoint errors — the card just doesn't show a chart in that
-        // case rather than failing.
+        // else (binary sensors, enum sensors, weather strings, etc.).
+        //
+        // PERF: lazy-loaded with a 1.5 s dwell delay. SensorHistoryChart is one
+        // of the heaviest composables in the app (Canvas drawing of N points
+        // + grid + labels), and on quick scrolls past a sensor card we
+        // don't want to fetch + render a graph the user never actually saw.
+        // The DisposableEffect's coroutine launches on enter, sleeps 1.5 s,
+        // then triggers the fetch. If the user swipes away within the dwell,
+        // the SensorCard disposes, the coroutine cancels, no network + no
+        // Canvas. Returning to the card after a long gap re-fetches fresh.
         val repo = com.github.itskenny0.r1ha.core.theme.LocalHaRepository.current
         val historyState = androidx.compose.runtime.remember(state.id.value) {
             androidx.compose.runtime.mutableStateOf<List<com.github.itskenny0.r1ha.core.ha.HistoryPoint>>(emptyList())
         }
+        val dwellElapsed = androidx.compose.runtime.remember(state.id.value) {
+            androidx.compose.runtime.mutableStateOf(false)
+        }
         val textHistoryLength = com.github.itskenny0.r1ha.core.theme.LocalUiOptions.current.textHistoryLength
         if (repo != null) {
             androidx.compose.runtime.LaunchedEffect(state.id.value) {
+                // Sleep 1.5s — if the user swipes off the card in that
+                // window, LaunchedEffect cancels and we skip the fetch
+                // entirely. dwellElapsed gates the heavy chart render too.
+                kotlinx.coroutines.delay(1500L)
+                dwellElapsed.value = true
                 repo.fetchHistory(state.id, hours = 24)
                     .onSuccess { historyState.value = it }
             }
         }
         // Latest state numeric? Then it's a line chart; otherwise list of changes.
         val latestIsNumeric = state.rawState?.toDoubleOrNull()?.isFinite() == true
-        if (latestIsNumeric) {
+        if (!dwellElapsed.value) {
+            // Placeholder strip while the dwell timer is running. Same
+            // approximate height as the real chart so the card layout
+            // doesn't shift when the chart populates.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "—",
+                    style = R1.labelMicro,
+                    color = R1.InkMuted,
+                )
+            }
+        } else if (latestIsNumeric) {
             SensorHistoryChart(
                 points = historyState.value,
                 accent = accent,

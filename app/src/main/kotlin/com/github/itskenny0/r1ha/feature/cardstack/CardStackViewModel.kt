@@ -377,9 +377,36 @@ class CardStackViewModel(
                     val renamed = snap.overrides[state.id.value]
                     return if (renamed != null) state.copy(friendlyName = renamed) else state
                 }
+                // PERF: preserve List<EntityState> reference identity across
+                // emissions whenever a page's cards are referentially
+                // equivalent to the previous build. Without this, every
+                // entityMap emit produced a fresh List for every page even
+                // when nothing on that page had changed — and Compose,
+                // seeing a new List reference, recomposed every PageDeck
+                // (including inactive neighbours peeked via the
+                // beyondViewportPageCount=1 horizontal pager). With ref
+                // preservation, only pages whose contents actually changed
+                // get a new list, so the inactive PageDecks skip
+                // recomposition entirely.
+                val prevCardsByPage = _state.value.cardsByPage
                 val cardsByPage = LinkedHashMap<String, List<EntityState>>()
                 for (page in snap.pages) {
-                    cardsByPage[page.id] = page.favorites.mapNotNull { materializeRow(it) }
+                    val newList = page.favorites.mapNotNull { materializeRow(it) }
+                    val prev = prevCardsByPage[page.id]
+                    cardsByPage[page.id] = if (
+                        prev != null &&
+                        prev.size == newList.size &&
+                        // === checks REFERENCE equality on each EntityState.
+                        // HaRepository preserves entity references when the
+                        // server's reported state hasn't changed, so this
+                        // catches the common case where the entityMap emit
+                        // was for an entity NOT on this page.
+                        prev.indices.all { prev[it] === newList[it] }
+                    ) {
+                        prev
+                    } else {
+                        newList
+                    }
                 }
                 val activeId = snap.pages.firstOrNull { it.id == snap.activeId }?.id
                     ?: snap.pages.firstOrNull()?.id
