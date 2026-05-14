@@ -162,6 +162,12 @@ private fun EntitiesDiagnosticRow(haRepository: HaRepository) {
     val byDomain = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<Map<String, List<String>>?>(null)
     }
+    // Raw response prefix counts — populated by the secondary 'PROBE RAW' button.
+    // Shows what HA actually returned BEFORE our supported-domain filter and per-row
+    // decoder run. Resolves the 'is HA sending media_player.* at all?' question.
+    val rawByPrefix = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<Map<String, Int>?>(null)
+    }
     val loading = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf(false)
     }
@@ -218,6 +224,82 @@ private fun EntitiesDiagnosticRow(haRepository: HaRepository) {
                         else -> R1.InkSoft
                     },
                 )
+            }
+        }
+        // Secondary 'PROBE RAW' button — hits the same /api/states endpoint but
+        // groups the response purely by entity_id prefix, including domains the app
+        // doesn't support and would otherwise drop. Use this when a domain shows
+        // zero in the decoded list above and you want to know whether HA even sent
+        // any rows for that prefix.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Raw prefixes (every domain HA returned, including unsupported)",
+                style = R1.body,
+                color = R1.InkMuted,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .background(R1.SurfaceMuted, shape = R1.ShapeS)
+                    .r1Pressable(onClick = {
+                        if (loading.value) return@r1Pressable
+                        loading.value = true
+                        scope.launch {
+                            haRepository.listAllEntitiesRawPrefixCounts().fold(
+                                onSuccess = { rawByPrefix.value = it },
+                                onFailure = { error.value = it.message ?: "fetch failed" },
+                            )
+                            loading.value = false
+                        }
+                    })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = if (rawByPrefix.value == null) "PROBE RAW" else "${rawByPrefix.value!!.values.sum()} RAW",
+                    style = R1.labelMicro,
+                    color = if (rawByPrefix.value != null) R1.AccentWarm else R1.InkSoft,
+                )
+            }
+        }
+        // Raw prefix list — shows every prefix HA returned, marking unsupported ones
+        // (those our app filters out). If media_player is here with a non-zero count
+        // but missing from the decoded list above, our decoder is dropping them; if
+        // it's missing from BOTH, HA isn't returning them to this auth token.
+        rawByPrefix.value?.let { raw ->
+            raw.forEach { (prefix, count) ->
+                val supported = com.github.itskenny0.r1ha.core.ha.Domain.isSupportedPrefix(prefix)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = prefix,
+                        style = R1.body.copy(fontFamily = FontFamily.Monospace),
+                        color = if (supported) R1.Ink else R1.InkMuted,
+                    )
+                    if (!supported) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "(filtered)",
+                            style = R1.labelMicro,
+                            color = R1.StatusAmber,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = count.toString(),
+                        style = R1.body.copy(fontFamily = FontFamily.Monospace),
+                        color = if (supported) R1.InkSoft else R1.InkMuted,
+                    )
+                }
             }
         }
         // Per-domain count list. Tapping a row expands to show the entity_ids in

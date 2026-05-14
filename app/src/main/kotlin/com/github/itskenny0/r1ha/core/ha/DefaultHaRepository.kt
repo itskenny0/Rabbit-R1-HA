@@ -830,6 +830,40 @@ class DefaultHaRepository(
         }
     }
 
+    override suspend fun listAllEntitiesRawPrefixCounts(): Result<Map<String, Int>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val s = settings.settings.first()
+                val server = s.server ?: error("Server URL not configured.")
+                refresher?.ensureFresh()
+                val body = fetchStatesBody(server.url) ?: run {
+                    if (refresher?.forceRefresh() == true) {
+                        fetchStatesBody(server.url)
+                            ?: error("Home Assistant returned HTTP 401 for /api/states even after refresh.")
+                    } else {
+                        error("Home Assistant returned HTTP 401 for /api/states — sign out & reconnect.")
+                    }
+                }
+                // Pull just the entity_id from each row by inspecting the raw JSON
+                // object — no per-row decoder, no supported-domain filter. The diagnostic
+                // needs to show what HA SENT, not what we kept; if media_player.* is in
+                // here but missing from listAllEntities's result, that proves the filter
+                // is the issue. If it's missing from BOTH, the problem is upstream
+                // (HA-side permissions / entity-level visibility).
+                val rowsJson = listStatesJson.decodeFromString<List<kotlinx.serialization.json.JsonElement>>(body)
+                rowsJson
+                    .mapNotNull {
+                        val obj = it as? kotlinx.serialization.json.JsonObject
+                        val eid = (obj?.get("entity_id") as? JsonPrimitive)?.content
+                        eid?.substringBefore('.', missingDelimiterValue = "")
+                    }
+                    .filter { it.isNotBlank() }
+                    .groupingBy { it }
+                    .eachCount()
+                    .toSortedMap()
+            }
+        }
+
     /**
      * Issue a GET to [url] with the current access token. Returns null on HTTP 401 so
      * the caller can refresh + retry; throws on any other non-success. Shared with the
@@ -972,7 +1006,22 @@ class DefaultHaRepository(
                     HistoryPoint.fromRaw(state, instant)
                 }
             }.onFailure { t ->
-                R1Log.w("HaRepo.fetchHistory", "${entityId.value}: ${t.message}")
+                // CancellationException is the normal flow-control signal when the
+                // calling LaunchedEffect (SensorCard's history fetch) is cancelled
+                // because the card was scrolled out of view — not an error, just the
+                // coroutine being told to stop. Logging it at WARN spammed the toast
+                // feed with 'coroutine scope left the composition' noise that drowned
+                // out actual failures. Surface it at DEBUG instead so it stays
+                // available for power users who turn the toast level down, and skip
+                // entirely the most common 'JobCancellationException: …left the
+                // composition' wording from Compose's lifecycle scope.
+                if (t is kotlinx.coroutines.CancellationException ||
+                    t.message?.contains("left the composition", ignoreCase = true) == true
+                ) {
+                    R1Log.d("HaRepo.fetchHistory", "${entityId.value}: cancelled (card no longer composed)")
+                } else {
+                    R1Log.w("HaRepo.fetchHistory", "${entityId.value}: ${t.message}")
+                }
             }
         }
 
