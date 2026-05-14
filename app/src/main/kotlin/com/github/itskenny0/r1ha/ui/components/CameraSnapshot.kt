@@ -1,0 +1,125 @@
+package com.github.itskenny0.r1ha.ui.components
+
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.core.util.R1Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
+
+/**
+ * Polling JPEG snapshot view backed by HA's `/api/camera_proxy/<entity_id>`
+ * endpoint. Each fetch is a one-shot HTTPS GET with the access token in
+ * the Authorization header; the result is decoded to an ImageBitmap and
+ * painted.
+ *
+ * **Why not MJPEG.** HA exposes `camera_proxy_stream` for MJPEG too, but
+ * MJPEG over HTTP keeps a long-running socket open per stream. On the R1
+ * (LineageOS GSI / CipherOS) we've seen long-running HTTP sockets get
+ * killed by Doze + power management mid-stream, and reconnecting is
+ * choppy. Polling JPEG at 3-5 s gives us a "live enough" feel without
+ * needing background-stream resilience.
+ *
+ * **Caching.** Deliberately bypassed — appending the current epoch
+ * millis as a `?cb=` cache-buster guarantees we always see HA's latest
+ * snapshot. Otherwise OkHttp would happily serve a 304 short-circuit
+ * and the image would freeze.
+ *
+ * **Cancellation.** The LaunchedEffect cancels the loop when the
+ * composable leaves composition (user backs out / pip moves on),
+ * cleanly tearing down any in-flight request.
+ */
+@Composable
+fun CameraSnapshot(
+    serverUrl: String,
+    bearerToken: String?,
+    entityId: String,
+    /** Polling interval — 4 s is the default. 1 s wastes data without
+     *  feeling much smoother given HA's typical camera-fetch latency. */
+    intervalMillis: Long = 4_000L,
+    modifier: Modifier = Modifier,
+) {
+    var bitmap by remember(entityId) { mutableStateOf<ImageBitmap?>(null) }
+    var failed by remember(entityId) { mutableStateOf(false) }
+    LaunchedEffect(entityId, serverUrl, bearerToken, intervalMillis) {
+        while (true) {
+            val cb = System.currentTimeMillis()
+            val url = "${serverUrl.trimEnd('/')}/api/camera_proxy/$entityId?cb=$cb"
+            val image = runCatching { fetchSnapshot(url, bearerToken) }
+                .onFailure { R1Log.d("Camera", "fetch $entityId failed: ${it.message}") }
+                .getOrNull()
+            if (image != null) {
+                bitmap = image
+                failed = false
+            } else if (bitmap == null) {
+                // Only flip into the failed-with-no-last-frame state if we never
+                // got anything. A transient failure mid-stream just keeps the
+                // previous frame visible until the next poll lands.
+                failed = true
+            }
+            delay(intervalMillis)
+        }
+    }
+    Box(modifier = modifier.background(R1.SurfaceMuted), contentAlignment = Alignment.Center) {
+        val img = bitmap
+        if (img != null) {
+            Image(
+                bitmap = img,
+                contentDescription = entityId,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (failed) {
+            Text(text = "NO SIGNAL", style = R1.labelMicro, color = R1.InkMuted)
+        } else {
+            // Initial-load state — empty SurfaceMuted box matches AsyncBitmap's
+            // first-frame behaviour rather than a spinner that flickers and
+            // disappears within a second.
+        }
+    }
+}
+
+/** Module-scoped OkHttp client for camera fetches. Separate from
+ *  AsyncBitmapCache's client so a slow camera doesn't park the
+ *  album-art request queue. */
+private val cameraHttp: OkHttpClient by lazy {
+    OkHttpClient.Builder()
+        // Long-ish read timeout — some integrations (Reolink / Doorbird)
+        // generate the snapshot on demand and a sub-5 s read can clip
+        // them. The polling loop keeps things lively in spite of this.
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+}
+
+private suspend fun fetchSnapshot(url: String, bearerToken: String?): ImageBitmap? =
+    withContext(Dispatchers.IO) {
+        val builder = Request.Builder().url(url)
+        if (!bearerToken.isNullOrBlank()) {
+            builder.header("Authorization", "Bearer $bearerToken")
+        }
+        cameraHttp.newCall(builder.build()).execute().use { resp ->
+            if (!resp.isSuccessful) return@withContext null
+            val bytes = resp.body?.bytes() ?: return@withContext null
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        }
+    }

@@ -52,6 +52,7 @@ fun SettingsScreen(
     onOpenTemplate: () -> Unit,
     onOpenServiceCaller: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenCameras: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -564,6 +565,12 @@ fun SettingsScreen(
             // automation-side `persistent_notification.create` messages.
             item {
                 NavRow(label = "Notifications", value = "HA persistent alerts", onClick = onOpenNotifications)
+            }
+
+            // Cameras — live polling snapshots from every camera.* entity
+            // HA exposes via /api/camera_proxy. Polls every 4 s.
+            item {
+                NavRow(label = "Cameras", value = "Live snapshots", onClick = onOpenCameras)
             }
 
             item { SectionDivider() }

@@ -90,6 +90,9 @@ fun AppNavGraph(
                 onOpenNotifications = {
                     navController.navigate(Routes.NOTIFICATIONS) { launchSingleTop = true }
                 },
+                onOpenCameras = {
+                    navController.navigate(Routes.CAMERAS) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
@@ -163,6 +166,15 @@ fun AppNavGraph(
             com.github.itskenny0.r1ha.feature.notifications.NotificationsScreen(
                 haRepository = haRepository,
                 settings = settings,
+                wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.CAMERAS) {
+            com.github.itskenny0.r1ha.feature.cameras.CamerasScreen(
+                haRepository = haRepository,
+                settings = settings,
+                tokens = tokens,
                 wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )

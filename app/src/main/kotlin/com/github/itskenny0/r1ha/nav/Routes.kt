@@ -15,4 +15,5 @@ object Routes {
     const val TEMPLATE = "template"
     const val SERVICE_CALLER = "service_caller"
     const val NOTIFICATIONS = "notifications"
+    const val CAMERAS = "cameras"
 }
