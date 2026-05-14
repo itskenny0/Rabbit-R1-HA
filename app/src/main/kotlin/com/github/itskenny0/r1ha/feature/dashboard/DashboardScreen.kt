@@ -127,6 +127,7 @@ fun DashboardScreen(
                 MetricsRow(
                     cameraCount = ui.cameraCount,
                     notificationCount = ui.notifications.size,
+                    lightsOnCount = ui.lightsOnCount,
                     onCameras = onOpenCameras,
                     onNotifications = onOpenNotifications,
                 )
@@ -399,6 +400,7 @@ private fun CalendarCard(
 private fun MetricsRow(
     cameraCount: Int,
     notificationCount: Int,
+    lightsOnCount: Int,
     onCameras: () -> Unit,
     onNotifications: () -> Unit,
 ) {
@@ -406,6 +408,21 @@ private fun MetricsRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // Lights-on count from a server-side Jinja count() — much
+        // lighter than fetching every light entity. -1 sentinel
+        // renders as '—' so the tile doesn't claim "0 on" while the
+        // template is still rendering.
+        Metric(
+            modifier = Modifier.weight(1f),
+            label = "LIGHTS ON",
+            value = if (lightsOnCount < 0) "—" else lightsOnCount.toString(),
+            accent = if (lightsOnCount > 0) R1.AccentWarm else R1.InkSoft,
+            onClick = onCameras, // No dedicated lights screen yet — falls
+                                   // through to cameras tap as a near-miss.
+                                   // (Refining this is a follow-up; user
+                                   // can still control lights via the
+                                   // card stack.)
+        )
         Metric(
             modifier = Modifier.weight(1f),
             label = "CAMERAS",

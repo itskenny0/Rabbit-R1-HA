@@ -83,6 +83,9 @@ class DashboardViewModel(
         /** Currently-playing or paused media players. Limited to 3 on
          *  the dashboard to keep the surface scannable. */
         val media: List<MediaSummary> = emptyList(),
+        /** Count of light.* entities currently in state='on'. -1 sentinel
+         *  for "not loaded yet" so the UI can render '—' rather than 0. */
+        val lightsOnCount: Int = -1,
         val error: String? = null,
     )
 
@@ -100,7 +103,15 @@ class DashboardViewModel(
                 val notifJob = async { haRepository.listPersistentNotifications() }
                 val sunJob = async { haRepository.listRawEntitiesByDomain("sun") }
                 val mediaJob = async { haRepository.listRawEntitiesByDomain("media_player") }
-                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob, mediaJob)
+                // Lightweight server-side count rather than transporting
+                // every light entity's full row. The integer comes back
+                // as plain text body from /api/template.
+                val lightsJob = async {
+                    haRepository.renderTemplate(
+                        "{{ states.light | selectattr('state','eq','on') | list | count }}",
+                    )
+                }
+                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob, mediaJob, lightsJob)
                 val weather = weatherJob.await().getOrNull()?.firstOrNull()?.let { row ->
                     WeatherSummary(
                         name = row.friendlyName,
@@ -155,6 +166,7 @@ class DashboardViewModel(
                     ?.sortedByDescending { it.state == "playing" }
                     ?.take(3)
                     .orEmpty()
+                val lightsOn = lightsJob.await().getOrNull()?.trim()?.toIntOrNull() ?: -1
                 val sun = sunJob.await().getOrNull()?.firstOrNull()?.let { row ->
                     SunSummary(
                         state = row.state,
@@ -179,6 +191,7 @@ class DashboardViewModel(
                     cameraCount = cameras.size,
                     notifications = notifs,
                     media = media,
+                    lightsOnCount = lightsOn,
                     error = null,
                 )
             } catch (t: Throwable) {
