@@ -31,11 +31,18 @@ import com.github.itskenny0.r1ha.core.ha.LogbookEntry
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import com.github.itskenny0.r1ha.core.util.R1Log
+import com.github.itskenny0.r1ha.core.util.Toaster
 import com.github.itskenny0.r1ha.ui.components.R1TextField
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import com.github.itskenny0.r1ha.ui.components.r1RowPressable
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Recent Activity surface — mirrors HA's Logbook panel. Reverse-
@@ -61,8 +68,39 @@ fun LogbookScreen(
     val vm: LogbookViewModel = viewModel(factory = LogbookViewModel.factory(haRepository))
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
     LaunchedEffect(Unit) { vm.refresh() }
+    // Long-press → open the entity's history in HA's web UI via the
+    // system browser. The R1's stock browser is rough but works; users on
+    // a tablet next to the device are the more likely audience for this
+    // drill-down. Server URL comes from the active settings snapshot.
+    fun openInHa(entry: LogbookEntry) {
+        val entityId = entry.entityId?.value ?: run {
+            Toaster.show("No entity_id on this row")
+            return
+        }
+        scope.launch {
+            val server = runCatching { settings.settings.first().server?.url }.getOrNull()
+            if (server.isNullOrBlank()) {
+                Toaster.error("No HA server configured")
+                return@launch
+            }
+            val url = "${server.trimEnd('/')}/history?entity_id=$entityId"
+            runCatching {
+                context.startActivity(
+                    android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(url),
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }.onFailure { t ->
+                R1Log.w("Logbook", "open-in-HA failed: ${t.message}")
+                Toaster.error("No browser to open ${url}")
+            }
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -122,7 +160,11 @@ fun LogbookScreen(
                     // at the same wall-clock second on different entities).
                     key = { it.timestamp.toEpochMilli().toString() + "|" + (it.entityId?.value ?: it.name) },
                     ) { entry ->
-                        LogbookRow(entry, onTap = { vm.showDetail(entry) })
+                        LogbookRow(
+                            entry,
+                            onTap = { vm.showDetail(entry) },
+                            onLongPress = { openInHa(entry) },
+                        )
                     }
                 }
             }
@@ -161,13 +203,19 @@ private fun WindowChips(
 }
 
 @Composable
-private fun LogbookRow(entry: LogbookEntry, onTap: () -> Unit) {
+private fun LogbookRow(
+    entry: LogbookEntry,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(R1.ShapeS)
             .background(R1.SurfaceMuted)
-            .r1Pressable(onClick = onTap)
+            // Tap = expand detail toast. Long-press = open the entity's
+            // /history view in HA's web UI via the system browser.
+            .r1RowPressable(onTap = onTap, onLongPress = onLongPress)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
