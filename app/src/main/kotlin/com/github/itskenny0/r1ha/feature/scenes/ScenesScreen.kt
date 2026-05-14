@@ -111,16 +111,25 @@ fun ScenesScreen(
                     color = R1.InkMuted,
                 )
             }
-            else -> LazyColumn(
-                state = listState,
+            // Pull-to-refresh wrap — re-issue /api/states to pick up any
+            // new scenes / scripts the user added in HA without backing
+            // out and re-entering the screen.
+            else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = ui.loading,
+                onRefresh = { vm.refresh() },
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 12.dp, vertical = 8.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                items(items = ui.entries, key = { it.id.value }) { entry ->
-                    SceneRow(entry, onFire = { vm.fire(entry) })
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp, vertical = 8.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(items = ui.entries, key = { it.id.value }) { entry ->
+                        SceneRow(entry, onFire = { vm.fire(entry) })
+                    }
                 }
             }
         }

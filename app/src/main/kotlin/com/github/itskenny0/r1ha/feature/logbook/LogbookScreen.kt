@@ -99,22 +99,31 @@ fun LogbookScreen(
                     color = R1.InkMuted,
                 )
             }
-            else -> LazyColumn(
-                state = listState,
+            // Pull-to-refresh wrap — the logbook is naturally append-only
+            // so a refresh just re-issues the same window query and picks
+            // up anything that landed in the seconds since the last fetch.
+            else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = ui.loading,
+                onRefresh = { vm.refresh() },
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 12.dp, vertical = 8.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                items(
-                    items = ui.entries,
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp, vertical = 8.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(
+                        items = ui.entries,
                     // Stable key: timestamp nanos + entity-id + name keeps
                     // duplicate-message rows distinct (two automations firing
                     // at the same wall-clock second on different entities).
                     key = { it.timestamp.toEpochMilli().toString() + "|" + (it.entityId?.value ?: it.name) },
-                ) { entry ->
-                    LogbookRow(entry, onTap = { vm.showDetail(entry) })
+                    ) { entry ->
+                        LogbookRow(entry, onTap = { vm.showDetail(entry) })
+                    }
                 }
             }
         }
