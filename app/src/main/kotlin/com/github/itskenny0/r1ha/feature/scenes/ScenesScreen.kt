@@ -75,7 +75,7 @@ fun ScenesScreen(
         // disable themselves while a previous tap is still in flight so
         // a double-tap doesn't queue two dispatches.
         MasterActionsRow(
-            inFlight = ui.allLightsOffInFlight,
+            inFlight = ui.masterActionInFlight,
             onLightsOff = { vm.allLightsOff() },
             onMediaPause = { vm.allMediaPause() },
             onSwitchesOff = { vm.allSwitchesOff() },

@@ -57,7 +57,7 @@ class ScenesViewModel(
         val counts: Map<Filter, Int> = emptyMap(),
         /** True while the "All Lights Off" master action is in flight; the
          *  button disables itself to prevent double-tap re-fires. */
-        val allLightsOffInFlight: Boolean = false,
+        val masterActionInFlight: Boolean = false,
     ) {
         /** Subset visible under the current filter + search query. Counts are
          *  small (typically <50) so the in-place filter is trivial. */
@@ -200,15 +200,15 @@ class ScenesViewModel(
         successMessage: String,
         failurePrefix: String,
     ) {
-        if (_ui.value.allLightsOffInFlight) return
-        _ui.value = _ui.value.copy(allLightsOffInFlight = true)
+        if (_ui.value.masterActionInFlight) return
+        _ui.value = _ui.value.copy(masterActionInFlight = true)
         viewModelScope.launch {
             val anyEntity = haRepository.listAllEntities().getOrNull()
                 ?.firstOrNull { it.id.domain == domain }
                 ?.id
             if (anyEntity == null) {
                 Toaster.show(emptyMessage)
-                _ui.value = _ui.value.copy(allLightsOffInFlight = false)
+                _ui.value = _ui.value.copy(masterActionInFlight = false)
                 return@launch
             }
             val call = ServiceCall(
@@ -228,7 +228,7 @@ class ScenesViewModel(
                     Toaster.error("$failurePrefix failed: ${t.message ?: "unknown"}")
                 },
             )
-            _ui.value = _ui.value.copy(allLightsOffInFlight = false)
+            _ui.value = _ui.value.copy(masterActionInFlight = false)
         }
     }
 
