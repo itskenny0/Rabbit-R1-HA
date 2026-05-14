@@ -1,0 +1,203 @@
+package com.github.itskenny0.r1ha.feature.weather
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.github.itskenny0.r1ha.core.ha.HaRepository
+import com.github.itskenny0.r1ha.core.input.WheelInput
+import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
+import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.ui.components.R1TopBar
+import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
+
+/**
+ * Weather surface — lists every `weather.*` entity HA reports with
+ * its current condition glyph + temperature + secondary readings
+ * (humidity, wind, pressure). Read-only display; no controls.
+ *
+ * Glyphs are drawn from the HA standard condition vocabulary
+ * (clear-night, cloudy, fog, hail, lightning, partlycloudy, pouring,
+ * rainy, snowy, snowy-rainy, sunny, windy, exceptional). The map
+ * coerces anything unknown to a neutral '·' so a future HA condition
+ * never breaks the layout.
+ */
+@Composable
+fun WeatherScreen(
+    haRepository: HaRepository,
+    settings: SettingsRepository,
+    wheelInput: WheelInput,
+    onBack: () -> Unit,
+) {
+    val vm: WeatherViewModel = viewModel(factory = WeatherViewModel.factory(haRepository))
+    val ui by vm.ui.collectAsState()
+    val listState = rememberLazyListState()
+    WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
+    LaunchedEffect(Unit) { vm.refresh() }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(R1.Bg)
+            .systemBarsPadding(),
+    ) {
+        R1TopBar(title = "WEATHER", onBack = onBack)
+        when {
+            ui.loading -> Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                    color = R1.AccentWarm,
+                )
+            }
+            ui.weathers.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "No weather entities in HA — add a weather integration to see them here.",
+                    style = R1.body,
+                    color = R1.InkMuted,
+                )
+            }
+            else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = ui.loading,
+                onRefresh = { vm.refresh() },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp, vertical = 8.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(items = ui.weathers, key = { it.entityId }) { w ->
+                        WeatherRow(w)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeatherRow(w: WeatherViewModel.Weather) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = conditionGlyph(w.condition),
+                style = R1.body,
+                color = conditionAccent(w.condition),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = w.name,
+                style = R1.body,
+                color = R1.Ink,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+            )
+            if (w.temperature != null) {
+                Text(
+                    text = formatTemp(w.temperature, w.temperatureUnit),
+                    style = R1.body,
+                    color = R1.Ink,
+                )
+            }
+        }
+        Spacer(Modifier.size(4.dp))
+        Text(
+            text = w.condition.replace('-', ' ').uppercase(),
+            style = R1.labelMicro,
+            color = conditionAccent(w.condition),
+        )
+        // Secondary readings — only render when present. Avoids blank
+        // columns when HA's integration omits an attribute (e.g. some
+        // sensors only report temperature + condition).
+        val parts = buildList {
+            if (w.humidity != null) add("${w.humidity}% RH")
+            if (w.windSpeed != null) {
+                add("${formatNumber(w.windSpeed)} ${w.windUnit ?: ""}".trim())
+            }
+            if (w.pressure != null) {
+                add("${formatNumber(w.pressure)} ${w.pressureUnit ?: ""}".trim())
+            }
+        }
+        if (parts.isNotEmpty()) {
+            Spacer(Modifier.size(2.dp))
+            Text(
+                text = parts.joinToString(" · "),
+                style = R1.labelMicro,
+                color = R1.InkSoft,
+            )
+        }
+    }
+}
+
+private fun formatTemp(t: Double, unit: String?): String =
+    "${formatNumber(t)}${unit ?: "°"}"
+
+private fun formatNumber(d: Double): String =
+    // One decimal for sub-100 values, integer for larger (pressure is usually 4 digits)
+    if (kotlin.math.abs(d) < 100) "%.1f".format(d) else "%.0f".format(d)
+
+/** Map HA standard weather conditions to a single-glyph preview.
+ *  Falls back to '·' for unknown / future conditions. */
+private fun conditionGlyph(condition: String): String = when (condition.lowercase()) {
+    "sunny", "clear" -> "☀"
+    "clear-night" -> "☾"
+    "partlycloudy" -> "⛅"
+    "cloudy" -> "☁"
+    "rainy" -> "☂"
+    "pouring" -> "☔"
+    "snowy", "snowy-rainy" -> "❄"
+    "fog" -> "≋"
+    "lightning", "lightning-rainy" -> "⚡"
+    "windy", "windy-variant" -> "🌬"
+    "hail" -> "•"
+    else -> "·"
+}
+
+private fun conditionAccent(condition: String): androidx.compose.ui.graphics.Color =
+    when (condition.lowercase()) {
+        "sunny", "clear" -> R1.AccentWarm
+        "rainy", "pouring", "snowy", "snowy-rainy", "fog" -> R1.AccentCool
+        "lightning", "lightning-rainy" -> R1.StatusAmber
+        "windy", "windy-variant" -> R1.AccentNeutral
+        "unavailable", "unknown" -> R1.InkMuted
+        else -> R1.InkSoft
+    }

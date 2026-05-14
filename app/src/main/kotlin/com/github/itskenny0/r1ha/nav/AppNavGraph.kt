@@ -93,6 +93,12 @@ fun AppNavGraph(
                 onOpenCameras = {
                     navController.navigate(Routes.CAMERAS) { launchSingleTop = true }
                 },
+                onOpenWeather = {
+                    navController.navigate(Routes.WEATHER) { launchSingleTop = true }
+                },
+                onOpenPersons = {
+                    navController.navigate(Routes.PERSONS) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
@@ -175,6 +181,22 @@ fun AppNavGraph(
                 haRepository = haRepository,
                 settings = settings,
                 tokens = tokens,
+                wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.WEATHER) {
+            com.github.itskenny0.r1ha.feature.weather.WeatherScreen(
+                haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.PERSONS) {
+            com.github.itskenny0.r1ha.feature.persons.PersonsScreen(
+                haRepository = haRepository,
+                settings = settings,
                 wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )

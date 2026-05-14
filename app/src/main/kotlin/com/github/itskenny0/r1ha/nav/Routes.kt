@@ -16,4 +16,6 @@ object Routes {
     const val SERVICE_CALLER = "service_caller"
     const val NOTIFICATIONS = "notifications"
     const val CAMERAS = "cameras"
+    const val WEATHER = "weather"
+    const val PERSONS = "persons"
 }

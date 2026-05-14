@@ -53,6 +53,8 @@ fun SettingsScreen(
     onOpenServiceCaller: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenCameras: () -> Unit,
+    onOpenWeather: () -> Unit,
+    onOpenPersons: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -571,6 +573,19 @@ fun SettingsScreen(
             // HA exposes via /api/camera_proxy. Polls every 4 s.
             item {
                 NavRow(label = "Cameras", value = "Live snapshots", onClick = onOpenCameras)
+            }
+
+            // Weather — read-only display of every weather.* entity HA
+            // reports, with condition glyph + temperature + humidity / wind
+            // / pressure secondary readings.
+            item {
+                NavRow(label = "Weather", value = "Conditions readout", onClick = onOpenWeather)
+            }
+
+            // Who's home — person.* and device_tracker.* in one directory,
+            // home/away state coloured per state.
+            item {
+                NavRow(label = "Who's home", value = "People + device trackers", onClick = onOpenPersons)
             }
 
             item { SectionDivider() }
