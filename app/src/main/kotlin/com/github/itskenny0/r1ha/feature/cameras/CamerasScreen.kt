@@ -17,8 +17,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.flow.first
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,7 +50,6 @@ import com.github.itskenny0.r1ha.ui.components.CameraSnapshot
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
-import kotlinx.coroutines.flow.first
 
 /**
  * Cameras surface — lists every `camera.*` entity HA reports and lets
@@ -68,9 +74,25 @@ fun CamerasScreen(
     val vm: CamerasViewModel = viewModel(factory = CamerasViewModel.factory(haRepository))
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
-    WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
+    val gridState = rememberLazyGridState()
+    // View-mode preference — rememberSaveable so it survives orientation
+    // changes and back-then-forward nav. Defaults to LIST (cheap; no
+    // background polling) so big installs don't accidentally fire a
+    // thumbnail-fetch stampede on first entry.
+    var viewMode by rememberSaveable { mutableStateOf("LIST") }
+    WheelScrollFor(
+        wheelInput = wheelInput,
+        listState = if (viewMode == "LIST") listState else rememberLazyListState(),
+        settings = settings,
+    )
     LaunchedEffect(Unit) { vm.refresh() }
     var viewingEntityId by remember { mutableStateOf<String?>(null) }
+    // Server URL + token for the grid-view thumbnails; null in LIST mode
+    // so we don't even attempt to fetch.
+    val serverUrl by produceState<String?>(null, settings) {
+        value = settings.settings.first().server?.url
+    }
+    val token by produceState<String?>(null, tokens) { value = tokens.load()?.accessToken }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -78,6 +100,12 @@ fun CamerasScreen(
             .systemBarsPadding(),
     ) {
         R1TopBar(title = "CAMERAS", onBack = onBack)
+        // LIST / GRID toggle row. GRID auto-polls every tile (heavier);
+        // LIST is text-only. Default to LIST so big installs don't fire
+        // a thumbnail stampede on first entry.
+        if (ui.cameras.isNotEmpty()) {
+            ViewModeRow(current = viewMode, onSelect = { viewMode = it })
+        }
         when {
             ui.loading -> Box(
                 modifier = Modifier.fillMaxSize(),
@@ -98,6 +126,31 @@ fun CamerasScreen(
                     style = R1.body,
                     color = R1.InkMuted,
                 )
+            }
+            viewMode == "GRID" && serverUrl != null -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = ui.loading,
+                onRefresh = { vm.refresh() },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 8.dp, vertical = 6.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(items = ui.cameras, key = { it.entityId }) { camera ->
+                        CameraTile(
+                            camera = camera,
+                            serverUrl = serverUrl!!,
+                            bearerToken = token,
+                            onTap = { viewingEntityId = camera.entityId },
+                        )
+                    }
+                }
             }
             else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                 isRefreshing = ui.loading,
@@ -128,6 +181,72 @@ fun CamerasScreen(
             settings = settings,
             tokens = tokens,
             onDismiss = { viewingEntityId = null },
+        )
+    }
+}
+
+@Composable
+private fun ViewModeRow(current: String, onSelect: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        for (mode in listOf("LIST", "GRID")) {
+            val active = mode == current
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(if (active) R1.AccentWarm else R1.SurfaceMuted)
+                    .r1Pressable(onClick = { onSelect(mode) })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = mode,
+                    style = R1.labelMicro,
+                    color = if (active) R1.Bg else R1.InkSoft,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraTile(
+    camera: CamerasViewModel.Camera,
+    serverUrl: String,
+    bearerToken: String?,
+    onTap: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .r1Pressable(onClick = onTap),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f),
+        ) {
+            CameraSnapshot(
+                serverUrl = serverUrl,
+                bearerToken = bearerToken,
+                entityId = camera.entityId,
+                // Slower polling on the grid — 8 s per tile keeps the
+                // total fetch rate sane when there are many cameras.
+                intervalMillis = 8_000L,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Text(
+            text = camera.name,
+            style = R1.body,
+            color = R1.Ink,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
 }
