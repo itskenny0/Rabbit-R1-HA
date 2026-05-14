@@ -28,6 +28,15 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
+/**
+ * @Stable: every field is `val` and the maps reference immutable contents
+ * (they're rebuilt on each observe emission). The annotation tells Compose
+ * to use the data class's generated equals to decide whether downstream
+ * composables can skip — without it, every wheel-event-driven state change
+ * would force every reader of the state to recompose even when their slice
+ * didn't actually change.
+ */
+@androidx.compose.runtime.Stable
 data class CardStackUiState(
     /** Ordered by the user's favorites list (NOT by entity_id). The HA cache snapshot —
      *  what the server has confirmed. The UI should bind to [displayedCards] instead so
@@ -95,12 +104,28 @@ data class CardStackUiState(
      * doesn't bounce.
      */
     val displayedCards: List<EntityState>
-        get() = cards.map { state -> state.applyOptimistic(optimisticPercents[state.id]) }
+        get() = if (optimisticPercents.isEmpty()) {
+            // Common case: no wheel/tap is in flight. Skip the allocation of
+            // the mapped list entirely — recompositions during static viewing
+            // (e.g. swiping between pages, just looking at the deck) were
+            // allocating a fresh List<EntityState> on every recomp for no
+            // reason. cards is already a List<EntityState> and applyOptimistic
+            // with a null override returns the same instance.
+            cards
+        } else {
+            cards.map { state -> state.applyOptimistic(optimisticPercents[state.id]) }
+        }
 
     val activeState: EntityState?
-        get() = cards.getOrNull(currentIndex)?.applyOptimistic(
-            optimisticPercents[cards.getOrNull(currentIndex)?.id],
-        )
+        get() {
+            // One getOrNull instead of two (the old shape called it once for
+            // the card lookup and again inside the optimisticPercents key).
+            // Short-circuit the optimistic application when nothing is in
+            // flight for the active card.
+            val card = cards.getOrNull(currentIndex) ?: return null
+            val override = optimisticPercents[card.id] ?: return card
+            return card.applyOptimistic(override)
+        }
 
     /**
      * Convenience for the UI: the currently-displayed (post-optimistic) card. Same as

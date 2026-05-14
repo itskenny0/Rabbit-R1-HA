@@ -56,6 +56,7 @@ class FavoritesPickerViewModel(
     private val settings: SettingsRepository,
 ) : ViewModel() {
 
+    @androidx.compose.runtime.Stable
     data class Row(
         val state: EntityState,
         val isFavorite: Boolean,

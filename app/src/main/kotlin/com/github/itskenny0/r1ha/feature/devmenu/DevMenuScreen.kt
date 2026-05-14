@@ -304,6 +304,25 @@ private fun LogViewer() {
             ) {
                 Text("PING", style = R1.labelMicro, color = R1.InkSoft)
             }
+            Spacer(Modifier.width(6.dp))
+            // Clear the in-memory + on-disk album-cover cache. Useful when a
+            // user's HA media_player_proxy URL changes and the cached bytes
+            // would otherwise paint a stale cover until eviction. Pushes a
+            // toast so the user sees it took effect (force-shown so it lands
+            // even with diagnostic toasts off — this is a deliberate action).
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(R1.SurfaceMuted)
+                    .r1Pressable(onClick = {
+                        com.github.itskenny0.r1ha.ui.components.AsyncBitmapCache.clear()
+                        R1Log.i("DevMenu", "AsyncBitmapCache cleared")
+                        com.github.itskenny0.r1ha.core.util.Toaster.error("Image cache cleared")
+                    })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text("IMG CACHE", style = R1.labelMicro, color = R1.InkSoft)
+            }
         }
         Spacer(Modifier.height(8.dp))
         entries.forEachIndexed { idx, entry ->

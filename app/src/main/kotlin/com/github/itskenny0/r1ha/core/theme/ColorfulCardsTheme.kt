@@ -110,16 +110,26 @@ object ColorfulCardsTheme : R1Theme {
                     maxLines = 2,
                 )
                 Spacer(Modifier.height(20.dp))
-                BigReadout(
-                    percent = model.percent,
-                    showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
-                    accent = accent,
-                    overrideText = model.displayValue,
-                    overrideUnit = model.displayUnit,
-                    textSizeSp = model.textSizeSp,
-                    lightEntityId = if (model.lightWheelMode != null) com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText) else null,
-                    lightWheelMode = model.lightWheelMode,
-                )
+                // Hide the giant percent readout on media_player cards with
+                // active now-playing — same parity rule as PragmaticHybridTheme
+                // and MinimalDarkTheme. The cover + title strip already
+                // dominate the card; '100 %' on top of them just compressed
+                // the now-playing into a sliver.
+                val hideBigReadoutForMedia = model.domainGlyph ==
+                    CardRenderModel.Glyph.MEDIA_PLAYER &&
+                    (!model.mediaTitle.isNullOrBlank() || !model.mediaPicture.isNullOrBlank())
+                if (!hideBigReadoutForMedia) {
+                    BigReadout(
+                        percent = model.percent,
+                        showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
+                        accent = accent,
+                        overrideText = model.displayValue,
+                        overrideUnit = model.displayUnit,
+                        textSizeSp = model.textSizeSp,
+                        lightEntityId = if (model.lightWheelMode != null) com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText) else null,
+                        lightWheelMode = model.lightWheelMode,
+                    )
+                }
                 if (model.lightAvailableModes.size > 1 || model.lightEffectListSize > 0) {
                     Spacer(Modifier.height(8.dp))
                     LightControlsRow(

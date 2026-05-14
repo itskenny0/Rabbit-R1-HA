@@ -91,4 +91,53 @@ class SettingsRepositoryTest {
             cancelAndConsumeRemainingEvents()
         }
     }
+
+    /**
+     * Multi-page state — active page id + page contents — round-trips
+     * through DataStore. Regression test for the 'app opens on the wrong
+     * tab after relaunch' bug class. Mirrors how the live activePageId is
+     * stored (string preference) and how the pages JSON is rebuilt on
+     * read.
+     */
+    @Test fun activePageAndPagesPersist() = runTest {
+        val repo = newRepo()
+        val pages = listOf(
+            com.github.itskenny0.r1ha.core.prefs.FavoritePage("home", "HOME", listOf("light.a")),
+            com.github.itskenny0.r1ha.core.prefs.FavoritePage("bed", "BEDROOM", listOf("light.b")),
+        )
+        repo.update { it.copy(pages = pages, activePageId = "bed") }
+        repo.settings.test {
+            val s = awaitItem()
+            assertThat(s.pages.map { it.id }).containsExactly("home", "bed").inOrder()
+            assertThat(s.activePageId).isEqualTo("bed")
+            // Favourites union derived from both pages.
+            assertThat(s.favorites).containsExactly("light.a", "light.b").inOrder()
+            cancelAndConsumeRemainingEvents()
+        }
+    }
+
+    /**
+     * Stale activePageId (saved for a page that was later deleted) clamps
+     * to the first remaining page. Without this, a relaunch after a delete
+     * would leave the deck pointing at nothing.
+     */
+    @Test fun activePageIdClampsWhenStale() = runTest {
+        val repo = newRepo()
+        repo.update {
+            it.copy(
+                pages = listOf(
+                    com.github.itskenny0.r1ha.core.prefs.FavoritePage("home", "HOME"),
+                    com.github.itskenny0.r1ha.core.prefs.FavoritePage("bed", "BEDROOM"),
+                ),
+                activePageId = "bed",
+            )
+        }
+        // Remove the active page externally.
+        repo.update { s -> s.copy(pages = s.pages.filter { it.id != "bed" }) }
+        repo.settings.test {
+            val s = awaitItem()
+            assertThat(s.activePageId).isEqualTo("home")
+            cancelAndConsumeRemainingEvents()
+        }
+    }
 }

@@ -1,8 +1,20 @@
 package com.github.itskenny0.r1ha.core.ha
 
+import androidx.compose.runtime.Stable
 import java.time.Instant
 import kotlin.math.roundToInt
 
+/**
+ * @Stable: every field is `val` and the maps / Json structures referenced
+ * are treated as immutable post-construction by the repository. Without this
+ * annotation Compose's inference sees JsonObject / Map and conservatively
+ * marks the class unstable, forcing every parent recomposition to also
+ * recompose EntityCard / SwitchCard / ChannelRow / etc. regardless of
+ * whether the cached state actually changed. Promoting to @Stable lets the
+ * Compose runtime use equals() to skip — data classes' generated equals
+ * compares every field by value, which is exactly what we want.
+ */
+@Stable
 data class EntityState(
     val id: EntityId,
     val friendlyName: String,

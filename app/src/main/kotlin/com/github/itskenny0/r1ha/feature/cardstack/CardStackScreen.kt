@@ -349,6 +349,17 @@ fun CardStackScreen(
                 androidx.compose.foundation.pager.HorizontalPager(
                     state = horizontalPagerState,
                     modifier = Modifier.fillMaxSize(),
+                    // Pre-compose one page on each side of the visible one so a
+                    // swipe between tabs feels instant — without this, the
+                    // neighbouring PageDeck composes from scratch during the
+                    // swipe and the user briefly sees a placeholder/empty
+                    // strip before the cards paint. With 1 page peek, both
+                    // neighbours are warm and the swipe reveals fully-
+                    // rendered content. Memory cost is modest: each PageDeck
+                    // is roughly one VerticalPager + its visible cards, and
+                    // most users have ≤ 3 pages so 'all warm' is the common
+                    // case anyway.
+                    beyondViewportPageCount = 1,
                 ) { pageIdx ->
                     val page = state.pages.getOrNull(pageIdx) ?: return@HorizontalPager
                     val pageCardsRaw = state.cardsByPage[page.id].orEmpty()

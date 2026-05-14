@@ -98,16 +98,26 @@ object MinimalDarkTheme : R1Theme {
                     maxLines = 2,
                 )
                 Spacer(Modifier.height(20.dp))
-                BigReadout(
-                    percent = model.percent,
-                    showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
-                    accent = accent,
-                    overrideText = model.displayValue,
-                    overrideUnit = model.displayUnit,
-                    textSizeSp = model.textSizeSp,
-                    lightEntityId = if (model.lightWheelMode != null) com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText) else null,
-                    lightWheelMode = model.lightWheelMode,
-                )
+                // Hide the giant percent readout on media_player cards that are
+                // currently playing — same logic as PragmaticHybridTheme. The
+                // now-playing block + the right-side meter already convey
+                // volume, so a 72 sp '100 %' on top of them squeezed the
+                // now-playing block into a thumbnail-sized strip.
+                val hideBigReadoutForMedia = model.domainGlyph ==
+                    CardRenderModel.Glyph.MEDIA_PLAYER &&
+                    (!model.mediaTitle.isNullOrBlank() || !model.mediaPicture.isNullOrBlank())
+                if (!hideBigReadoutForMedia) {
+                    BigReadout(
+                        percent = model.percent,
+                        showPercentSuffix = ui.displayMode == DisplayMode.PERCENT,
+                        accent = accent,
+                        overrideText = model.displayValue,
+                        overrideUnit = model.displayUnit,
+                        textSizeSp = model.textSizeSp,
+                        lightEntityId = if (model.lightWheelMode != null) com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText) else null,
+                        lightWheelMode = model.lightWheelMode,
+                    )
+                }
                 // Light controls (BRIGHT / WHITE / HUE / FX) and Media controls — same
                 // shared building blocks as PragmaticHybridTheme. Surface only when
                 // the entity supports them; otherwise hidden.
