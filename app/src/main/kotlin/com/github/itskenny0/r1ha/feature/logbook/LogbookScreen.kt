@@ -131,11 +131,16 @@ fun LogbookScreen(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = "Nothing happened in the selected window.",
-                    style = R1.body,
-                    color = R1.InkMuted,
-                )
+                // Distinguish a quiet HA install from a filter that hides
+                // everything so the user knows whether to wait, change
+                // window, or clear the search.
+                val hasAny = ui.all.isNotEmpty()
+                val msg = when {
+                    !hasAny -> "Nothing happened in the selected window."
+                    ui.query.isNotBlank() -> "No matches for '${ui.query}' in this window."
+                    else -> "Logbook is empty for the selected window."
+                }
+                Text(text = msg, style = R1.body, color = R1.InkMuted)
             }
             // Pull-to-refresh wrap — the logbook is naturally append-only
             // so a refresh just re-issues the same window query and picks

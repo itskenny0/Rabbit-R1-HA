@@ -108,11 +108,16 @@ fun ScenesScreen(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = "No scenes or scripts in HA — define them in HA's UI to see them here.",
-                    style = R1.body,
-                    color = R1.InkMuted,
-                )
+                // Distinguish "the install has no scenes" from "the search /
+                // filter chip excluded everything" so the user knows which
+                // dial to twist to see anything.
+                val hasAny = ui.all.isNotEmpty()
+                val msg = when {
+                    !hasAny -> "No scenes or scripts in HA — define them in HA's UI to see them here."
+                    ui.query.isNotBlank() -> "No matches for '${ui.query}'. Clear the search or try different terms."
+                    else -> "Nothing under this filter. Switch to ALL to see everything."
+                }
+                Text(text = msg, style = R1.body, color = R1.InkMuted)
             }
             // Pull-to-refresh wrap — re-issue /api/states to pick up any
             // new scenes / scripts the user added in HA without backing
