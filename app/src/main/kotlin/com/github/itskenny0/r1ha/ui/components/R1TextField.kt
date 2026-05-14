@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -50,6 +51,14 @@ fun R1TextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     monospace: Boolean = true,
+    /** Optional [androidx.compose.ui.focus.FocusRequester] — callers pass one
+     *  when they want to auto-focus the field on dialog open (so the keyboard
+     *  appears without a stray tap). The component attaches it via
+     *  Modifier.focusRequester on the inner BasicTextField; callers drive
+     *  .requestFocus() from a LaunchedEffect on their side. Null = no
+     *  attachment, preserving the original behaviour for every existing
+     *  caller. */
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
@@ -87,7 +96,11 @@ fun R1TextField(
             keyboardOptions = keyboardOptions,
             keyboardActions = keyboardActions,
             interactionSource = interactionSource,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .let { m ->
+                    if (focusRequester != null) m.focusRequester(focusRequester) else m
+                },
             decorationBox = { innerTextField ->
                 if (value.isEmpty() && placeholder != null) {
                     Text(text = placeholder, style = placeholderStyle)

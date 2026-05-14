@@ -1317,11 +1317,25 @@ private fun TabManageDialog(
                 )
             }
             Spacer(Modifier.height(12.dp))
+            // Auto-focus the name field on dialog open so the keyboard appears
+            // without a stray tap. The user just hit '+' (add) or long-pressed
+            // a chip (edit) — they want to type. The 50 ms delay gives the
+            // dialog a frame to commit composition before we yank focus into
+            // the BasicTextField; without it the request occasionally lands
+            // before the field is laid out and gets dropped.
+            val nameFocus = androidx.compose.runtime.remember(isAdd, page?.id) {
+                androidx.compose.ui.focus.FocusRequester()
+            }
+            androidx.compose.runtime.LaunchedEffect(isAdd, page?.id) {
+                kotlinx.coroutines.delay(50)
+                runCatching { nameFocus.requestFocus() }
+            }
             com.github.itskenny0.r1ha.ui.components.R1TextField(
                 value = name,
                 onValueChange = { name = it.take(20) },
                 placeholder = "PAGE NAME",
                 monospace = false,
+                focusRequester = nameFocus,
             )
             Spacer(Modifier.height(12.dp))
             Row(
