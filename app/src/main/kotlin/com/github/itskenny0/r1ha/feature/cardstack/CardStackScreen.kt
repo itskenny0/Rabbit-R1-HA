@@ -1756,6 +1756,15 @@ private fun CardContextMenu(
             // we never offer a self-move. When there's only one page total,
             // this section collapses to a 'no other pages' affordance pointing
             // at the '+' chip so the user discovers the page-creation route.
+            //
+            // Rendered as a wrapping FlowRow of compact chips rather than
+            // one full-width R1Button per page — users with 8+ pages were
+            // seeing the modal fill the whole screen with MOVE TO buttons.
+            // Each chip sizes to its text + a small horizontal padding,
+            // wrapping onto multiple rows only when the page count actually
+            // requires it. Active accent border so each chip reads as
+            // tappable; same labelMicro text style as the page chips on
+            // the main tab strip for visual consistency.
             val targetPages = pages.filter { it.id != sourcePageId }
             Spacer(Modifier.height(14.dp))
             Text(text = "MOVE TO", style = R1.labelMicro, color = R1.InkSoft)
@@ -1767,15 +1776,25 @@ private fun CardContextMenu(
                     color = R1.InkMuted,
                 )
             } else {
-                for (p in targetPages) {
-                    R1Button(
-                        text = p.name.uppercase(),
-                        onClick = { onMove(p.id) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.dp),
-                        variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
-                    )
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    for (p in targetPages) {
+                        Box(
+                            modifier = Modifier
+                                .clip(R1.ShapeS)
+                                .border(1.dp, R1.AccentWarm, R1.ShapeS)
+                                .r1Pressable(onClick = { onMove(p.id) })
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = p.name.uppercase(),
+                                style = R1.labelMicro,
+                                color = R1.AccentWarm,
+                            )
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(14.dp))
