@@ -1241,6 +1241,69 @@ class DefaultHaRepository(
         coerceInputValues = true
     }
 
+    override suspend fun renderTemplate(template: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val s = settings.settings.first()
+                val server = s.server ?: error("Server URL not configured.")
+                refresher?.ensureFresh()
+                val payload = kotlinx.serialization.json.buildJsonObject {
+                    put("template", JsonPrimitive(template))
+                }
+                val url = "${server.url.trimEnd('/')}/api/template"
+                val body = templateCallBody(url, payload) ?: run {
+                    if (refresher?.forceRefresh() == true) {
+                        R1Log.i("HaRepo.template", "401 → refreshed; retrying once")
+                        templateCallBody(url, payload)
+                            ?: error("Home Assistant returned HTTP 401 for /api/template after refresh.")
+                    } else {
+                        error("Home Assistant returned HTTP 401 for /api/template.")
+                    }
+                }
+                // /api/template returns the rendered template as a plain
+                // string in the response body — not wrapped in JSON. Some
+                // HA versions emit quoted strings; trim outer quotes if so.
+                body.trim().let { raw ->
+                    if (raw.length >= 2 && raw.first() == '"' && raw.last() == '"') {
+                        raw.substring(1, raw.length - 1)
+                    } else raw
+                }
+            }.onFailure { t ->
+                R1Log.w("HaRepo.template", "render failed: ${t.message}")
+            }
+        }
+
+    /** POST to /api/template with a JSON payload. HA's response is plain
+     *  text (not JSON-wrapped), so the caller just receives the raw
+     *  string body. Returns null on HTTP 401 for the refresh + retry
+     *  pattern used elsewhere. HTTP 400 is surfaced as an exception
+     *  carrying HA's error body — that's the "your template has a
+     *  Jinja syntax error" path and the user wants to see it. */
+    private suspend fun templateCallBody(
+        url: String,
+        payload: kotlinx.serialization.json.JsonObject,
+    ): String? = withContext(Dispatchers.IO) {
+        val t = tokens.load()
+            ?: error("Authentication tokens missing — sign out & reconnect from Settings.")
+        val mediaType = "application/json".toMediaTypeOrNull()
+        val req = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer ${t.accessToken}")
+            .post(payload.toString().toRequestBody(mediaType))
+            .build()
+        http.newCall(req).execute().use { resp ->
+            if (resp.code == 401) return@withContext null
+            val responseBody = resp.body?.string().orEmpty()
+            require(resp.isSuccessful) {
+                // Forward HA's body verbatim — it contains the Jinja syntax
+                // error / template traceback the user needs to iterate.
+                if (responseBody.isNotBlank()) responseBody.trim()
+                else "Home Assistant returned HTTP ${resp.code} for /api/template"
+            }
+            responseBody
+        }
+    }
+
     /** POST to /api/conversation/process. Returns null on HTTP 401 so the caller
      *  can refresh + retry. Same pattern as [fetchHistoryBody]. */
     private suspend fun conversationCallBody(

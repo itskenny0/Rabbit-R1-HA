@@ -67,6 +67,16 @@ interface HaRepository {
      * installs.
      */
     suspend fun fetchLogbook(hours: Int = 12): Result<List<LogbookEntry>>
+
+    /**
+     * Render a Jinja2 template against the live HA state — POSTs to
+     * `/api/template` with `{template: "..."}` and returns the
+     * resulting plain-text string. Powers the Templates power-user
+     * surface; an HA install ships a template editor in its frontend
+     * and this brings the same loop (type → render → iterate) onto
+     * the R1 for users who don't have a laptop nearby.
+     */
+    suspend fun renderTemplate(template: String): Result<String>
     suspend fun start()
     suspend fun stop()
 

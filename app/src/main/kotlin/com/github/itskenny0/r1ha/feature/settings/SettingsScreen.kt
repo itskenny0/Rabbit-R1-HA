@@ -49,6 +49,7 @@ fun SettingsScreen(
     onOpenAssist: () -> Unit,
     onOpenScenes: () -> Unit,
     onOpenLogbook: () -> Unit,
+    onOpenTemplate: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -524,6 +525,14 @@ fun SettingsScreen(
             // 12 h / 24 h / 3 d windows.
             item {
                 NavRow(label = "Recent Activity", value = "Logbook feed", onClick = onOpenLogbook)
+            }
+
+            // Templates — Jinja2 evaluator backed by /api/template. Power
+            // user surface: type a template, tap RENDER, see HA's output
+            // or syntax error. Iterates faster than HA's web editor when
+            // you're already holding the R1.
+            item {
+                NavRow(label = "Templates", value = "Jinja2 evaluator", onClick = onOpenTemplate)
             }
 
             item { SectionDivider() }

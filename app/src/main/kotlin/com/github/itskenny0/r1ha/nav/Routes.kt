@@ -12,4 +12,5 @@ object Routes {
     const val ASSIST = "assist"
     const val SCENES = "scenes"
     const val LOGBOOK = "logbook"
+    const val TEMPLATE = "template"
 }

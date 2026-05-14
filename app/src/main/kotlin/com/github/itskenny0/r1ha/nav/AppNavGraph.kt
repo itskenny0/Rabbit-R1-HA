@@ -81,6 +81,9 @@ fun AppNavGraph(
                 onOpenLogbook = {
                     navController.navigate(Routes.LOGBOOK) { launchSingleTop = true }
                 },
+                onOpenTemplate = {
+                    navController.navigate(Routes.TEMPLATE) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
@@ -135,6 +138,12 @@ fun AppNavGraph(
                 haRepository = haRepository,
                 settings = settings,
                 wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.TEMPLATE) {
+            com.github.itskenny0.r1ha.feature.template.TemplateScreen(
+                haRepository = haRepository,
                 onBack = { navController.popBackStack() },
             )
         }
