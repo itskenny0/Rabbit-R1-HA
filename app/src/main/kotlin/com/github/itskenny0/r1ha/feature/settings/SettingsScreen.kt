@@ -46,6 +46,7 @@ fun SettingsScreen(
     wheelInput: WheelInput,
     onOpenThemePicker: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenAssist: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -498,6 +499,14 @@ fun SettingsScreen(
             }
 
             item { SectionDivider() }
+
+            // Assist — text-mode HA conversation surface. Opens a chat-style
+            // screen wired to /api/conversation/process. Voice (STT/TTS via
+            // the Assist pipeline WS) is a follow-up; this text path is the
+            // foundation.
+            item {
+                NavRow(label = "Assist", value = "Talk to HA", onClick = onOpenAssist)
+            }
 
             item {
                 NavRow(label = "About", onClick = onOpenAbout)

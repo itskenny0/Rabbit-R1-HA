@@ -9,4 +9,5 @@ object Routes {
     const val THEME_PICKER = "theme_picker"
     const val ABOUT = "about"
     const val DEV_MENU = "dev_menu"
+    const val ASSIST = "assist"
 }

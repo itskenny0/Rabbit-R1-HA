@@ -44,6 +44,18 @@ interface HaRepository {
      * sensors and a recent-changes list for text/categorical sensors.
      */
     suspend fun fetchHistory(entityId: EntityId, hours: Int = 24): Result<List<HistoryPoint>>
+
+    /**
+     * HA's conversation/process endpoint — sends a natural-language [text]
+     * prompt and returns the plain-text response. Powers the Assist text
+     * surface. [conversationId] threads multi-turn context; null starts a
+     * fresh conversation.
+     */
+    suspend fun conversationProcess(
+        text: String,
+        language: String? = null,
+        conversationId: String? = null,
+    ): Result<ConversationResponse>
     suspend fun start()
     suspend fun stop()
 

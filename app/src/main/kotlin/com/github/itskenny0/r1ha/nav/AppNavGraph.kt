@@ -72,6 +72,9 @@ fun AppNavGraph(
                 onOpenAbout = {
                     navController.navigate(Routes.ABOUT) { launchSingleTop = true }
                 },
+                onOpenAssist = {
+                    navController.navigate(Routes.ASSIST) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
@@ -104,6 +107,12 @@ fun AppNavGraph(
                 settings = settings,
                 tokens = tokens,
                 wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.ASSIST) {
+            com.github.itskenny0.r1ha.feature.assist.AssistScreen(
+                haRepository = haRepository,
                 onBack = { navController.popBackStack() },
             )
         }

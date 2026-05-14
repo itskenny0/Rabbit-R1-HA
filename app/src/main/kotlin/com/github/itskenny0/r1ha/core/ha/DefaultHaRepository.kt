@@ -30,8 +30,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
@@ -1113,6 +1115,76 @@ class DefaultHaRepository(
         val last_changed: String? = null,
         val last_updated: String? = null,
     )
+
+    override suspend fun conversationProcess(
+        text: String,
+        language: String?,
+        conversationId: String?,
+    ): Result<ConversationResponse> = withContext(Dispatchers.IO) {
+        runCatching {
+            val s = settings.settings.first()
+            val server = s.server ?: error("Server URL not configured.")
+            refresher?.ensureFresh()
+            val payload = kotlinx.serialization.json.buildJsonObject {
+                put("text", JsonPrimitive(text))
+                if (!language.isNullOrBlank()) put("language", JsonPrimitive(language))
+                if (!conversationId.isNullOrBlank()) put("conversation_id", JsonPrimitive(conversationId))
+            }
+            val url = "${server.url.trimEnd('/')}/api/conversation/process"
+            val body = conversationCallBody(url, payload) ?: run {
+                if (refresher?.forceRefresh() == true) {
+                    R1Log.i("HaRepo.conversation", "401 → refreshed; retrying once")
+                    conversationCallBody(url, payload)
+                        ?: error("Home Assistant returned HTTP 401 for /api/conversation/process after refresh.")
+                } else {
+                    error("Home Assistant returned HTTP 401 for /api/conversation/process.")
+                }
+            }
+            // Response shape: { response: { speech: { plain: { speech: "…" } },
+            // response_type: "action_done" | "query_answer" | "error", … },
+            // conversation_id: "…" }
+            val root = kotlinx.serialization.json.Json.parseToJsonElement(body)
+                as? kotlinx.serialization.json.JsonObject
+                ?: error("Unexpected conversation response shape")
+            val convId = (root["conversation_id"] as? JsonPrimitive)?.content
+            val response = root["response"] as? kotlinx.serialization.json.JsonObject
+            val responseType = (response?.get("response_type") as? JsonPrimitive)?.content
+            val speech = response
+                ?.get("speech")?.let { it as? kotlinx.serialization.json.JsonObject }
+                ?.get("plain")?.let { it as? kotlinx.serialization.json.JsonObject }
+                ?.get("speech")?.let { (it as? JsonPrimitive)?.content }
+                ?: "(no response)"
+            ConversationResponse(
+                speech = speech,
+                conversationId = convId,
+                responseType = responseType,
+            )
+        }.onFailure { t ->
+            R1Log.w("HaRepo.conversation", "process failed: ${t.message}")
+        }
+    }
+
+    /** POST to /api/conversation/process. Returns null on HTTP 401 so the caller
+     *  can refresh + retry. Same pattern as [fetchHistoryBody]. */
+    private suspend fun conversationCallBody(
+        url: String,
+        payload: kotlinx.serialization.json.JsonObject,
+    ): String? = withContext(Dispatchers.IO) {
+        val t = tokens.load() ?: error("Authentication tokens missing — sign out & reconnect from Settings.")
+        val mediaType = "application/json".toMediaTypeOrNull()
+        val req = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer ${t.accessToken}")
+            .post(payload.toString().toRequestBody(mediaType))
+            .build()
+        http.newCall(req).execute().use { resp ->
+            if (resp.code == 401) return@withContext null
+            require(resp.isSuccessful) {
+                "Home Assistant returned HTTP ${resp.code} for /api/conversation/process"
+            }
+            resp.body!!.string()
+        }
+    }
 
     private companion object {
         const val MAX_AUTHLOST_RETRIES = 3
