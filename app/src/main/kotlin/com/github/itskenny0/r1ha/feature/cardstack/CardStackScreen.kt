@@ -414,9 +414,21 @@ fun CardStackScreen(
                 // the VM so wheel routing and chrome state follow the visible
                 // page. Each PageDeck holds its own VerticalPager state so a
                 // swipe-away-and-back lands on the user's previous card.
-                val activePageIndex = state.pages.indexOfFirst { it.id == state.activePageId }
-                    .coerceAtLeast(0)
-                val pageIds = state.pages.map { it.id }
+                // pageIds + activePageIndex memoised. pageIds was being
+                // rebuilt as a fresh List on every screen recomposition
+                // even when state.pages was unchanged; the LaunchedEffect
+                // keys then compared the new list to the old (structurally
+                // equal, but it's still N comparisons) and the
+                // rememberPagerState key() ran an equals check. Memoising
+                // makes both no-op when pages haven't changed.
+                val pageIds = androidx.compose.runtime.remember(state.pages) {
+                    state.pages.map { it.id }
+                }
+                val activePageIndex = androidx.compose.runtime.remember(
+                    state.pages, state.activePageId,
+                ) {
+                    state.pages.indexOfFirst { it.id == state.activePageId }.coerceAtLeast(0)
+                }
                 // Rebuild the horizontal pager state whenever the page set changes
                 // (add/delete/rename moves indices around). Keyed on the list of
                 // ids so re-ordering ALSO rebuilds — otherwise the pager would
@@ -598,7 +610,14 @@ fun CardStackScreen(
         // no-op. Surface a transient hint so the user learns to swipe or tap the pip
         // to navigate, rather than wondering why the wheel does nothing. Auto-fades
         // after 2 s of no fresh wheel events.
-        WheelHintOverlay(triggerAt = wheelHintAt.longValue)
+        // PERF: pass the MutableLongState itself, not its value — so the
+        // .longValue State read happens INSIDE WheelHintOverlay's scope.
+        // Reading .longValue at the call site here subscribed the WHOLE
+        // CardStackScreen to wheelHintAt changes, which meant every wheel
+        // event on a sensor/action card (which is when wheelHintAt fires)
+        // recomposed the whole card-stack. Pushing the read into the
+        // overlay's scope isolates the subscription.
+        WheelHintOverlay(state = wheelHintAt)
 
         // ── Customize dialog ────────────────────────────────────────────────────────
         // Reuses the favourites-picker's RenameDialog so the customize flow is identical
@@ -2192,7 +2211,11 @@ private fun ChromeRow(
  * hint on screen continuously.
  */
 @Composable
-private fun BoxScope.WheelHintOverlay(triggerAt: Long) {
+private fun BoxScope.WheelHintOverlay(state: androidx.compose.runtime.MutableLongState) {
+    // Read the trigger timestamp INSIDE this composable so only this scope
+    // (not the parent CardStackScreen) subscribes to the State changes —
+    // see call-site comment for the perf rationale.
+    val triggerAt = state.longValue
     val visible = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf(false)
     }
