@@ -135,7 +135,8 @@ private fun ExampleChips(onPick: (String) -> Unit) {
         "Sun" to "{{ state_attr('sun.sun','elevation') }}°",
         "On lights" to "{{ states.light | selectattr('state','eq','on') | list | count }}",
         "States count" to "{{ states | count }}",
-        "HA version" to "{{ states('zone.home') }} · {{ states | count }} entities",
+        "Unavailable" to "{{ states | selectattr('state','in',['unavailable','unknown']) | map(attribute='entity_id') | list }}",
+        "Areas" to "{{ areas() }}",
     )
     Row(
         modifier = Modifier
