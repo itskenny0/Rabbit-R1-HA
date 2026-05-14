@@ -245,12 +245,18 @@ fun CardStackScreen(
         if (active.supportsScalar) active.percent else if (active.isOn) 1 else 0
     }
     LaunchedEffect(state.activeState?.id, hapticKey) {
-        if (state.activeState == null || !appSettings.behavior.haptics) return@LaunchedEffect
-        val now = System.currentTimeMillis()
-        if (now - lastHapticMs[0] < 50L) return@LaunchedEffect
-        lastHapticMs[0] = now
-        @Suppress("DEPRECATION")  // CLOCK_TICK is available on all our target SDKs (33+)
-        view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+        // Defensive: View.performHapticFeedback can theoretically fail when
+        // the view is detaching or the device's haptic motor is in a weird
+        // state. Wrap in runCatching so a haptic miss doesn't tear down the
+        // LaunchedEffect for the whole session.
+        runCatching {
+            if (state.activeState == null || !appSettings.behavior.haptics) return@runCatching
+            val now = System.currentTimeMillis()
+            if (now - lastHapticMs[0] < 50L) return@runCatching
+            lastHapticMs[0] = now
+            @Suppress("DEPRECATION")  // CLOCK_TICK is available on all our target SDKs (33+)
+            view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+        }
     }
 
     DisposableEffect(appSettings.behavior.keepScreenOn) {
