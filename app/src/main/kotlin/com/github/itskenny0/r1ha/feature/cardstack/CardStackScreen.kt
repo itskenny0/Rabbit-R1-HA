@@ -440,13 +440,14 @@ fun CardStackScreen(
                 androidx.compose.foundation.pager.HorizontalPager(
                     state = horizontalPagerState,
                     modifier = Modifier.fillMaxSize(),
-                    // Pre-compose one page on each side of the visible one so
-                    // a swipe between tabs reveals fully-rendered cards
-                    // immediately. The PagerState stale-closure fix means
-                    // each PageDeck's own pager rebuilds correctly when its
-                    // cards.size changes, so the previous crash concern with
-                    // two neighbour PageDecks coexisting no longer applies.
-                    beyondViewportPageCount = 1,
+                    // Re-disabled. After restoring this (alongside connection
+                    // pulse, long-press indicator, etc.) the crash came back.
+                    // Pre-composing two PageDecks means two VerticalPager
+                    // states coexist; even with the cards.size key fix, an
+                    // edge case in the coexisting-pagers path could still
+                    // surface. Disabling again pending the next LAST CRASH
+                    // trace.
+                    beyondViewportPageCount = 0,
                 ) { pageIdx ->
                     val page = state.pages.getOrNull(pageIdx) ?: return@HorizontalPager
                     val pageCardsRaw = state.cardsByPage[page.id].orEmpty()
@@ -2059,36 +2060,16 @@ private fun ChromeRow(
                     label = "conn-dot-color",
                 )
                 // While the connection is amber (Idle/Connecting/Authenticating) the
-                // Infinite-pulse alpha while connecting / authenticating. The
-                // dot pulses between 40% and 100% alpha (750ms half-cycle,
-                // ease in-out) to signal 'work in progress' while the WS is
-                // mid-handshake. Disconnected/red stays solid — a steady red
-                // reads as 'something is wrong, not in flight'.
-                val isWorking = connection is ConnectionState.Connecting ||
-                    connection is ConnectionState.Authenticating ||
-                    connection == ConnectionState.Idle
-                val transition = androidx.compose.animation.core.rememberInfiniteTransition(
-                    label = "conn-dot-pulse",
-                )
-                val pulse by transition.animateFloat(
-                    initialValue = 0.4f,
-                    targetValue = 1f,
-                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                        animation = androidx.compose.animation.core.tween(
-                            durationMillis = 750,
-                            easing = androidx.compose.animation.core.FastOutSlowInEasing,
-                        ),
-                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
-                    ),
-                    label = "conn-dot-pulse-alpha",
-                )
+                // Pulse animation re-disabled — second suspect for the
+                // returning crash. InfiniteTransition running inside an
+                // AnimatedVisibility that may fade in/out as connection
+                // state churns could be the cause. Solid dot until we have
+                // a real trace from LAST CRASH.
                 Box(
                     modifier = Modifier
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(
-                            animatedColor.copy(alpha = if (isWorking) pulse else 1f),
-                        ),
+                        .background(animatedColor),
                 )
             }
         }
