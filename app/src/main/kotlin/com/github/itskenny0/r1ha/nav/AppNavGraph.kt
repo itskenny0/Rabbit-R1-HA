@@ -78,6 +78,9 @@ fun AppNavGraph(
                 onOpenScenes = {
                     navController.navigate(Routes.SCENES) { launchSingleTop = true }
                 },
+                onOpenLogbook = {
+                    navController.navigate(Routes.LOGBOOK) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
@@ -121,6 +124,14 @@ fun AppNavGraph(
         }
         composable(Routes.SCENES) {
             com.github.itskenny0.r1ha.feature.scenes.ScenesScreen(
+                haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.LOGBOOK) {
+            com.github.itskenny0.r1ha.feature.logbook.LogbookScreen(
                 haRepository = haRepository,
                 settings = settings,
                 wheelInput = wheelInput,

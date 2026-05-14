@@ -1164,6 +1164,83 @@ class DefaultHaRepository(
         }
     }
 
+    override suspend fun fetchLogbook(hours: Int): Result<List<LogbookEntry>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val s = settings.settings.first()
+                val server = s.server ?: error("Server URL not configured.")
+                refresher?.ensureFresh()
+                val since = Instant.now().minusSeconds(hours.toLong() * 3600L)
+                val sinceIso = since.toString()
+                // HA accepts the start time in the path; `end_time` is omitted so the
+                // endpoint defaults to "now". The user wants the most recent activity,
+                // so we let HA's default end window catch any events that landed in
+                // the milliseconds since the request was constructed.
+                val url = "${server.url.trimEnd('/')}/api/logbook/$sinceIso"
+                val body = fetchHistoryBody(url) ?: run {
+                    if (refresher?.forceRefresh() == true) {
+                        R1Log.i("HaRepo.logbook", "401 → refreshed; retrying once")
+                        fetchHistoryBody(url)
+                            ?: error("Home Assistant returned HTTP 401 for /api/logbook after refresh.")
+                    } else {
+                        error("Home Assistant returned HTTP 401 for /api/logbook.")
+                    }
+                }
+                // The endpoint returns a flat JSON array. We allow unknown keys
+                // because HA includes context_id / context_user_id / message
+                // depending on integration version — we only consume a fixed subset.
+                val rows = logbookJson.decodeFromString<List<LogbookRow>>(body)
+                rows.mapNotNull { row ->
+                    val ts = row.`when`
+                        ?: return@mapNotNull null
+                    val instant = runCatching { Instant.parse(ts) }.getOrNull()
+                        ?: return@mapNotNull null
+                    val entityId = row.entity_id?.let { raw ->
+                        // Defensive — HA can include entity_ids from domains we
+                        // don't model (weather.*, person.*). Skip the EntityId
+                        // constructor's domain-validation by trying it inside a
+                        // runCatching; on miss, surface the event without a
+                        // structured entity reference.
+                        runCatching { EntityId(raw) }.getOrNull()
+                    }
+                    LogbookEntry(
+                        timestamp = instant,
+                        name = row.name ?: row.entity_id ?: "(unknown)",
+                        message = row.message ?: "changed",
+                        entityId = entityId,
+                        domain = row.domain ?: row.entity_id?.substringBefore('.'),
+                        state = row.state,
+                    )
+                }.sortedByDescending { it.timestamp } // newest first
+            }.onFailure { t ->
+                R1Log.w("HaRepo.logbook", "fetch failed: ${t.message}")
+            }
+        }
+
+    /** Minimal row shape for /api/logbook. Every field is nullable
+     *  because HA's logbook payloads vary by event type — an automation
+     *  trigger row often lacks `state` but has `message`, a state-change
+     *  row has both. `when` is the JSON key HA uses and is the only
+     *  field we treat as required (skipping rows without it). */
+    @kotlinx.serialization.Serializable
+    private data class LogbookRow(
+        val `when`: String? = null,
+        val name: String? = null,
+        val message: String? = null,
+        val entity_id: String? = null,
+        val domain: String? = null,
+        val state: String? = null,
+    )
+
+    /** Lenient JSON for /api/logbook — same shape as [listStatesJson]: ignore
+     *  fields HA adds in newer versions (context_id, context_user_id, icon).
+     *  Defined as a property to keep the decoder hot rather than rebuilding
+     *  it per call. */
+    private val logbookJson = kotlinx.serialization.json.Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+    }
+
     /** POST to /api/conversation/process. Returns null on HTTP 401 so the caller
      *  can refresh + retry. Same pattern as [fetchHistoryBody]. */
     private suspend fun conversationCallBody(

@@ -11,4 +11,5 @@ object Routes {
     const val DEV_MENU = "dev_menu"
     const val ASSIST = "assist"
     const val SCENES = "scenes"
+    const val LOGBOOK = "logbook"
 }

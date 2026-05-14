@@ -56,6 +56,17 @@ interface HaRepository {
         language: String? = null,
         conversationId: String? = null,
     ): Result<ConversationResponse>
+
+    /**
+     * Fetch the HA logbook — `GET /api/logbook/<since-iso>?end_time=<now>`.
+     * Returns a chronological list of recent state changes, automation
+     * triggers, scene activations, etc. Used by the Recent Activity
+     * surface as a "what just happened?" feed. [hours] defaults to 12 —
+     * a balance between catching the morning's automations from an
+     * evening glance and not slurping an enormous payload on big HA
+     * installs.
+     */
+    suspend fun fetchLogbook(hours: Int = 12): Result<List<LogbookEntry>>
     suspend fun start()
     suspend fun stop()
 

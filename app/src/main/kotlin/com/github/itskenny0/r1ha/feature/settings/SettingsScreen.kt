@@ -48,6 +48,7 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit,
     onOpenAssist: () -> Unit,
     onOpenScenes: () -> Unit,
+    onOpenLogbook: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -515,6 +516,13 @@ fun SettingsScreen(
             // just wants one-tap activation.
             item {
                 NavRow(label = "Scenes & Scripts", value = "Fire instantly", onClick = onOpenScenes)
+            }
+
+            // Recent activity — mirrors HA's Logbook panel. State changes,
+            // automation triggers, scene activations etc. in reverse chrono.
+            // 12 h / 24 h / 3 d windows.
+            item {
+                NavRow(label = "Recent Activity", value = "Logbook feed", onClick = onOpenLogbook)
             }
 
             item {
