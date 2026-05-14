@@ -158,6 +158,50 @@ object PragmaticHybridTheme : R1Theme {
                         hidden = model.lightButtonsHidden,
                     )
                 }
+                // Brightness preset chips on light cards. Three tap targets for
+                // the most common brightness values — saves the user from
+                // wheel-tuning to round numbers. Shown only when the entity is
+                // a Light AND its scalar is wheel-controlled (i.e., BRIGHTNESS
+                // mode), so non-scalar lights and lights in HUE/CT mode keep
+                // the cleaner readout layout. The setter is the same path the
+                // wheel uses (LocalOnSetEntityPercent), so the optimistic
+                // override + service-call debouncer kick in just like a wheel
+                // adjustment.
+                if (model.domainGlyph == CardRenderModel.Glyph.LIGHT &&
+                    (model.lightWheelMode == com.github.itskenny0.r1ha.core.ha.LightWheelMode.BRIGHTNESS ||
+                        model.lightWheelMode == null)
+                ) {
+                    Spacer(Modifier.height(8.dp))
+                    val onSetPercent = com.github.itskenny0.r1ha.core.theme.LocalOnSetEntityPercent.current
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        listOf(25, 50, 100).forEach { pct ->
+                            val isCurrent = model.percent == pct
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(R1.ShapeS)
+                                    .background(if (isCurrent) accent else R1.SurfaceMuted)
+                                    .r1Pressable(onClick = {
+                                        onSetPercent?.invoke(
+                                            com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
+                                            pct,
+                                        )
+                                    })
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "$pct%",
+                                    style = R1.labelMicro,
+                                    color = if (isCurrent) R1.Bg else accent,
+                                )
+                            }
+                        }
+                    }
+                }
                 // Media-player extras: now-playing block (album art + title/artist +
                 // live progress) above the transport row. Both render only on
                 // media_player cards; the now-playing block hides cleanly when nothing

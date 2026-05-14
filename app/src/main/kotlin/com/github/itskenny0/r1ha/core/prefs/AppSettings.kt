@@ -180,6 +180,16 @@ data class AdvancedSettings(
     /** Show a small per-card debug strip in the bottom-right with the cached
      *  percent / supportsScalar / raw state. */
     val showDebugStripOnCards: Boolean = false,
+    /**
+     * Opt-in: persist the HA entity cache to disk so the card stack paints
+     * with last-known state at cold start, before the WS even connects.
+     * Disabled by default while the rehydrate path is being hardened — an
+     * early-2026 build had it on by default and a crash report came in
+     * that pointed at the rehydrated-entity-with-null-fields surface. The
+     * file is small (~5 KB / 50 entities) and self-healing on schema
+     * mismatch; users who want the cold-start speedup can opt in here.
+     */
+    val persistCacheToDisk: Boolean = false,
 )
 
 @Stable

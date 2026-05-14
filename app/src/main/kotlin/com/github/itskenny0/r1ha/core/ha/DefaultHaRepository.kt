@@ -157,12 +157,19 @@ class DefaultHaRepository(
 
     override suspend fun start() {
         if (supervisorJob != null) return
-        // Seed the in-memory cache from disk BEFORE we start the WS. Means the
-        // card stack screen subscribes to a cache that already has the user's
-        // last-known states — first paint shows actual cards, not the
-        // 'Connecting…' EmptyState. Fresh HA data merges in as soon as the WS
-        // delivers it.
+        // Seed the in-memory cache from disk BEFORE we start the WS — IF the
+        // user opted into disk persistence via Settings → Dev menu →
+        // 'persistCacheToDisk'. Off by default while the rehydrate path is
+        // being hardened (the rehydrated entities have null `raw` and null
+        // `attributesJson` which one user's session caught in an
+        // unguarded read path). Opt-in users get the cold-start speedup;
+        // everyone else gets the safe behaviour.
         persister?.let { p ->
+            val current = settings.settings.first()
+            if (!current.advanced.persistCacheToDisk) {
+                R1Log.i("HaRepo", "persistCacheToDisk=false; skipping disk-cache wiring")
+                return@let
+            }
             val restored = withContext(Dispatchers.IO) { p.load() }
             if (restored.isNotEmpty()) {
                 cache.value = restored

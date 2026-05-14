@@ -212,6 +212,14 @@ fun DevMenuScreen(
             }
             item {
                 DevSwitchRow(
+                    label = "Persist cache to disk",
+                    subtitle = "Snapshot the HA entity cache on every change so cold starts paint cards from disk before the WebSocket connects. Off by default — needs an app restart to take effect.",
+                    checked = advanced.persistCacheToDisk,
+                    onChange = { v -> vm.updateAdvanced { it.copy(persistCacheToDisk = v) } },
+                )
+            }
+            item {
+                DevSwitchRow(
                     label = "Verbose service calls",
                     subtitle = "Log every HA service call payload via R1Log.i (surface in toast if level high enough).",
                     checked = advanced.verboseServiceCalls,
