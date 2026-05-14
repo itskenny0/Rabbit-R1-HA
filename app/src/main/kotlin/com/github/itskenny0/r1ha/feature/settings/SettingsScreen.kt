@@ -47,6 +47,7 @@ fun SettingsScreen(
     onOpenThemePicker: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenAssist: () -> Unit,
+    onOpenScenes: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -506,6 +507,14 @@ fun SettingsScreen(
             // foundation.
             item {
                 NavRow(label = "Assist", value = "Talk to HA", onClick = onOpenAssist)
+            }
+
+            // Scenes & Scripts launcher — flat list of every scene.*/script.*
+            // the HA install exposes, tap-fires the matching service. Faster
+            // than scrolling to a per-scene card on the stack when the user
+            // just wants one-tap activation.
+            item {
+                NavRow(label = "Scenes & Scripts", value = "Fire instantly", onClick = onOpenScenes)
             }
 
             item {
