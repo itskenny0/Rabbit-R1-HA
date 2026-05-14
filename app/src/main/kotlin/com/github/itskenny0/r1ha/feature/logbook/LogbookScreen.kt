@@ -31,6 +31,7 @@ import com.github.itskenny0.r1ha.core.ha.LogbookEntry
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.ui.components.R1TextField
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
@@ -70,6 +71,7 @@ fun LogbookScreen(
     ) {
         R1TopBar(title = "RECENT ACTIVITY", onBack = onBack)
         WindowChips(current = ui.window, onSelect = { vm.setWindow(it) })
+        SearchBar(query = ui.query, onQueryChange = { vm.setQuery(it) })
         when {
             ui.loading -> Box(
                 modifier = Modifier.fillMaxSize(),
@@ -112,7 +114,7 @@ fun LogbookScreen(
                     // at the same wall-clock second on different entities).
                     key = { it.timestamp.toEpochMilli().toString() + "|" + (it.entityId?.value ?: it.name) },
                 ) { entry ->
-                    LogbookRow(entry)
+                    LogbookRow(entry, onTap = { vm.showDetail(entry) })
                 }
             }
         }
@@ -150,12 +152,13 @@ private fun WindowChips(
 }
 
 @Composable
-private fun LogbookRow(entry: LogbookEntry) {
+private fun LogbookRow(entry: LogbookEntry, onTap: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(R1.ShapeS)
             .background(R1.SurfaceMuted)
+            .r1Pressable(onClick = onTap)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -185,6 +188,42 @@ private fun LogbookRow(entry: LogbookEntry) {
             color = R1.InkMuted,
             style = R1.labelMicro,
         )
+    }
+}
+
+@Composable
+private fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "FIND",
+            style = R1.labelMicro,
+            color = R1.InkMuted,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        Box(modifier = Modifier.weight(1f)) {
+            R1TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = "kitchen, automation, light.bedroom, ...",
+                monospace = false,
+            )
+        }
+        if (query.isNotEmpty()) {
+            Spacer(Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .r1Pressable({ onQueryChange("") }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "✕", style = R1.labelMicro, color = R1.InkSoft)
+            }
+        }
     }
 }
 
