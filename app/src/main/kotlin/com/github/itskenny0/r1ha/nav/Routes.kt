@@ -18,4 +18,5 @@ object Routes {
     const val CAMERAS = "cameras"
     const val WEATHER = "weather"
     const val PERSONS = "persons"
+    const val CALENDARS = "calendars"
 }

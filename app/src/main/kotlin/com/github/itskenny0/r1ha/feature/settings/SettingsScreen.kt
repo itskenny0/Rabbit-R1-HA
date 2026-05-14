@@ -55,6 +55,7 @@ fun SettingsScreen(
     onOpenCameras: () -> Unit,
     onOpenWeather: () -> Unit,
     onOpenPersons: () -> Unit,
+    onOpenCalendars: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -586,6 +587,12 @@ fun SettingsScreen(
             // home/away state coloured per state.
             item {
                 NavRow(label = "Who's home", value = "People + device trackers", onClick = onOpenPersons)
+            }
+
+            // Calendars — calendar.* entities, NOW pill + relative timestamp
+            // for the next event from each calendar.
+            item {
+                NavRow(label = "Calendars", value = "Next event preview", onClick = onOpenCalendars)
             }
 
             item { SectionDivider() }
