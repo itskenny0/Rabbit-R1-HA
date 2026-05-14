@@ -713,6 +713,37 @@ class CardStackViewModel(
         }
     }
 
+    /**
+     * Fire `media_pause` on every playing media_player in the active page.
+     * Sibling of [turnOffActivePage] for users who don't want to turn off
+     * their lights but DO want music / videos paused (the 'company is at
+     * the door' moment). Skips media_players that aren't currently
+     * playing to avoid stomping idle players into a no-op-but-noisy state.
+     */
+    fun pauseAllMedia() {
+        viewModelScope.launch {
+            val active = _state.value.activePageId
+            val pageCards = _state.value.cardsByPage[active].orEmpty()
+            val targets = pageCards.filter { ent ->
+                ent.id.domain == Domain.MEDIA_PLAYER &&
+                    ent.rawState?.equals("playing", ignoreCase = true) == true
+            }
+            R1Log.i("CardStack.pauseMedia", "firing media_pause on ${targets.size} players")
+            for (t in targets) {
+                haRepository.call(
+                    ServiceCall(
+                        target = t.id,
+                        service = "media_pause",
+                        data = kotlinx.serialization.json.JsonObject(emptyMap()),
+                    ),
+                )
+            }
+            com.github.itskenny0.r1ha.core.util.Toaster.show(
+                "Paused ${targets.size} media player${if (targets.size == 1) "" else "s"}",
+            )
+        }
+    }
+
     fun turnOffActivePage() {
         viewModelScope.launch {
             val active = _state.value.activePageId

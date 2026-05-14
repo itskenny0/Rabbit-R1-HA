@@ -730,16 +730,26 @@ fun CardStackScreen(
         // armed/commit pattern (same as page delete) since this fires N
         // service calls and the user can't undo with one tap.
         if (quickActionsOpen.value) {
+            val activePageCards = state.cardsByPage[appSettings.activePageId].orEmpty()
+            val playingMediaCount = activePageCards.count { ent ->
+                ent.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.MEDIA_PLAYER &&
+                    ent.rawState?.equals("playing", ignoreCase = true) == true
+            }
             QuickActionsSheet(
                 activePageName = appSettings.pages.firstOrNull { it.id == appSettings.activePageId }?.name
                     ?: "this page",
                 cardCount = state.cards.size,
+                playingMediaCount = playingMediaCount,
                 onAllOn = {
                     vm.turnOnActivePage()
                     quickActionsOpen.value = false
                 },
                 onAllOff = {
                     vm.turnOffActivePage()
+                    quickActionsOpen.value = false
+                },
+                onPauseMedia = {
+                    vm.pauseAllMedia()
                     quickActionsOpen.value = false
                 },
                 onDismiss = { quickActionsOpen.value = false },
@@ -1785,8 +1795,10 @@ private fun CardContextMenu(
 private fun QuickActionsSheet(
     activePageName: String,
     cardCount: Int,
+    playingMediaCount: Int,
     onAllOn: () -> Unit,
     onAllOff: () -> Unit,
+    onPauseMedia: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     androidx.activity.compose.BackHandler(onBack = onDismiss)
@@ -1834,6 +1846,19 @@ private fun QuickActionsSheet(
                 modifier = Modifier.fillMaxWidth(),
                 accent = R1.AccentGreen,
             )
+            // 'Pause N media' — surfaces only when there's at least one
+            // playing media_player on the active page. Single-tap fire
+            // since pausing is non-destructive and the user can immediately
+            // tap play on any card to resume.
+            if (playingMediaCount > 0) {
+                Spacer(Modifier.height(8.dp))
+                R1Button(
+                    text = "PAUSE $playingMediaCount MEDIA",
+                    onClick = onPauseMedia,
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+                )
+            }
             Spacer(Modifier.height(8.dp))
             // 'Turn all off' — two-stage confirm. Off is the more disruptive
             // direction (lights you wanted on, media you wanted playing) so
