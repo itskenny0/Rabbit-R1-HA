@@ -1258,13 +1258,24 @@ private fun TabStrip(
                     }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
-                // Page name + entity-count badge. The "· N" suffix appears only
-                // when the page has favourites — empty pages would otherwise
-                // get a misleading "· 0" that crowds the chip without conveying
-                // anything useful. Same labelMicro style for both segments so
-                // they read as one unit; the count is dimmed slightly so it
-                // doesn't compete with the page name for attention.
+                // Page icon + name + entity-count badge. Icon is a single
+                // Unicode glyph chosen from the manage modal's curated row;
+                // rendered first so the user's eye lands on it. Name follows.
+                // The "· N" suffix appears only when the page has favourites
+                // — empty pages would otherwise get a misleading "· 0" that
+                // crowds the chip without conveying anything useful. Same
+                // labelMicro style for both segments so they read as one
+                // unit; the count is dimmed slightly so it doesn't compete
+                // with the page name for attention.
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!page.icon.isNullOrEmpty()) {
+                        Text(
+                            text = page.icon,
+                            style = R1.labelMicro,
+                            color = if (active) R1.Bg else R1.InkSoft,
+                        )
+                        Spacer(Modifier.width(5.dp))
+                    }
                     Text(
                         text = page.name,
                         style = R1.labelMicro,

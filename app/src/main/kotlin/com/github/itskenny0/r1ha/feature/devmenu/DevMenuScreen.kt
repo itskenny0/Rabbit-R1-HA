@@ -400,6 +400,38 @@ private fun LogViewer() {
             ) {
                 Text("EXPORT", style = R1.labelMicro, color = R1.InkSoft)
             }
+            Spacer(Modifier.width(6.dp))
+            // LAST CRASH — reads the persisted crash report written by the
+            // uncaught-exception handler in App.onCreate and surfaces it
+            // through the expandable error toast. After-the-fact diagnostics
+            // for the most-recent crash; the file persists until overwritten
+            // by the next crash, so the user has a window to retrieve it
+            // after re-launching.
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(R1.SurfaceMuted)
+                    .r1Pressable(onClick = {
+                        val file = java.io.File(context.filesDir, "last_crash.txt")
+                        if (!file.exists() || file.length() == 0L) {
+                            com.github.itskenny0.r1ha.core.util.Toaster.show("No crash report on disk")
+                        } else {
+                            val raw = runCatching { file.readText(Charsets.UTF_8) }
+                                .getOrElse { "(read failed: ${it.message})" }
+                            // Use the gated info toast since this is a
+                            // deliberate user action — they want to see the
+                            // long text. errorExpandable would render red
+                            // which feels wrong for retrospective viewing.
+                            com.github.itskenny0.r1ha.core.util.Toaster.errorExpandable(
+                                shortText = "Last crash · ${raw.lineSequence().firstOrNull()?.take(40) ?: "(empty)"}",
+                                fullText = raw,
+                            )
+                        }
+                    })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text("LAST CRASH", style = R1.labelMicro, color = R1.InkSoft)
+            }
         }
         Spacer(Modifier.height(8.dp))
         entries.forEachIndexed { idx, entry ->

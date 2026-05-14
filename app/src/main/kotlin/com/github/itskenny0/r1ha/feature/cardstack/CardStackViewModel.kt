@@ -577,6 +577,10 @@ class CardStackViewModel(
         viewModelScope.launch { settings.setPageAccent(pageId, accentArgb) }
     }
 
+    fun setPageIcon(pageId: String, icon: String?) {
+        viewModelScope.launch { settings.setPageIcon(pageId, icon) }
+    }
+
     fun renamePage(pageId: String, name: String) {
         viewModelScope.launch { settings.renamePage(pageId, name) }
     }

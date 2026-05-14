@@ -372,6 +372,18 @@ class SettingsRepository private constructor(
     }
 
     /** Rename [pageId] to [name]. No-op when the id doesn't exist. */
+    /** Update the per-page icon (single Unicode glyph). Null clears it.
+     *  Mutates the named page in place; no-op when the id doesn't resolve. */
+    suspend fun setPageIcon(pageId: String, icon: String?) {
+        update { s ->
+            val idx = s.pages.indexOfFirst { it.id == pageId }
+            if (idx < 0) return@update s
+            val updated = s.pages.toMutableList()
+            updated[idx] = updated[idx].copy(icon = icon)
+            s.copy(pages = updated)
+        }
+    }
+
     /** Update the per-page accent colour (ARGB int). Null = inherit the
      *  default warm accent. Mutates the named page in place; no-op when the
      *  id doesn't resolve. */

@@ -220,6 +220,12 @@ data class FavoritePage(
      *  page-scoped chrome. Defaulted nullable + additive so older settings
      *  blobs deserialize without migration. */
     val accentArgb: Int? = null,
+    /** Optional per-page icon — single Unicode glyph rendered before the page
+     *  name in the tab strip. Null = no icon, just the name. Picked from a
+     *  curated preset list in [TabManageDialog]; storing as String rather
+     *  than a constrained type means a future build can add new presets
+     *  without a schema bump. Additive + nullable for back-compat. */
+    val icon: String? = null,
 )
 
 /**

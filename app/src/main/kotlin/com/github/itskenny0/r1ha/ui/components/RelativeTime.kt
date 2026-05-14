@@ -58,18 +58,33 @@ internal fun formatRelativeTime(at: Instant, now: Instant): String {
 @Composable
 fun rememberRelativeTime(at: Instant?): String {
     if (at == null) return ""
-    val text by produceState(initialValue = formatRelativeTime(at, Instant.now()), at) {
+    // Defensive: an Instant from a malformed HA timestamp (or one populated
+    // by a rehydrated persister with a placeholder epoch) could in theory
+    // overflow toEpochMilli(). Wrap in runCatching so any arithmetic
+    // problem renders an empty string rather than crashing the whole
+    // composable tree. Caller renders unconditionally with `if (rel
+    // .isNotEmpty())` so an empty string just hides the label.
+    val initial = runCatching { formatRelativeTime(at, Instant.now()) }.getOrDefault("")
+    val text by produceState(initialValue = initial, at) {
         while (true) {
-            val now = Instant.now()
-            value = formatRelativeTime(at, now)
-            val ageSec = abs(now.toEpochMilli() - at.toEpochMilli()) / 1000
-            val nextTickMs = when {
-                ageSec < 60 -> 5_000L
-                ageSec < 3600 -> 30_000L
-                ageSec < 86_400 -> 600_000L
-                else -> 3_600_000L
+            val r = runCatching {
+                val now = Instant.now()
+                val s = formatRelativeTime(at, now)
+                val ageSec = abs(now.toEpochMilli() - at.toEpochMilli()) / 1000
+                val nextTickMs = when {
+                    ageSec < 60 -> 5_000L
+                    ageSec < 3600 -> 30_000L
+                    ageSec < 86_400 -> 600_000L
+                    else -> 3_600_000L
+                }
+                s to nextTickMs
+            }.getOrNull()
+            if (r == null) {
+                value = ""
+                return@produceState
             }
-            delay(nextTickMs)
+            value = r.first
+            delay(r.second)
         }
     }
     return text
