@@ -57,6 +57,7 @@ class ServiceCallerViewModel(
     fun setDomain(value: String) { _ui.value = _ui.value.copy(domain = value) }
     fun setService(value: String) { _ui.value = _ui.value.copy(service = value) }
     fun setData(value: String) { _ui.value = _ui.value.copy(data = value) }
+    fun clearRecent() { _ui.value = _ui.value.copy(recent = emptyList()) }
 
     fun fire() {
         val s = _ui.value

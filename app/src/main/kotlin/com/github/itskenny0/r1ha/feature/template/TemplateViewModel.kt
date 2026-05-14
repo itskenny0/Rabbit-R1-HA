@@ -46,6 +46,10 @@ class TemplateViewModel(
         _ui.value = _ui.value.copy(template = value)
     }
 
+    fun clearRecent() {
+        _ui.value = _ui.value.copy(recent = emptyList())
+    }
+
     fun render() {
         val template = _ui.value.template
         if (template.isBlank() || _ui.value.inFlight) return

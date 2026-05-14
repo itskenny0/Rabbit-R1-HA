@@ -162,7 +162,19 @@ fun ServiceCallerScreen(
             // Useful for re-firing the same service while iterating data.
             if (ui.recent.isNotEmpty()) {
                 Spacer(Modifier.padding(top = 16.dp))
-                Text(text = "RECENT", style = R1.labelMicro, color = R1.InkSoft)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "RECENT", style = R1.labelMicro, color = R1.InkSoft)
+                    Spacer(Modifier.weight(1f))
+                    Box(
+                        modifier = Modifier
+                            .clip(R1.ShapeS)
+                            .background(R1.SurfaceMuted)
+                            .r1Pressable(onClick = { vm.clearRecent() })
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Text(text = "CLEAR", style = R1.labelMicro, color = R1.InkSoft)
+                    }
+                }
                 Spacer(Modifier.padding(top = 4.dp))
                 for (call in ui.recent) {
                     RecentRow(call, onPick = { vm.load(call.domain, call.service, call.data) })
