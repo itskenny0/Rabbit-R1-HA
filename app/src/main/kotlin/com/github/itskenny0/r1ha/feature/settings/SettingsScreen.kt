@@ -57,6 +57,7 @@ fun SettingsScreen(
     onOpenPersons: () -> Unit,
     onOpenCalendars: () -> Unit,
     onOpenLongLivedToken: () -> Unit,
+    onOpenSystemHealth: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -605,6 +606,12 @@ fun SettingsScreen(
             // for the next event from each calendar.
             item {
                 NavRow(label = "Calendars", value = "Next event preview", onClick = onOpenCalendars)
+            }
+
+            // System Health — /api/config + tail of /api/error_log for
+            // diagnostic "is my HA install healthy?" inspection.
+            item {
+                NavRow(label = "System Health", value = "HA version + error log", onClick = onOpenSystemHealth)
             }
 
             item { SectionDivider() }

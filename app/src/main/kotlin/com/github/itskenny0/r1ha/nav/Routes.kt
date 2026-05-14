@@ -20,4 +20,5 @@ object Routes {
     const val PERSONS = "persons"
     const val CALENDARS = "calendars"
     const val LONG_LIVED_TOKEN = "long_lived_token"
+    const val SYSTEM_HEALTH = "system_health"
 }

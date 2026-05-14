@@ -1290,6 +1290,88 @@ class DefaultHaRepository(
             }
         }
 
+    override suspend fun fetchHaConfig(): Result<HaConfig> = withContext(Dispatchers.IO) {
+        runCatching {
+            val s = settings.settings.first()
+            val server = s.server ?: error("Server URL not configured.")
+            refresher?.ensureFresh()
+            val url = "${server.url.trimEnd('/')}/api/config"
+            val body = simpleAuthedGet(url) ?: run {
+                if (refresher?.forceRefresh() == true) {
+                    R1Log.i("HaRepo.config", "401 → refreshed; retrying once")
+                    simpleAuthedGet(url)
+                        ?: error("Home Assistant returned HTTP 401 for /api/config after refresh.")
+                } else {
+                    error("Home Assistant returned HTTP 401 for /api/config.")
+                }
+            }
+            val root = listStatesJson.decodeFromString<kotlinx.serialization.json.JsonObject>(body)
+            HaConfig(
+                version = (root["version"] as? JsonPrimitive)?.content,
+                locationName = (root["location_name"] as? JsonPrimitive)?.content,
+                timeZone = (root["time_zone"] as? JsonPrimitive)?.content,
+                elevation = (root["elevation"] as? JsonPrimitive)?.content?.toDoubleOrNull(),
+                unitSystem = (root["unit_system"] as? kotlinx.serialization.json.JsonObject)
+                    ?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.content?.let { k to it } }
+                    ?.toMap()
+                    .orEmpty(),
+                internalUrl = (root["internal_url"] as? JsonPrimitive)?.content,
+                externalUrl = (root["external_url"] as? JsonPrimitive)?.content,
+                components = (root["components"] as? kotlinx.serialization.json.JsonArray)
+                    ?.mapNotNull { (it as? JsonPrimitive)?.content }
+                    ?.sorted()
+                    .orEmpty(),
+            )
+        }.onFailure { t ->
+            R1Log.w("HaRepo.config", "fetch failed: ${t.message}")
+        }
+    }
+
+    override suspend fun fetchErrorLog(): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val s = settings.settings.first()
+            val server = s.server ?: error("Server URL not configured.")
+            refresher?.ensureFresh()
+            val url = "${server.url.trimEnd('/')}/api/error_log"
+            val body = simpleAuthedGet(url) ?: run {
+                if (refresher?.forceRefresh() == true) {
+                    simpleAuthedGet(url)
+                        ?: error("Home Assistant returned HTTP 401 for /api/error_log after refresh.")
+                } else {
+                    error("Home Assistant returned HTTP 401 for /api/error_log.")
+                }
+            }
+            // Cap body size — HA's error log can be megabytes on busy
+            // installs with WARN logging. Take the LAST ~32 KB which is
+            // where the most-recent events live.
+            val maxBytes = 32 * 1024
+            if (body.length > maxBytes) {
+                "… (truncated to last $maxBytes chars)\n" + body.takeLast(maxBytes)
+            } else body
+        }.onFailure { t ->
+            R1Log.w("HaRepo.errorLog", "fetch failed: ${t.message}")
+        }
+    }
+
+    /** Bearer-authed GET — returns the body as a String, or null on HTTP
+     *  401 (so the caller can refresh + retry). Used by surfaces that
+     *  don't fit the existing fetchStatesBody / fetchHistoryBody helpers
+     *  (config, error_log). */
+    private suspend fun simpleAuthedGet(url: String): String? = withContext(Dispatchers.IO) {
+        val t = tokens.load()
+            ?: error("Authentication tokens missing — sign out & reconnect from Settings.")
+        val req = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer ${t.accessToken}")
+            .get()
+            .build()
+        http.newCall(req).execute().use { resp ->
+            if (resp.code == 401) return@withContext null
+            require(resp.isSuccessful) { "HTTP ${resp.code} for $url" }
+            resp.body?.string().orEmpty()
+        }
+    }
+
     /** Shared raw-row fetcher used by the not-in-Domain-enum surfaces
      *  ([listPersistentNotifications], [listRawEntitiesByDomain] for
      *  cameras / persons / weather / calendars). Calls `/api/states`

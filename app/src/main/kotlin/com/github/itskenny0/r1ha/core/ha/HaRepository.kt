@@ -118,6 +118,21 @@ interface HaRepository {
      * domain-specific fields without bloating [EntityState]. Filters
      * client-side by [domainPrefix] (e.g. "camera"). */
     suspend fun listRawEntitiesByDomain(domainPrefix: String): Result<List<RawEntityRow>>
+
+    /**
+     * GET `/api/config` — HA's server metadata (version, location name,
+     * timezone, components list, unit system, internal/external URLs).
+     * Powers the System Health diagnostic screen.
+     */
+    suspend fun fetchHaConfig(): Result<HaConfig>
+
+    /**
+     * GET `/api/error_log` — HA's recent log output. Plain text body, up
+     * to a few hundred KB depending on log level. We deliberately cap
+     * the returned size client-side rather than streaming because the
+     * R1's renderer wants the whole thing in memory anyway.
+     */
+    suspend fun fetchErrorLog(): Result<String>
     suspend fun start()
     suspend fun stop()
 
