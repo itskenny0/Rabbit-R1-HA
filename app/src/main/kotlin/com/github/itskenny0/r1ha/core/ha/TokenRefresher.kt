@@ -86,10 +86,23 @@ class TokenRefresher(
                 )
             )
             R1Log.i("TokenRefresher", "refreshed; new expiry in ${resp.expires_in}s")
-            Toaster.show("Session refreshed")
+            // Success route — routed through the level-gated R1Toast.push at INFO
+            // so it only surfaces when the user has set the diagnostic toast
+            // level to INFO or DEBUG. The user previously reported it appeared
+            // even with toasts off, which is correct for unconditional Toaster
+            // calls but inappropriate for a routine background operation that
+            // the user doesn't need to be told about.
+            com.github.itskenny0.r1ha.core.util.R1Toast.push(
+                com.github.itskenny0.r1ha.core.util.R1Toast.Level.INFO,
+                "TokenRefresher",
+                "Session refreshed",
+            )
             true
         } catch (t: Throwable) {
             R1Log.e("TokenRefresher", "refresh failed", t)
+            // Failure path still goes through Toaster.show (which is now the
+            // force-show user-facing route) — a failed refresh is something the
+            // user needs to know about because the next HA call may 401.
             Toaster.show("Couldn't refresh session: ${t.message ?: "error"} — sign out & reconnect", long = true)
             false
         }
