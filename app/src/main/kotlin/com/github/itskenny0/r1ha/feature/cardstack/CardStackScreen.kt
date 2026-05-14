@@ -274,14 +274,29 @@ fun CardStackScreen(
         runCatching {
             val crashFile = java.io.File(context.filesDir, "last_crash.txt")
             if (crashFile.exists() && crashFile.length() > 0L) {
-                val raw = crashFile.readText(Charsets.UTF_8)
+                // Cap the read at 32 KB — a crash report is typically a few
+                // KB; any more and we're holding it in memory unnecessarily.
+                // Truncation suffix tells the user there's more available
+                // via the dev menu's LAST CRASH button (which reads the
+                // full file).
+                val maxBytes = 32 * 1024L
+                val raw = if (crashFile.length() <= maxBytes) {
+                    crashFile.readText(Charsets.UTF_8)
+                } else {
+                    crashFile.bufferedReader(Charsets.UTF_8).use { reader ->
+                        val buf = CharArray(maxBytes.toInt())
+                        val n = reader.read(buf, 0, buf.size)
+                        String(buf, 0, n.coerceAtLeast(0)) +
+                            "\n\n[truncated — full report in dev menu LAST CRASH]"
+                    }
+                }
                 com.github.itskenny0.r1ha.core.util.Toaster.errorExpandable(
                     shortText = "Crash detected — tap for trace",
                     fullText = raw,
                 )
                 // Don't delete — keep it accessible via the dev menu's
                 // LAST CRASH button in case the user wants to revisit. Just
-                // mark the file with a 'seen' suffix so we don't auto-pop
+                // rename the file with a 'seen' suffix so we don't auto-pop
                 // again on next launch.
                 runCatching {
                     java.io.File(context.filesDir, "last_crash_seen.txt").writeText(raw)

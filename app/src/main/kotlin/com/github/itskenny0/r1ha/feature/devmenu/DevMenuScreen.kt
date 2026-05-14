@@ -412,16 +412,21 @@ private fun LogViewer() {
                     .clip(R1.ShapeS)
                     .background(R1.SurfaceMuted)
                     .r1Pressable(onClick = {
-                        val file = java.io.File(context.filesDir, "last_crash.txt")
-                        if (!file.exists() || file.length() == 0L) {
+                        // Try the un-seen file first (most-recent crash that
+                        // wasn't auto-surfaced yet), then the seen file (the
+                        // last crash that the auto-surface already showed).
+                        val unseen = java.io.File(context.filesDir, "last_crash.txt")
+                        val seen = java.io.File(context.filesDir, "last_crash_seen.txt")
+                        val file = when {
+                            unseen.exists() && unseen.length() > 0L -> unseen
+                            seen.exists() && seen.length() > 0L -> seen
+                            else -> null
+                        }
+                        if (file == null) {
                             com.github.itskenny0.r1ha.core.util.Toaster.show("No crash report on disk")
                         } else {
                             val raw = runCatching { file.readText(Charsets.UTF_8) }
                                 .getOrElse { "(read failed: ${it.message})" }
-                            // Use the gated info toast since this is a
-                            // deliberate user action — they want to see the
-                            // long text. errorExpandable would render red
-                            // which feels wrong for retrospective viewing.
                             com.github.itskenny0.r1ha.core.util.Toaster.errorExpandable(
                                 shortText = "Last crash · ${raw.lineSequence().firstOrNull()?.take(40) ?: "(empty)"}",
                                 fullText = raw,
