@@ -50,6 +50,17 @@ fun WheelScrollFor(
         // card stack and the list views.
         val timestamps = ArrayDeque<Long>()
         val windowMs = 250L
+        // PERF: rapid wheel spins were launching one `animateScrollBy`
+        // coroutine per detent — those queued behind the LazyListState's
+        // scroll mutex and each ~300ms animation played in serial. A
+        // 5-event spin took ~1.5 s to settle, and the screen visibly
+        // chugged on the way. Now we keep a reference to the latest
+        // animation job and cancel it before launching the next; the
+        // cancelled scroll snaps to its current position, then the new
+        // one starts from there toward the latest cumulative target.
+        // Result: a fast spin animates ONCE to the final target instead
+        // of N times to N intermediate targets.
+        var pendingJob: kotlinx.coroutines.Job? = null
         wheelInput.events.collect { event ->
             val now = event.timestampMillis
             timestamps.addLast(now)
@@ -66,9 +77,13 @@ fun WheelScrollFor(
             }
             val stepPx = with(density) { effective.dp.toPx() }
             val delta = if (event.direction == WheelEvent.Direction.UP) -stepPx else stepPx
-            // Don't suspend the wheel-event collector while the scroll is animating —
-            // launch into a coroutine so back-to-back detents queue up smoothly.
-            scope.launch { listState.animateScrollBy(delta) }
+            // Cancel any in-flight animation. The next launch will scroll
+            // from wherever the old one settled, which combined with the
+            // event rate gives the appearance of a continuous smooth
+            // motion. The cancellation is cooperative — the scroll mutex
+            // releases promptly and the new launch picks up immediately.
+            pendingJob?.cancel()
+            pendingJob = scope.launch { listState.animateScrollBy(delta) }
         }
     }
 }

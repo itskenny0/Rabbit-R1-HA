@@ -103,20 +103,18 @@ object PragmaticHybridTheme : R1Theme {
                     color = R1.Ink,
                     maxLines = 2,
                 )
-                // Auto-ticking 'last changed' label — only renders when the
-                // entity has a known lastChangedAt (the cache has seen it).
-                // Sits directly under the friendly name as a small dim line
-                // so sensor users can tell at a glance whether their reading
-                // is fresh. rememberRelativeTime wraps the produceState in
-                // runCatching so any rare arithmetic edge case renders as
-                // an empty string rather than crashing the composable tree.
-                val rel = com.github.itskenny0.r1ha.ui.components.rememberRelativeTime(model.lastChangedAt)
-                if (rel.isNotEmpty()) {
+                // Auto-ticking 'last changed' label, isolated into its own
+                // composable (RelativeTimeLabel) so the 5-second tick
+                // recomposes ONLY the label — not the surrounding card body
+                // with its BigReadout, light controls, tape meter, and
+                // brightness chips. Spacer-then-label so the spacer also
+                // disappears when the label renders empty (no lastChangedAt).
+                if (model.lastChangedAt != null) {
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = rel,
-                        style = R1.labelMicro,
+                    com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel(
+                        at = model.lastChangedAt,
                         color = R1.InkMuted,
+                        style = R1.labelMicro,
                     )
                 }
                 Spacer(Modifier.height(20.dp))

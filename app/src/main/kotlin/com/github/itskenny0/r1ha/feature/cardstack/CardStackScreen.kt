@@ -327,19 +327,56 @@ fun CardStackScreen(
     val selectPickerFor = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<com.github.itskenny0.r1ha.core.ha.EntityId?>(null)
     }
+    // Stable callback holders — each lambda is remembered keyed on `vm` (which
+    // doesn't change across recompositions) so the reference identity stays
+    // stable. The local-provider stack is staticCompositionLocalOf which
+    // invalidates the WHOLE subtree on a value-identity change; without
+    // remember, every wheel detent flipped these 11 references and forced
+    // every card to recompose from scratch. With remember, the providers
+    // hold the same lambda for the lifetime of the screen and Compose can
+    // skip the subtree on most state changes.
+    val onCycleLightMode = androidx.compose.runtime.remember(vm) {
+        { id: com.github.itskenny0.r1ha.core.ha.EntityId -> vm.cycleLightWheelMode(id) }
+    }
+    val onSetLightWheelMode = androidx.compose.runtime.remember(vm) {
+        { id: com.github.itskenny0.r1ha.core.ha.EntityId,
+          mode: com.github.itskenny0.r1ha.core.ha.LightWheelMode -> vm.setLightWheelMode(id, mode) }
+    }
+    val onCycleLightEffect = androidx.compose.runtime.remember(vm) {
+        { id: com.github.itskenny0.r1ha.core.ha.EntityId -> vm.cycleLightEffect(id) }
+    }
+    val onSetLightEffect = androidx.compose.runtime.remember(vm) {
+        { id: com.github.itskenny0.r1ha.core.ha.EntityId, effect: String? -> vm.setLightEffect(id, effect) }
+    }
+    val onOpenEffectPicker = androidx.compose.runtime.remember(effectPickerFor) {
+        { id: com.github.itskenny0.r1ha.core.ha.EntityId -> effectPickerFor.value = id }
+    }
+    val onMediaTransport = androidx.compose.runtime.remember(vm) {
+        { id: com.github.itskenny0.r1ha.core.ha.EntityId,
+          action: com.github.itskenny0.r1ha.core.ha.MediaTransport -> vm.mediaTransport(id, action) }
+    }
+    val onOpenSelectPicker = androidx.compose.runtime.remember(selectPickerFor) {
+        { id: com.github.itskenny0.r1ha.core.ha.EntityId -> selectPickerFor.value = id }
+    }
+    val onSetSelectOption = androidx.compose.runtime.remember(vm) {
+        { id: com.github.itskenny0.r1ha.core.ha.EntityId, option: String -> vm.setSelectOption(id, option) }
+    }
+    val onSetEntityPercent = androidx.compose.runtime.remember(vm) {
+        { id: com.github.itskenny0.r1ha.core.ha.EntityId, pct: Int -> vm.setEntityPercent(id, pct) }
+    }
     androidx.compose.runtime.CompositionLocalProvider(
         com.github.itskenny0.r1ha.core.theme.LocalHaRepository provides haRepository,
         com.github.itskenny0.r1ha.core.theme.LocalHaServerUrl provides appSettings.server?.url,
         com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides appSettings.entityOverrides,
-        com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightMode provides { id -> vm.cycleLightWheelMode(id) },
-        com.github.itskenny0.r1ha.core.theme.LocalOnSetLightWheelMode provides { id, mode -> vm.setLightWheelMode(id, mode) },
-        com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightEffect provides { id -> vm.cycleLightEffect(id) },
-        com.github.itskenny0.r1ha.core.theme.LocalOnSetLightEffect provides { id, effect -> vm.setLightEffect(id, effect) },
-        com.github.itskenny0.r1ha.core.theme.LocalOnOpenEffectPicker provides { id -> effectPickerFor.value = id },
-        com.github.itskenny0.r1ha.core.theme.LocalOnMediaTransport provides { id, action -> vm.mediaTransport(id, action) },
-        com.github.itskenny0.r1ha.core.theme.LocalOnOpenSelectPicker provides { id -> selectPickerFor.value = id },
-        com.github.itskenny0.r1ha.core.theme.LocalOnSetSelectOption provides { id, option -> vm.setSelectOption(id, option) },
-        com.github.itskenny0.r1ha.core.theme.LocalOnSetEntityPercent provides { id, pct -> vm.setEntityPercent(id, pct) },
+        com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightMode provides onCycleLightMode,
+        com.github.itskenny0.r1ha.core.theme.LocalOnSetLightWheelMode provides onSetLightWheelMode,
+        com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightEffect provides onCycleLightEffect,
+        com.github.itskenny0.r1ha.core.theme.LocalOnSetLightEffect provides onSetLightEffect,
+        com.github.itskenny0.r1ha.core.theme.LocalOnOpenEffectPicker provides onOpenEffectPicker,
+        com.github.itskenny0.r1ha.core.theme.LocalOnMediaTransport provides onMediaTransport,
+        com.github.itskenny0.r1ha.core.theme.LocalOnOpenSelectPicker provides onOpenSelectPicker,
+        com.github.itskenny0.r1ha.core.theme.LocalOnSetSelectOption provides onSetSelectOption,
+        com.github.itskenny0.r1ha.core.theme.LocalOnSetEntityPercent provides onSetEntityPercent,
     ) {
     Box(modifier = Modifier.fillMaxSize().background(R1.Bg)) {
         // displayedCards = cards with optimistic overrides applied per entity. Binding the
@@ -453,13 +490,31 @@ fun CardStackScreen(
                     // changes track instantly even when the page becomes active
                     // mid-edit. Same path the legacy displayedCards used; just
                     // scoped per-page.
-                    val pageCards = pageCardsRaw.map { card ->
-                        val overridePct = state.optimisticPercents[card.id]
-                        if (overridePct != null) {
-                            if (card.supportsScalar) card.copy(percent = overridePct)
-                            else card.copy(percent = overridePct, isOn = overridePct > 0)
+                    //
+                    // Memoised — the prior version allocated a fresh
+                    // List<EntityState> via .map { ... } on every recomp,
+                    // including the ones HorizontalPager peek triggered for
+                    // both neighbour pages. With beyondViewportPageCount=1,
+                    // three pages re-derived their list on every wheel
+                    // detent at 50 Hz. remember keyed on the raw list +
+                    // optimistic map identity means we only re-map when
+                    // either actually changes; the no-optimistic case
+                    // returns the existing list reference verbatim.
+                    val pageCards = androidx.compose.runtime.remember(
+                        pageCardsRaw, state.optimisticPercents,
+                    ) {
+                        if (state.optimisticPercents.isEmpty()) {
+                            pageCardsRaw
                         } else {
-                            card
+                            pageCardsRaw.map { card ->
+                                val overridePct = state.optimisticPercents[card.id]
+                                if (overridePct != null) {
+                                    if (card.supportsScalar) card.copy(percent = overridePct)
+                                    else card.copy(percent = overridePct, isOn = overridePct > 0)
+                                } else {
+                                    card
+                                }
+                            }
                         }
                     }
                     val isActive = page.id == state.activePageId
@@ -889,14 +944,6 @@ private fun PageDeck(
             pageSpacing = 0.dp,
             modifier = Modifier.fillMaxSize(),
         ) { page ->
-            // Compute this page's offset from the currently-settled page. During a drag this
-            // is fractional; the deeper magnitude is, the more we offset/dim the page so it
-            // visually slides BEHIND the active card with a chunky shadow rather than just
-            // scrolling past it.
-            val pageOffset = (
-                (pagerState.currentPage - page) +
-                    pagerState.currentPageOffsetFraction
-            )
             // ~85% viewport — pad the card inward so the bg shows around it. Combined with a
             // rounded corner shape and the shadow elevation, the card looks like a free-
             // floating panel rather than a full-screen surface.
@@ -938,6 +985,20 @@ private fun PageDeck(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
+                            // Compute pageOffset INSIDE graphicsLayer so the
+                            // state read (pagerState.currentPage +
+                            // currentPageOffsetFraction) happens at the draw
+                            // phase, not at composition. Previously this was
+                            // captured in the composable scope, which meant
+                            // every fractional change during a fling forced a
+                            // recomposition of every visible card just to
+                            // re-run the graphicsLayer block. Now the layer
+                            // re-invalidates on State change without
+                            // recomposing.
+                            val pageOffset = (
+                                (pagerState.currentPage - page) +
+                                    pagerState.currentPageOffsetFraction
+                            )
                             val abs = kotlin.math.abs(pageOffset)
                             // The active page (offset ≈ 0) casts a strong shadow that fades
                             // to nothing as the page slides off screen.
@@ -2079,39 +2140,43 @@ private fun ChromeRow(
                 // While the connection is amber (Idle/Connecting/Authenticating) the
                 // Infinite-pulse alpha while connecting / authenticating. The
                 // dot pulses between 40% and 100% alpha to signal 'work in
-                // progress'. Restored — the LAST CRASH trace pointed at the
-                // pip-thumb spring overshoot, not this animation.
+                // progress'. Conditionally composed so the InfiniteTransition
+                // coroutine only runs when actually needed — otherwise it
+                // burns frames recomputing pulse values for an alpha that's
+                // gated to 1f anyway.
                 val isWorking = connection is ConnectionState.Connecting ||
                     connection is ConnectionState.Authenticating ||
                     connection == ConnectionState.Idle
-                val transition = androidx.compose.animation.core.rememberInfiniteTransition(
-                    label = "conn-dot-pulse",
-                )
-                val pulse by transition.animateFloat(
-                    initialValue = 0.4f,
-                    targetValue = 1f,
-                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                        animation = androidx.compose.animation.core.tween(
-                            durationMillis = 750,
-                            easing = androidx.compose.animation.core.FastOutSlowInEasing,
-                        ),
-                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
-                    ),
-                    label = "conn-dot-pulse-alpha",
-                )
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(
-                            // Clamp alpha to [0, 1] defensively — the bouncy-
-                            // free tween shouldn't overshoot but a small
-                            // coerceIn() costs nothing.
-                            animatedColor.copy(
-                                alpha = if (isWorking) pulse.coerceIn(0f, 1f) else 1f,
+                if (isWorking) {
+                    val transition = androidx.compose.animation.core.rememberInfiniteTransition(
+                        label = "conn-dot-pulse",
+                    )
+                    val pulse by transition.animateFloat(
+                        initialValue = 0.4f,
+                        targetValue = 1f,
+                        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                            animation = androidx.compose.animation.core.tween(
+                                durationMillis = 750,
+                                easing = androidx.compose.animation.core.FastOutSlowInEasing,
                             ),
+                            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
                         ),
-                )
+                        label = "conn-dot-pulse-alpha",
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(animatedColor.copy(alpha = pulse.coerceIn(0f, 1f))),
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(animatedColor),
+                    )
+                }
             }
         }
         }  // end right-cluster Row

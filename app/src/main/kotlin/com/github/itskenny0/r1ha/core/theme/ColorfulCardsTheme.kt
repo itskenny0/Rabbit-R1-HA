@@ -110,16 +110,14 @@ object ColorfulCardsTheme : R1Theme {
                     maxLines = 2,
                 )
                 // 'Last changed' relative-time label — parity with
-                // PragmaticHybridTheme. Dimmed white so it reads against
-                // the colourful background without competing with the
-                // big value.
-                val rel = com.github.itskenny0.r1ha.ui.components.rememberRelativeTime(model.lastChangedAt)
-                if (rel.isNotEmpty()) {
+                // PragmaticHybridTheme. Localised composable so the ticker
+                // doesn't recompose the whole card on every interval.
+                if (model.lastChangedAt != null) {
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = rel,
-                        style = R1.labelMicro,
+                    com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel(
+                        at = model.lastChangedAt,
                         color = Color.White.copy(alpha = 0.65f),
+                        style = R1.labelMicro,
                     )
                 }
                 Spacer(Modifier.height(20.dp))

@@ -89,3 +89,34 @@ fun rememberRelativeTime(at: Instant?): String {
     }
     return text
 }
+
+/**
+ * Localised relative-time label. Renders nothing when [at] is null. The
+ * point of bundling this into its own composable (instead of letting
+ * callers do `Text(text = rememberRelativeTime(at))`) is to confine the
+ * State read to a single small composable — when the ticker emits, only
+ * the surrounding [RelativeTimeLabel] re-runs, not the whole card body
+ * that uses it. With many cards alive (HorizontalPager peek + a
+ * VerticalPager full of cards), this was recomposing the entire deck on
+ * every 5 s tick.
+ *
+ * Pass [color], [style] in from the call site so the label fits each
+ * theme's palette without growing a per-theme variant.
+ */
+@Composable
+fun RelativeTimeLabel(
+    at: Instant?,
+    color: androidx.compose.ui.graphics.Color,
+    style: androidx.compose.ui.text.TextStyle,
+    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
+) {
+    val rel = rememberRelativeTime(at)
+    if (rel.isNotEmpty()) {
+        androidx.compose.material3.Text(
+            text = rel,
+            style = style,
+            color = color,
+            modifier = modifier,
+        )
+    }
+}

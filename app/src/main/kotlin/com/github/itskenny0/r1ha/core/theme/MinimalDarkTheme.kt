@@ -98,15 +98,14 @@ object MinimalDarkTheme : R1Theme {
                     maxLines = 2,
                 )
                 // 'Last changed' relative-time label — parity with
-                // PragmaticHybridTheme. Hidden when the entity has no
-                // observed lastChangedAt yet.
-                val rel = com.github.itskenny0.r1ha.ui.components.rememberRelativeTime(model.lastChangedAt)
-                if (rel.isNotEmpty()) {
+                // PragmaticHybridTheme. Localised into its own composable so
+                // the 5 s ticker doesn't recompose the whole card.
+                if (model.lastChangedAt != null) {
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = rel,
-                        style = R1.labelMicro,
+                    com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel(
+                        at = model.lastChangedAt,
                         color = R1.InkMuted,
+                        style = R1.labelMicro,
                     )
                 }
                 Spacer(Modifier.height(20.dp))
