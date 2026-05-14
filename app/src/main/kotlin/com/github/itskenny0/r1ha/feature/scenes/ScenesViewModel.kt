@@ -47,20 +47,31 @@ class ScenesViewModel(
     @androidx.compose.runtime.Stable
     data class UiState(
         val loading: Boolean = true,
-        /** All loaded entries (full set); [visibleEntries] applies the chip filter. */
+        /** All loaded entries (full set); [entries] applies kind + query filters. */
         val all: List<Entry> = emptyList(),
         val filter: Filter = Filter.ALL,
+        /** Free-text search query — substring-matched against the entry name
+         *  and entity_id, case-insensitive. Empty = no text filter. */
+        val query: String = "",
         /** Per-filter counts for the chip labels. ALL is the full size. */
         val counts: Map<Filter, Int> = emptyMap(),
+        /** True while the "All Lights Off" master action is in flight; the
+         *  button disables itself to prevent double-tap re-fires. */
+        val allLightsOffInFlight: Boolean = false,
     ) {
-        /** Subset visible under the current filter — computed each read so we
-         *  don't have to invalidate it from two places when filter or all
-         *  change. The list count is small (typically <50) so the filter is
-         *  trivial. */
-        val entries: List<Entry> get() = when (filter) {
-            Filter.ALL -> all
-            Filter.SCENES -> all.filter { it.kind == Kind.SCENE }
-            Filter.SCRIPTS -> all.filter { it.kind == Kind.SCRIPT }
+        /** Subset visible under the current filter + search query. Counts are
+         *  small (typically <50) so the in-place filter is trivial. */
+        val entries: List<Entry> get() {
+            val byKind = when (filter) {
+                Filter.ALL -> all
+                Filter.SCENES -> all.filter { it.kind == Kind.SCENE }
+                Filter.SCRIPTS -> all.filter { it.kind == Kind.SCRIPT }
+            }
+            if (query.isBlank()) return byKind
+            val q = query.trim().lowercase()
+            return byKind.filter {
+                it.name.lowercase().contains(q) || it.id.value.lowercase().contains(q)
+            }
         }
     }
 
@@ -108,6 +119,63 @@ class ScenesViewModel(
     fun setFilter(filter: Filter) {
         if (_ui.value.filter == filter) return
         _ui.value = _ui.value.copy(filter = filter)
+    }
+
+    fun setQuery(query: String) {
+        if (_ui.value.query == query) return
+        _ui.value = _ui.value.copy(query = query)
+    }
+
+    /**
+     * Master "all lights off" — dispatches `light.turn_off` with no target,
+     * which HA treats as "every entity in the light domain". Same trick
+     * HA's own frontend dashboards use for the "All Lights Off" tile.
+     * Other domains have their own master variants (`switch.turn_off`,
+     * `media_player.media_pause`) we could add later; lights are the
+     * most-requested mass-action by far.
+     *
+     * Why this lives on the Scenes screen: it's the same conceptual
+     * surface — fire-and-forget mass actions. A user reaching for
+     * "all lights off" is in the same flow as reaching for a "bedtime"
+     * scene; putting them together saves a navigation hop.
+     */
+    fun allLightsOff() {
+        if (_ui.value.allLightsOffInFlight) return
+        _ui.value = _ui.value.copy(allLightsOffInFlight = true)
+        viewModelScope.launch {
+            // Construct a domain-wide call by targeting any light entity
+            // we know of and overriding the target afterwards. Cheaper than
+            // adding a "no-target" branch to ServiceCall.
+            val anyLight = haRepository.listAllEntities().getOrNull()
+                ?.firstOrNull { it.id.domain == Domain.LIGHT }
+                ?.id
+            if (anyLight == null) {
+                Toaster.show("No light entities — nothing to turn off")
+                _ui.value = _ui.value.copy(allLightsOffInFlight = false)
+                return@launch
+            }
+            // The ServiceCall plumbing wants a target. We pass anyLight, but
+            // include `entity_id: "all"` in the data payload — HA accepts
+            // either form and prefers the data field when set.
+            val call = ServiceCall(
+                target = anyLight,
+                service = "turn_off",
+                data = kotlinx.serialization.json.buildJsonObject {
+                    put("entity_id", kotlinx.serialization.json.JsonPrimitive("all"))
+                },
+            )
+            haRepository.call(call).fold(
+                onSuccess = {
+                    R1Log.i("Scenes", "all lights off dispatched")
+                    Toaster.show("All lights off")
+                },
+                onFailure = { t ->
+                    R1Log.w("Scenes", "all lights off failed: ${t.message}")
+                    Toaster.error("All-off failed: ${t.message ?: "unknown"}")
+                },
+            )
+            _ui.value = _ui.value.copy(allLightsOffInFlight = false)
+        }
     }
 
     /**

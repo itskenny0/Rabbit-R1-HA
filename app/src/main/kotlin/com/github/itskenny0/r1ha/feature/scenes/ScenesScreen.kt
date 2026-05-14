@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -30,6 +31,7 @@ import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.ui.components.R1TextField
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
@@ -66,6 +68,19 @@ fun ScenesScreen(
             .systemBarsPadding(),
     ) {
         R1TopBar(title = "SCENES & SCRIPTS", onBack = onBack)
+        // ALL LIGHTS OFF master action — sticky at the top, single tap.
+        // Lives here because mass-actions sit at the same conceptual layer
+        // as scene activations (fire-and-forget, no scalar). Disabled while
+        // a previous tap is still in flight so a double-tap doesn't queue
+        // two dispatches.
+        AllLightsOffButton(
+            inFlight = ui.allLightsOffInFlight,
+            onClick = { vm.allLightsOff() },
+        )
+        // Search bar — substring match against entry name + entity_id. Big
+        // HA installs have 30+ scenes and 50+ scripts; without search the
+        // user has to wheel-scroll forever.
+        SearchBar(query = ui.query, onQueryChange = { vm.setQuery(it) })
         // Filter chips — ALL / SCENES / SCRIPTS. Tap to switch the visible
         // subset. Counts come from the loaded entity list so users with no
         // scripts (or no scenes) see an empty subset chip rather than a
@@ -143,6 +158,67 @@ private fun SceneRow(entry: ScenesViewModel.Entry, onFire: () -> Unit) {
                 color = R1.InkSoft,
                 maxLines = 1,
             )
+        }
+    }
+}
+
+@Composable
+private fun AllLightsOffButton(inFlight: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .clip(R1.ShapeS)
+                .background(if (inFlight) R1.SurfaceMuted else R1.StatusRed.copy(alpha = 0.18f))
+                .r1Pressable(onClick = { if (!inFlight) onClick() }),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (inFlight) "DISPATCHING…" else "ALL LIGHTS OFF",
+                style = R1.labelMicro,
+                color = if (inFlight) R1.InkMuted else R1.StatusRed,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "FIND",
+            style = R1.labelMicro,
+            color = R1.InkMuted,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        Box(modifier = Modifier.weight(1f)) {
+            R1TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = "bedroom, scene, movie, ...",
+                monospace = false,
+            )
+        }
+        if (query.isNotEmpty()) {
+            Spacer(Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .r1Pressable({ onQueryChange("") }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "✕", style = R1.labelMicro, color = R1.InkSoft)
+            }
         }
     }
 }
