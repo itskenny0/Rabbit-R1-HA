@@ -536,80 +536,47 @@ fun SettingsScreen(
             }
 
             item { SectionDivider() }
-            item { Section("TOOLS") }
 
-            // Assist — text-mode HA conversation surface. Opens a chat-style
-            // screen wired to /api/conversation/process. Voice (STT/TTS via
-            // the Assist pipeline WS) is a follow-up; this text path is the
-            // foundation.
+            // ── Talk + Fire — high-frequency action surfaces ─────────────
+            item { Section("TALK & FIRE") }
             item {
                 NavRow(label = "Assist", value = "Talk to HA", onClick = onOpenAssist)
             }
-
-            // Scenes & Scripts launcher — flat list of every scene.*/script.*
-            // the HA install exposes, tap-fires the matching service. Faster
-            // than scrolling to a per-scene card on the stack when the user
-            // just wants one-tap activation.
             item {
                 NavRow(label = "Scenes & Scripts", value = "Fire instantly", onClick = onOpenScenes)
             }
 
-            // Recent activity — mirrors HA's Logbook panel. State changes,
-            // automation triggers, scene activations etc. in reverse chrono.
-            // 12 h / 24 h / 3 d windows.
+            // ── Status views — read-only at-a-glance HA state ────────────
+            item { SectionDivider() }
+            item { Section("STATUS VIEWS") }
+            item {
+                NavRow(label = "Cameras", value = "Live snapshots", onClick = onOpenCameras)
+            }
+            item {
+                NavRow(label = "Weather", value = "Conditions readout", onClick = onOpenWeather)
+            }
+            item {
+                NavRow(label = "Who's home", value = "People + device trackers", onClick = onOpenPersons)
+            }
+            item {
+                NavRow(label = "Calendars", value = "Next event preview", onClick = onOpenCalendars)
+            }
             item {
                 NavRow(label = "Recent Activity", value = "Logbook feed", onClick = onOpenLogbook)
             }
-
-            // Templates — Jinja2 evaluator backed by /api/template. Power
-            // user surface: type a template, tap RENDER, see HA's output
-            // or syntax error. Iterates faster than HA's web editor when
-            // you're already holding the R1.
-            item {
-                NavRow(label = "Templates", value = "Jinja2 evaluator", onClick = onOpenTemplate)
-            }
-
-            // Service caller — POST /api/services/<domain>/<service>. Lets
-            // power users fire arbitrary services (reload, check_config,
-            // notify, etc.) that don't fit the per-entity WS path.
-            item {
-                NavRow(label = "Service Caller", value = "Fire any service", onClick = onOpenServiceCaller)
-            }
-
-            // HA Notifications — persistent_notification.* entities,
-            // typically "an integration broke", "firmware available",
-            // automation-side `persistent_notification.create` messages.
             item {
                 NavRow(label = "Notifications", value = "HA persistent alerts", onClick = onOpenNotifications)
             }
 
-            // Cameras — live polling snapshots from every camera.* entity
-            // HA exposes via /api/camera_proxy. Polls every 4 s.
+            // ── Power tools — diagnostic / advanced surfaces ─────────────
+            item { SectionDivider() }
+            item { Section("POWER TOOLS") }
             item {
-                NavRow(label = "Cameras", value = "Live snapshots", onClick = onOpenCameras)
+                NavRow(label = "Templates", value = "Jinja2 evaluator", onClick = onOpenTemplate)
             }
-
-            // Weather — read-only display of every weather.* entity HA
-            // reports, with condition glyph + temperature + humidity / wind
-            // / pressure secondary readings.
             item {
-                NavRow(label = "Weather", value = "Conditions readout", onClick = onOpenWeather)
+                NavRow(label = "Service Caller", value = "Fire any service", onClick = onOpenServiceCaller)
             }
-
-            // Who's home — person.* and device_tracker.* in one directory,
-            // home/away state coloured per state.
-            item {
-                NavRow(label = "Who's home", value = "People + device trackers", onClick = onOpenPersons)
-            }
-
-            // Calendars — calendar.* entities, NOW pill + relative timestamp
-            // for the next event from each calendar.
-            item {
-                NavRow(label = "Calendars", value = "Next event preview", onClick = onOpenCalendars)
-            }
-
-            // System Health — /api/config + tail of /api/error_log for
-            // diagnostic "is my HA install healthy?" inspection.
             item {
                 NavRow(label = "System Health", value = "HA version + error log", onClick = onOpenSystemHealth)
             }
