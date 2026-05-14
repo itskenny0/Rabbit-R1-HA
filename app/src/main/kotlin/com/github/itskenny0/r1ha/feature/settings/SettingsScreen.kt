@@ -501,6 +501,7 @@ fun SettingsScreen(
             }
 
             item { SectionDivider() }
+            item { Section("TOOLS") }
 
             // Assist — text-mode HA conversation surface. Opens a chat-style
             // screen wired to /api/conversation/process. Voice (STT/TTS via
@@ -524,6 +525,8 @@ fun SettingsScreen(
             item {
                 NavRow(label = "Recent Activity", value = "Logbook feed", onClick = onOpenLogbook)
             }
+
+            item { SectionDivider() }
 
             item {
                 NavRow(label = "About", onClick = onOpenAbout)
