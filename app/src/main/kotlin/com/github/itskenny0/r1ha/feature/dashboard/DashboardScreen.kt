@@ -95,6 +95,7 @@ fun DashboardScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                Greeting()
                 ui.weather?.let { WeatherCard(it, onClick = onOpenWeather) }
                 ui.sun?.let { SunCard(it) }
                 if (ui.media.isNotEmpty()) {
@@ -234,6 +235,29 @@ private fun SunCard(s: DashboardViewModel.SunSummary) {
                 RelativeTimeLabel(at = s.nextSetting, color = R1.AccentCool, style = R1.labelMicro)
             }
         }
+    }
+}
+
+@Composable
+private fun Greeting() {
+    // Time-of-day greeting + a short date line. Refreshes whenever the
+    // Dashboard recomposes (every 60 s via the auto-refresh loop) which
+    // is enough granularity for a greeting that only changes every few
+    // hours. Kept lightweight: no animation, no live ticker.
+    val now = java.time.LocalDateTime.now()
+    val hour = now.hour
+    val greeting = when (hour) {
+        in 5..11 -> "GOOD MORNING"
+        in 12..17 -> "GOOD AFTERNOON"
+        in 18..21 -> "GOOD EVENING"
+        else -> "GOOD NIGHT"
+    }
+    val dateLine = now.toLocalDate().format(
+        java.time.format.DateTimeFormatter.ofPattern("EEEE, d MMM").withLocale(java.util.Locale.getDefault()),
+    )
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp)) {
+        Text(text = greeting, style = R1.sectionHeader, color = R1.AccentWarm)
+        Text(text = dateLine.uppercase(), style = R1.labelMicro, color = R1.InkSoft)
     }
 }
 
