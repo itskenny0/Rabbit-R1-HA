@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -30,6 +31,7 @@ import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.ui.components.R1Button
 import com.github.itskenny0.r1ha.ui.components.R1TextField
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
 
 /**
  * Templates evaluator — type a Jinja2 template, tap RENDER, see HA's
@@ -62,6 +64,11 @@ fun TemplateScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
+            // Example chips — one-tap insertion of common templates so the
+            // user can iterate without having to remember the Jinja2 syntax
+            // for the bits HA cares about (states.* tree, state_attr(), etc.).
+            ExampleChips(onPick = { vm.setTemplate(it); vm.render() })
+            Spacer(Modifier.padding(top = 10.dp))
             Text(text = "TEMPLATE (JINJA2)", style = R1.labelMicro, color = R1.InkSoft)
             Spacer(Modifier.padding(top = 4.dp))
             // Multi-line monospace editor. heightIn keeps a sensible minimum
@@ -111,6 +118,42 @@ fun TemplateScreen(
                 )
             }
             Spacer(Modifier.padding(top = 24.dp))
+        }
+    }
+}
+
+/** A horizontally-scrollable strip of "try this" templates. Picking a
+ *  chip both overwrites the editor AND fires a render so the user
+ *  sees the live output on a single tap. */
+@Composable
+private fun ExampleChips(onPick: (String) -> Unit) {
+    val examples = listOf(
+        "Now" to "{{ now().isoformat() }}",
+        "Sun" to "{{ state_attr('sun.sun','elevation') }}°",
+        "On lights" to "{{ states.light | selectattr('state','eq','on') | list | count }}",
+        "States count" to "{{ states | count }}",
+        "HA version" to "{{ states('zone.home') }} · {{ states | count }} entities",
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = "TRY", style = R1.labelMicro, color = R1.InkMuted)
+        Spacer(Modifier.width(4.dp))
+        for ((label, template) in examples) {
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(R1.SurfaceMuted)
+                    .border(1.dp, R1.Hairline, R1.ShapeS)
+                    .r1Pressable(onClick = { onPick(template) })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(text = label, style = R1.labelMicro, color = R1.InkSoft)
+            }
         }
     }
 }
