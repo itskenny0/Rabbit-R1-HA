@@ -134,6 +134,23 @@ fun AssistScreen(
         // Input row — text field + SEND button. Plus a small RESET chip on
         // the left so the user can drop the conversation_id and start fresh
         // without backing out.
+        // Voice-input launcher — fires the system RecognizerIntent which
+        // shows the standard Android mic dialog. Returns the recognised
+        // text via the activity result; we drop it into the draft field
+        // and immediately send. No RECORD_AUDIO permission needed by the
+        // app because the recognition UI runs in the system process.
+        val voiceLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+        ) { result ->
+            val matches = result.data?.getStringArrayListExtra(
+                android.speech.RecognizerIntent.EXTRA_RESULTS,
+            )
+            val best = matches?.firstOrNull()?.takeIf { it.isNotBlank() }
+            if (best != null) {
+                vm.setDraft(best)
+                vm.send()
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -148,6 +165,40 @@ fun AssistScreen(
                     .padding(horizontal = 8.dp, vertical = 8.dp),
             ) {
                 Text(text = "↺", style = R1.labelMicro, color = R1.InkSoft)
+            }
+            Spacer(Modifier.width(4.dp))
+            // 🎤 voice button — fires the system speech recognizer.
+            // Disabled while a send is in flight so a quick voice tap
+            // doesn't queue a second prompt over the first.
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .border(1.dp, R1.Hairline, R1.ShapeS)
+                    .r1Pressable(onClick = {
+                        if (ui.inFlight) return@r1Pressable
+                        val intent = android.content.Intent(
+                            android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH,
+                        ).apply {
+                            putExtra(
+                                android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                            )
+                            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Ask HA…")
+                            putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                        }
+                        // Some R1 ROMs (CipherOS especially) might not have a
+                        // speech-recognition service installed — surface a toast
+                        // rather than crashing on ActivityNotFoundException.
+                        runCatching { voiceLauncher.launch(intent) }
+                            .onFailure {
+                                com.github.itskenny0.r1ha.core.util.Toaster.error(
+                                    "No speech recognizer on this device",
+                                )
+                            }
+                    })
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+            ) {
+                Text(text = "🎤", style = R1.labelMicro, color = R1.InkSoft)
             }
             Spacer(Modifier.width(6.dp))
             Box(modifier = Modifier.weight(1f)) {
