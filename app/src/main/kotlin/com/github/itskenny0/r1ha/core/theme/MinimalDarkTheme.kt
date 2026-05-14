@@ -97,6 +97,18 @@ object MinimalDarkTheme : R1Theme {
                     color = R1.Ink,
                     maxLines = 2,
                 )
+                // 'Last changed' relative-time label — parity with
+                // PragmaticHybridTheme. Hidden when the entity has no
+                // observed lastChangedAt yet.
+                val rel = com.github.itskenny0.r1ha.ui.components.rememberRelativeTime(model.lastChangedAt)
+                if (rel.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = rel,
+                        style = R1.labelMicro,
+                        color = R1.InkMuted,
+                    )
+                }
                 Spacer(Modifier.height(20.dp))
                 // Hide the giant percent readout on media_player cards that are
                 // currently playing — same logic as PragmaticHybridTheme. The

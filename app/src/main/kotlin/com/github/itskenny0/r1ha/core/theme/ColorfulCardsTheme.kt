@@ -109,6 +109,19 @@ object ColorfulCardsTheme : R1Theme {
                     color = Color.White,
                     maxLines = 2,
                 )
+                // 'Last changed' relative-time label — parity with
+                // PragmaticHybridTheme. Dimmed white so it reads against
+                // the colourful background without competing with the
+                // big value.
+                val rel = com.github.itskenny0.r1ha.ui.components.rememberRelativeTime(model.lastChangedAt)
+                if (rel.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = rel,
+                        style = R1.labelMicro,
+                        color = Color.White.copy(alpha = 0.65f),
+                    )
+                }
                 Spacer(Modifier.height(20.dp))
                 // Hide the giant percent readout on media_player cards with
                 // active now-playing — same parity rule as PragmaticHybridTheme
