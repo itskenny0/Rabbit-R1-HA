@@ -279,6 +279,9 @@ fun AppNavGraph(
                 onOpenNotifications = {
                     navController.navigate(Routes.NOTIFICATIONS) { launchSingleTop = true }
                 },
+                onOpenScenes = {
+                    navController.navigate(Routes.SCENES) { launchSingleTop = true }
+                },
             )
         }
     }

@@ -52,6 +52,7 @@ fun DashboardScreen(
     onOpenCalendars: () -> Unit,
     onOpenCameras: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenScenes: () -> Unit,
 ) {
     val vm: DashboardViewModel = viewModel(factory = DashboardViewModel.factory(haRepository))
     val ui by vm.ui.collectAsState()
@@ -128,6 +129,7 @@ fun DashboardScreen(
                     cameraCount = ui.cameraCount,
                     notificationCount = ui.notifications.size,
                     lightsOnCount = ui.lightsOnCount,
+                    onLights = onOpenScenes,
                     onCameras = onOpenCameras,
                     onNotifications = onOpenNotifications,
                 )
@@ -401,6 +403,7 @@ private fun MetricsRow(
     cameraCount: Int,
     notificationCount: Int,
     lightsOnCount: Int,
+    onLights: () -> Unit,
     onCameras: () -> Unit,
     onNotifications: () -> Unit,
 ) {
@@ -411,17 +414,16 @@ private fun MetricsRow(
         // Lights-on count from a server-side Jinja count() — much
         // lighter than fetching every light entity. -1 sentinel
         // renders as '—' so the tile doesn't claim "0 on" while the
-        // template is still rendering.
+        // template is still rendering. Tap routes to the Scenes
+        // screen so the user can fire 'ALL LIGHTS OFF' from there
+        // — the natural next action when noticing too many lights
+        // are on.
         Metric(
             modifier = Modifier.weight(1f),
             label = "LIGHTS ON",
             value = if (lightsOnCount < 0) "—" else lightsOnCount.toString(),
             accent = if (lightsOnCount > 0) R1.AccentWarm else R1.InkSoft,
-            onClick = onCameras, // No dedicated lights screen yet — falls
-                                   // through to cameras tap as a near-miss.
-                                   // (Refining this is a follow-up; user
-                                   // can still control lights via the
-                                   // card stack.)
+            onClick = onLights,
         )
         Metric(
             modifier = Modifier.weight(1f),
