@@ -631,60 +631,81 @@ internal fun MediaControlsRow(
     entityId: com.github.itskenny0.r1ha.core.ha.EntityId,
     isPlaying: Boolean,
     accent: Color,
+    isMuted: Boolean = false,
 ) {
     val onTransport = com.github.itskenny0.r1ha.core.theme.LocalOnMediaTransport.current
-    // Glyph-only row — ⏮ / ⏯ / ⏭ / ∅. Previous version paired each glyph with a
-    // 4-char text label, but on the R1's narrow card area each button's slot is
-    // ~50 px wide and the labels wrapped mid-word (BAC/K, PAU/SE, NEX/T, MUT/E).
-    // The music-control glyphs are universal and read better without the text.
-    // Vol± buttons were dropped earlier since the slider covers volume.
+    // Glyph-only row — ⏮ / ⏯ / ⏭ / speaker. Previous version paired each glyph
+    // with a 4-char text label, but on the R1's narrow card area each button's
+    // slot is ~50 px wide and the labels wrapped mid-word (BAC/K, PAU/SE,
+    // NEX/T, MUT/E). The music-control glyphs are universal and read better
+    // without the text. Vol± buttons were dropped earlier since the slider
+    // covers volume. The mute button uses a custom canvas-drawn speaker glyph
+    // that flips between 'emitting' (two waves) and 'slashed' so the user
+    // can tell at a glance whether mute is on — the previous Unicode '∅' was
+    // ambiguous AND stateless, leaving the tile looking permanently inert.
     Row(modifier = Modifier.fillMaxWidth()) {
         MediaButton(
-            glyph = "⏮",
             onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PREVIOUS) },
             accent = accent,
             modifier = Modifier.weight(1f),
-        )
+        ) {
+            Text(text = "⏮", style = R1.numeralM, color = accent)
+        }
         Spacer(Modifier.width(4.dp))
         MediaButton(
-            glyph = if (isPlaying) "⏸" else "▶",
             onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PLAY_PAUSE) },
             accent = accent,
             emphasis = true,
             modifier = Modifier.weight(1f),
-        )
+        ) {
+            Text(text = if (isPlaying) "⏸" else "▶", style = R1.numeralM, color = R1.Bg)
+        }
         Spacer(Modifier.width(4.dp))
         MediaButton(
-            glyph = "⏭",
             onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.NEXT) },
             accent = accent,
             modifier = Modifier.weight(1f),
-        )
+        ) {
+            Text(text = "⏭", style = R1.numeralM, color = accent)
+        }
         Spacer(Modifier.width(4.dp))
+        // Mute toggle. When currently muted, render with emphasis (accent fill +
+        // slashed speaker glyph in Bg). When unmuted, surface-muted background
+        // with the speaker emitting two waves in accent. This gives users two
+        // independent cues (background fill + glyph shape) so the state is
+        // unambiguous on the R1's small display.
         MediaButton(
-            glyph = "∅",
             onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.MUTE_TOGGLE) },
             accent = accent,
+            emphasis = isMuted,
             modifier = Modifier.weight(1f),
-        )
+        ) {
+            com.github.itskenny0.r1ha.ui.components.SpeakerGlyph(
+                isMuted = isMuted,
+                tint = if (isMuted) R1.Bg else accent,
+                size = 22.dp,
+            )
+        }
     }
 }
 
 
 /**
- * Single media-control button — just the glyph, centred. The emphasis flag fills
- * with accent (used on play/pause so it's the obvious primary action of the row);
- * the others are surface-muted with the accent glyph as a hint that the button is
- * interactive. Tall enough (~36 dp) for a comfortable tap target without crowding
- * the rest of the card.
+ * Single media-control button — content slot in the middle. The emphasis flag
+ * fills with accent (used on play/pause so it's the obvious primary action of
+ * the row, and on the mute button when currently muted so the active state
+ * stands out); the others are surface-muted. Tall enough (~36 dp) for a
+ * comfortable tap target without crowding the rest of the card. The slot is a
+ * composable so callers can pass either a Text (transport glyphs) or a custom
+ * Canvas-drawn icon (the speaker glyph for mute).
  */
 @Composable
 private fun MediaButton(
-    glyph: String,
     onClick: () -> Unit,
     accent: Color,
     modifier: Modifier = Modifier,
     emphasis: Boolean = false,
+    content: @Composable () -> Unit,
 ) {
     Box(
         modifier = modifier
@@ -694,11 +715,7 @@ private fun MediaButton(
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = glyph,
-            style = R1.numeralM,
-            color = if (emphasis) R1.Bg else accent,
-        )
+        content()
     }
 }
 

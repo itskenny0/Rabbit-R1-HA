@@ -44,6 +44,16 @@ data class CardStackUiState(
      */
     val favouritesCount: Int = 0,
     /**
+     * Flipped to true on the FIRST emission from the settings flow. Distinguishes
+     * "settings haven't loaded yet" (cold start, DataStore I/O still in flight)
+     * from "settings loaded but the user has no favourites". Without this flag
+     * the screen briefly showed a "No favourites" message during the first ~50
+     * ms before settings arrived, which read as a permanent state to the user.
+     * Now the screen shows a plain throbber until [settingsLoaded] is true, then
+     * decides between [EmptyState] and [VerticalCardPager] based on real data.
+     */
+    val settingsLoaded: Boolean = false,
+    /**
      * Per-light transient wheel-mode override. Defaults to BRIGHTNESS for any light
      * the user hasn't toggled. Not persisted — the user re-picks each session, which
      * matches the "tap the readout to cycle" UX (a one-shot adjustment rather than a
@@ -338,6 +348,7 @@ class CardStackViewModel(
                     currentIndex = clampedIndex,
                     optimisticPercents = newOptimistic,
                     favouritesCount = favouriteIds.size,
+                    settingsLoaded = true,
                 )
             }
             .launchIn(viewModelScope)

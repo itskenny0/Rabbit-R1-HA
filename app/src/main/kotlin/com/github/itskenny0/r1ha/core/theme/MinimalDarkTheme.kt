@@ -147,6 +147,7 @@ object MinimalDarkTheme : R1Theme {
                         entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
                         isPlaying = model.isOn,
                         accent = accent,
+                        isMuted = model.mediaIsMuted,
                     )
                 }
                 Spacer(Modifier.weight(1f))

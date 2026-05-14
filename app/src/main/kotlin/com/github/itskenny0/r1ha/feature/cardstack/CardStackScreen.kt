@@ -297,8 +297,16 @@ fun CardStackScreen(
         // brightness/value track the wheel *instantly* instead of waiting for the HA
         // round-trip to echo a state_changed event back.
         val cards = state.displayedCards
-        if (cards.isNotEmpty()) {
-            VerticalCardPager(
+        when {
+            // Cold-start splash. DataStore is async on first read so for a brief
+            // window the VM has its default state (favouritesCount = 0,
+            // cards = empty). Without this branch the user momentarily saw the
+            // 'No favourites yet' EmptyState before the real data arrived, which
+            // they read as a permanent error. Plain throbber, no copy — once
+            // settings load we route into either the pager or EmptyState as
+            // appropriate.
+            !state.settingsLoaded -> StartupSplash()
+            cards.isNotEmpty() -> VerticalCardPager(
                 cards = cards,
                 vm = vm,
                 appSettings = appSettings,
@@ -306,26 +314,29 @@ fun CardStackScreen(
                 pagerState = pagerState,
                 lightWheelModes = state.lightWheelMode,
             )
-        } else {
-            val reconnectAt by haRepository.reconnectNextAttemptAtMillis
-                .collectAsStateWithLifecycle()
-            EmptyState(
-                loading = state.favouritesCount > 0,
-                favouritesCount = state.favouritesCount,
-                connection = connection,
-                reconnectAt = reconnectAt,
-                onOpenFavoritesPicker = onOpenFavoritesPicker,
-                onOpenSettings = onOpenSettings,
-                onRetry = { haRepository.reconnectNow() },
-            )
+            else -> {
+                val reconnectAt by haRepository.reconnectNextAttemptAtMillis
+                    .collectAsStateWithLifecycle()
+                EmptyState(
+                    loading = state.favouritesCount > 0,
+                    favouritesCount = state.favouritesCount,
+                    connection = connection,
+                    reconnectAt = reconnectAt,
+                    onOpenFavoritesPicker = onOpenFavoritesPicker,
+                    onOpenSettings = onOpenSettings,
+                    onRetry = { haRepository.reconnectNow() },
+                )
+            }
         }
 
         // Top chrome stack: ChromeRow on top, TabStrip directly under it. The two
         // are siblings inside the outer Box so the page chips sit above the active
         // card without affecting the pager's contentPadding (which is already
         // tuned for ChromeRow's 64 dp tall area). When there's only one page the
-        // strip is empty visual chrome — collapses to zero height.
-        androidx.compose.foundation.layout.Column(
+        // strip is empty visual chrome — collapses to zero height. Hidden during
+        // the cold-start splash so the user sees a clean throbber and not chrome
+        // perched above a loading spinner.
+        if (state.settingsLoaded) androidx.compose.foundation.layout.Column(
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             ChromeRow(
@@ -646,6 +657,30 @@ private fun VerticalCardPager(
         ) {
             Chevron(direction = ChevronDirection.Down, size = 14.dp, tint = R1.InkMuted)
         }
+    }
+}
+
+/**
+ * Cold-start splash shown until [CardStackUiState.settingsLoaded] flips true.
+ * Plain centred throbber on the dashboard background — no copy, because at
+ * this point we don't yet know whether the user has favourites, has set up a
+ * server, or is opening the app for the first time. Once settings arrive the
+ * screen routes into either [EmptyState] (with onboarding copy) or
+ * [VerticalCardPager] (with the user's deck) as appropriate. Holds the screen
+ * stable through the brief DataStore read so the user doesn't see a flash of
+ * 'No favourites yet' right after launch.
+ */
+@Composable
+private fun StartupSplash() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(28.dp),
+            strokeWidth = 2.dp,
+            color = R1.AccentWarm,
+        )
     }
 }
 

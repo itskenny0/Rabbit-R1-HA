@@ -85,6 +85,11 @@ data class CardRenderModel(
     val mediaPositionUpdatedAt: java.time.Instant? = null,
     val mediaPicture: String? = null,
     val mediaIsPlaying: Boolean = false,
+    /** Mirrors [com.github.itskenny0.r1ha.core.ha.EntityState.isVolumeMuted] —
+     *  surfaces the muted state to the media controls so the mute button can
+     *  render its 'currently muted' visual (filled background + slashed speaker
+     *  glyph) instead of being permanently stuck in one state. */
+    val mediaIsMuted: Boolean = false,
     /**
      * Tick labels for the vertical tape meter (right side of the card). Top→bottom
      * order, typically five strings. Null falls back to the default `100/75/50/25/0`

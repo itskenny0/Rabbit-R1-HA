@@ -145,6 +145,7 @@ fun SwitchCard(
                 entityId = state.id,
                 isPlaying = state.isOn,
                 accent = accent,
+                isMuted = state.isVolumeMuted,
             )
         }
 
