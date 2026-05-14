@@ -440,14 +440,11 @@ fun CardStackScreen(
                 androidx.compose.foundation.pager.HorizontalPager(
                     state = horizontalPagerState,
                     modifier = Modifier.fillMaxSize(),
-                    // Re-disabled. After restoring this (alongside connection
-                    // pulse, long-press indicator, etc.) the crash came back.
-                    // Pre-composing two PageDecks means two VerticalPager
-                    // states coexist; even with the cards.size key fix, an
-                    // edge case in the coexisting-pagers path could still
-                    // surface. Disabling again pending the next LAST CRASH
-                    // trace.
-                    beyondViewportPageCount = 0,
+                    // Pre-compose one page on each side of the visible one so
+                    // a swipe between tabs reveals fully-rendered cards
+                    // immediately. The crash trace identified the pip-thumb
+                    // spring overshoot as the cause, not this peek; restored.
+                    beyondViewportPageCount = 1,
                 ) { pageIdx ->
                     val page = state.pages.getOrNull(pageIdx) ?: return@HorizontalPager
                     val pageCardsRaw = state.cardsByPage[page.id].orEmpty()
@@ -2060,16 +2057,40 @@ private fun ChromeRow(
                     label = "conn-dot-color",
                 )
                 // While the connection is amber (Idle/Connecting/Authenticating) the
-                // Pulse animation re-disabled — second suspect for the
-                // returning crash. InfiniteTransition running inside an
-                // AnimatedVisibility that may fade in/out as connection
-                // state churns could be the cause. Solid dot until we have
-                // a real trace from LAST CRASH.
+                // Infinite-pulse alpha while connecting / authenticating. The
+                // dot pulses between 40% and 100% alpha to signal 'work in
+                // progress'. Restored — the LAST CRASH trace pointed at the
+                // pip-thumb spring overshoot, not this animation.
+                val isWorking = connection is ConnectionState.Connecting ||
+                    connection is ConnectionState.Authenticating ||
+                    connection == ConnectionState.Idle
+                val transition = androidx.compose.animation.core.rememberInfiniteTransition(
+                    label = "conn-dot-pulse",
+                )
+                val pulse by transition.animateFloat(
+                    initialValue = 0.4f,
+                    targetValue = 1f,
+                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                        animation = androidx.compose.animation.core.tween(
+                            durationMillis = 750,
+                            easing = androidx.compose.animation.core.FastOutSlowInEasing,
+                        ),
+                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+                    ),
+                    label = "conn-dot-pulse-alpha",
+                )
                 Box(
                     modifier = Modifier
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(animatedColor),
+                        .background(
+                            // Clamp alpha to [0, 1] defensively — the bouncy-
+                            // free tween shouldn't overshoot but a small
+                            // coerceIn() costs nothing.
+                            animatedColor.copy(
+                                alpha = if (isWorking) pulse.coerceIn(0f, 1f) else 1f,
+                            ),
+                        ),
                 )
             }
         }
@@ -2305,16 +2326,24 @@ private fun JumpRow(
 private fun VerticalPagePip(count: Int, current: Int, onClick: (() -> Unit)? = null) {
     val trackHeight = 22.dp
     val thumbHeight = 6.dp
-    val targetFrac = if (count <= 1) 0f else current.toFloat() / (count - 1).toFloat()
-    // Smooth the thumb between positions so a wheel-driven nav (or a jump-to-
-    // card sheet pick) reads as a glide instead of a teleport. Spring tuning
-    // matches the card pager's own animateScrollToPage — they end at the same
-    // moment, so the thumb and the deck travel together. Restored after the
-    // PagerState stale-closure crash fix.
+    // Clamp target to [0, 1] — `current` can momentarily exceed `count - 1`
+    // when a deck shrinks under the pager (e.g., between observeFavorites
+    // emissions). Without the clamp targetFrac > 1 and the spring
+    // animation's overshoot landed negative on the *other* side too.
+    val targetFrac = if (count <= 1) 0f
+        else (current.toFloat() / (count - 1).toFloat()).coerceIn(0f, 1f)
+    // CRITICAL: use DampingRatioNoBouncy (was LowBouncy) so the spring
+    // never overshoots BELOW 0. The bouncy spring would briefly visit
+    // ~-0.05 during settle — and the displayed fraction is fed into
+    // .padding(top = travel * animatedFrac), which Compose hard-throws
+    // on with IllegalArgumentException('Padding must be non-negative').
+    // Confirmed by a user crash trace at r1ha-2026.05.14.1741. Pair with
+    // a defensive .coerceIn at the use site so any future change to the
+    // animation spec can't reintroduce the bug.
     val animatedFrac by androidx.compose.animation.core.animateFloatAsState(
         targetValue = targetFrac,
         animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
             stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
         ),
         label = "r1-pip-thumb",
@@ -2345,11 +2374,15 @@ private fun VerticalPagePip(count: Int, current: Int, onClick: (() -> Unit)? = n
                     .background(R1.Hairline),
             )
             // Thumb — offset down by the animated fraction of available travel.
+            // Hard-clamp the multiplier to [0, 1] as a belt-and-braces guard
+            // against any spring overshoot reaching a negative Dp value —
+            // .padding() throws IllegalArgumentException on negatives.
             val travel = trackHeight - thumbHeight
+            val safeFrac = animatedFrac.coerceIn(0f, 1f)
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = travel * animatedFrac)
+                    .padding(top = travel * safeFrac)
                     .height(thumbHeight)
                     .width(4.dp)
                     .background(R1.AccentWarm),
