@@ -29,6 +29,13 @@ class ServiceCallerViewModel(
 ) : ViewModel() {
 
     @androidx.compose.runtime.Stable
+    data class RecentCall(
+        val domain: String,
+        val service: String,
+        val data: String,
+    )
+
+    @androidx.compose.runtime.Stable
     data class UiState(
         val domain: String = "homeassistant",
         val service: String = "check_config",
@@ -36,6 +43,12 @@ class ServiceCallerViewModel(
         val inFlight: Boolean = false,
         val result: String = "",
         val error: String? = null,
+        /** Last 5 successfully-fired calls, newest first. Lives in
+         *  ViewModel state only — not persisted across app restarts.
+         *  That's intentional: this is "what did I just try?", not
+         *  "what did I do last week" — the latter would want a real
+         *  history surface. */
+        val recent: List<RecentCall> = emptyList(),
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -70,10 +83,15 @@ class ServiceCallerViewModel(
             haRepository.callRawService(s.domain.trim(), s.service.trim(), payload).fold(
                 onSuccess = { result ->
                     R1Log.i("ServiceCaller", "${s.domain}.${s.service} OK len=${result.length}")
+                    // Push to recent history (dedupe + cap at 5). Newest first.
+                    val justFired = RecentCall(s.domain.trim(), s.service.trim(), s.data)
+                    val newRecent = (listOf(justFired) + _ui.value.recent.filterNot { it == justFired })
+                        .take(5)
                     _ui.value = _ui.value.copy(
                         result = if (result.isBlank()) "[] (no state changes)" else result,
                         error = null,
                         inFlight = false,
+                        recent = newRecent,
                     )
                 },
                 onFailure = { t ->

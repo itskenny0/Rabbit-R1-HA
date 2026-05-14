@@ -158,7 +158,50 @@ fun ServiceCallerScreen(
                     color = R1.InkMuted,
                 )
             }
+            // Recent fires — newest first; tap to recall into the editor.
+            // Useful for re-firing the same service while iterating data.
+            if (ui.recent.isNotEmpty()) {
+                Spacer(Modifier.padding(top = 16.dp))
+                Text(text = "RECENT", style = R1.labelMicro, color = R1.InkSoft)
+                Spacer(Modifier.padding(top = 4.dp))
+                for (call in ui.recent) {
+                    RecentRow(call, onPick = { vm.load(call.domain, call.service, call.data) })
+                    Spacer(Modifier.padding(top = 4.dp))
+                }
+            }
             Spacer(Modifier.padding(top = 24.dp))
+        }
+    }
+}
+
+@Composable
+private fun RecentRow(
+    call: ServiceCallerViewModel.RecentCall,
+    onPick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .r1Pressable(onClick = onPick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Column {
+            Text(
+                text = "${call.domain}.${call.service}",
+                style = R1.body,
+                color = R1.Ink,
+                maxLines = 1,
+            )
+            if (call.data.isNotBlank()) {
+                Text(
+                    text = call.data,
+                    style = R1.labelMicro,
+                    color = R1.InkSoft,
+                    maxLines = 2,
+                )
+            }
         }
     }
 }
