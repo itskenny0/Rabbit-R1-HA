@@ -420,6 +420,16 @@ class SettingsRepository private constructor(
         update { it.copy(activePageId = pageId) }
     }
 
+    /**
+     * Atomically restore an [AppBackup] on top of the current settings. Wraps
+     * [AppBackup.applyOnto] in a single [update] call so the favourites union
+     * + activePageId clamp logic runs once on the merged result; no half-
+     * applied state is ever visible to the rest of the app.
+     */
+    suspend fun applyBackup(backup: AppBackup) {
+        update { current -> backup.applyOnto(current) }
+    }
+
     private fun writeShadow(server: ServerConfig?, favorites: List<String>) {
         val editor = shadow.edit()
         if (server != null) {

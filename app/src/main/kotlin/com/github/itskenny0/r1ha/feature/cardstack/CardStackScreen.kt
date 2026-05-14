@@ -37,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,6 +60,8 @@ import com.github.itskenny0.r1ha.ui.components.r1Pressable
 import com.github.itskenny0.r1ha.ui.components.r1RowPressable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -429,6 +433,7 @@ fun CardStackScreen(
                     onTapPage = { id -> vm.setActivePage(id) },
                     onLongPressPage = { id -> tabManagementForId.value = id },
                     onAddPage = { tabManagementForId.value = NEW_PAGE_SENTINEL },
+                    onReorder = { from, to -> vm.reorderPages(from, to) },
                     solidBackdrop = appSettings.ui.hideCardTailAbove,
                 )
             }
@@ -551,10 +556,7 @@ fun CardStackScreen(
                     jumpPickerOpen.value = false
                 },
                 onReorder = { from, to -> vm.reorderFavorite(from, to) },
-                onRemove = { idx ->
-                    cards.getOrNull(idx)?.let { vm.removeFavorite(it.id.value) }
-                },
-                onLongPress = { idx -> cardContextMenuIdx.value = idx },
+                onOpenMenu = { idx -> cardContextMenuIdx.value = idx },
                 onDismiss = { jumpPickerOpen.value = false },
             )
         }
@@ -981,8 +983,15 @@ private const val NEW_PAGE_SENTINEL = "__new_page__"
 
 /**
  * Tab strip — one chip per page, plus a trailing '+' chip to add a new page. The
- * active page chip fills with accent; others sit on the muted surface. Tap to
- * switch active; long-press to open the manage modal (rename / delete).
+ * active page chip fills with accent; others sit on the muted surface.
+ *
+ * Gesture map:
+ *  - Tap: switch to that page.
+ *  - Long-press + drag horizontally: live-reorder. A swap fires every time the
+ *    finger crosses half a chip-width worth of travel (~40 dp). Same pattern as
+ *    [DragReorderColumn] but flipped to the horizontal axis.
+ *  - Long-press + release without dragging: open the manage modal (rename /
+ *    delete / explicit MOVE LEFT / MOVE RIGHT).
  *
  * Sits directly under the chrome row when there's more than one page. Hidden on
  * single-page installs so the pre-tabs aesthetic is preserved for users who
@@ -995,9 +1004,59 @@ private fun TabStrip(
     onTapPage: (String) -> Unit,
     onLongPressPage: (String) -> Unit,
     onAddPage: () -> Unit,
+    onReorder: (fromIdx: Int, toIdx: Int) -> Unit,
     solidBackdrop: Boolean,
 ) {
     val scroll = androidx.compose.foundation.rememberScrollState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // Per-chip measured X bounds (left .. right, in pixels relative to the Row's
+    // origin). Populated via onGloballyPositioned on each chip and read by the
+    // auto-scroll LaunchedEffect so the active chip is brought into view when
+    // the user swipes to a new page on the horizontal-pager below. Without
+    // this, swiping between pages on a long tab strip would leave the visible
+    // page label stuck off-screen.
+    val chipBounds = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateMapOf<String, IntRange>()
+    }
+    // Snap the active chip into view whenever the active page id changes. Pads
+    // the scroll target so the chip isn't flush against the viewport edge — a
+    // small breathing margin keeps it readable + leaves a hint that more chips
+    // exist to either side. Animated rather than instant so the transition
+    // visibly mirrors the page swipe happening underneath.
+    val pagerScope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(activePageId, chipBounds.size, scroll.maxValue) {
+        val r = chipBounds[activePageId] ?: return@LaunchedEffect
+        val viewport = scroll.viewportSize
+        if (viewport <= 0) return@LaunchedEffect
+        val margin = with(density) { 16.dp.toPx() }.toInt()
+        val visibleStart = scroll.value
+        val visibleEnd = visibleStart + viewport
+        val target = when {
+            r.first < visibleStart + margin ->
+                (r.first - margin).coerceAtLeast(0)
+            r.last > visibleEnd - margin ->
+                (r.last - viewport + margin).coerceAtMost(scroll.maxValue)
+            else -> return@LaunchedEffect
+        }
+        pagerScope.launch { scroll.animateScrollTo(target) }
+    }
+    // rememberUpdatedState lets the long-lived pointerInput lambda reach the
+    // *current* pages + callbacks every drag event, even though pointerInput is
+    // keyed on the stable page.id (and so isn't rebuilt on every recomposition).
+    // Without this, a chip that just got swapped would see the pre-swap pages
+    // list and fire a duplicate swap.
+    val currentPages = androidx.compose.runtime.rememberUpdatedState(pages)
+    val currentOnReorder = androidx.compose.runtime.rememberUpdatedState(onReorder)
+    val currentOnLongPress = androidx.compose.runtime.rememberUpdatedState(onLongPressPage)
+    // Half-chip's worth of travel. Chips on the R1 are roughly 56-72 dp wide
+    // depending on the page name; 40 dp lands somewhere between "easy to
+    // trigger" and "easy to overshoot by accident". Same magnitude as
+    // DragReorderColumn's vertical threshold so the tactile feel matches.
+    val swapThresholdPx = with(density) { 40.dp.toPx() }
+    /** ID of the chip currently in flight. Drives the visual lift effect. */
+    var draggedKey by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1013,15 +1072,92 @@ private fun TabStrip(
     ) {
         pages.forEach { page ->
             val active = page.id == activePageId
+            val isDragging = draggedKey == page.id
+            // Per-chip mutable drag state. Reset whenever the long-press
+            // starts so each new drag begins from zero offset. Keyed on
+            // page.id so a chip's state survives reorders.
+            val hasDragged = androidx.compose.runtime.remember(page.id) {
+                androidx.compose.runtime.mutableStateOf(false)
+            }
+            val dragOffsetPx = androidx.compose.runtime.remember(page.id) {
+                androidx.compose.runtime.mutableFloatStateOf(0f)
+            }
             Box(
                 modifier = Modifier
                     .padding(end = 4.dp)
+                    // Record this chip's measured x-bounds (relative to the
+                    // Row) so the LaunchedEffect above can scroll the strip
+                    // when the active page changes. Stored as IntRange so the
+                    // auto-scroll math can compare against scroll.value
+                    // directly without a separate width/offset pair.
+                    .onGloballyPositioned { coords ->
+                        val left = coords.positionInParent().x.toInt()
+                        val right = left + coords.size.width
+                        chipBounds[page.id] = left..right
+                    }
+                    // Slight lift while dragging so the user has visual
+                    // confirmation the chip is in flight. Scale > 1 keeps the
+                    // tap target the same physical size; alpha drop signals
+                    // 'this is being moved'.
+                    .graphicsLayer {
+                        if (isDragging) {
+                            scaleX = 1.06f
+                            scaleY = 1.06f
+                            this.alpha = 0.85f
+                        }
+                    }
                     .clip(R1.ShapeS)
                     .background(if (active) R1.AccentWarm else R1.SurfaceMuted)
-                    .r1RowPressable(
-                        onTap = { onTapPage(page.id) },
-                        onLongPress = { onLongPressPage(page.id) },
-                    )
+                    .r1Pressable(onClick = { onTapPage(page.id) })
+                    .pointerInput(page.id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                hasDragged.value = false
+                                dragOffsetPx.floatValue = 0f
+                                draggedKey = page.id
+                            },
+                            onDrag = { change, drag ->
+                                change.consume()
+                                dragOffsetPx.floatValue += drag.x
+                                // Re-resolve current index every event — the
+                                // chip may have already shifted due to a prior
+                                // swap in the same drag. currentPages is the
+                                // up-to-date list via rememberUpdatedState.
+                                val curIdx = currentPages.value.indexOfFirst { it.id == page.id }
+                                if (curIdx < 0) return@detectDragGesturesAfterLongPress
+                                // Swap right.
+                                while (dragOffsetPx.floatValue > swapThresholdPx &&
+                                    currentPages.value.indexOfFirst { it.id == page.id }
+                                        .let { it >= 0 && it < currentPages.value.lastIndex }
+                                ) {
+                                    val i = currentPages.value.indexOfFirst { it.id == page.id }
+                                    currentOnReorder.value(i, i + 1)
+                                    dragOffsetPx.floatValue -= swapThresholdPx
+                                    hasDragged.value = true
+                                }
+                                // Swap left.
+                                while (dragOffsetPx.floatValue < -swapThresholdPx &&
+                                    currentPages.value.indexOfFirst { it.id == page.id } > 0
+                                ) {
+                                    val i = currentPages.value.indexOfFirst { it.id == page.id }
+                                    currentOnReorder.value(i, i - 1)
+                                    dragOffsetPx.floatValue += swapThresholdPx
+                                    hasDragged.value = true
+                                }
+                            },
+                            onDragEnd = {
+                                draggedKey = null
+                                // Long-press without any drag movement falls
+                                // through to the manage-modal callback so
+                                // users still have a way to open it.
+                                if (!hasDragged.value) currentOnLongPress.value(page.id)
+                            },
+                            onDragCancel = {
+                                draggedKey = null
+                                if (!hasDragged.value) currentOnLongPress.value(page.id)
+                            },
+                        )
+                    }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 Text(
@@ -1501,15 +1637,11 @@ private fun JumpToCardSheet(
     listState: androidx.compose.foundation.lazy.LazyListState,
     onPick: (Int) -> Unit,
     onReorder: (fromIndex: Int, toIndex: Int) -> Unit,
-    /** Per-row remove affordance. Tapping the '✕' chip on a row calls back with
-     *  that row's index — the screen converts that to an entity_id and unfavourites
-     *  it. Lets the user prune their deck without round-tripping through the full
-     *  favourites picker. */
-    onRemove: (index: Int) -> Unit,
-    /** Long-press anywhere outside the drag handle on a row opens the per-card
-     *  context menu — used for moving the card to another page or other
-     *  per-entity actions that don't have an inline affordance. */
-    onLongPress: (index: Int) -> Unit,
+    /** Open the per-card context menu (move-to-page, remove). Surfaced by the
+     *  '…' chip on each row — replaces the prior pair of inline '✕' + long-press
+     *  affordances. Callback receives the row's index; the screen resolves that
+     *  to an entity_id and shows [CardContextMenu]. */
+    onOpenMenu: (index: Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     androidx.activity.compose.BackHandler(onBack = onDismiss)
@@ -1544,7 +1676,7 @@ private fun JumpToCardSheet(
                 }
             }
             Text(
-                text = "TAP JUMP · LONG-PRESS MENU · DRAG # TO REORDER · WHEEL SCROLLS",
+                text = "TAP JUMP · LONG-PRESS DRAG · '…' MENU · WHEEL SCROLLS",
                 style = R1.labelMicro,
                 color = R1.InkMuted,
                 modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
@@ -1571,8 +1703,7 @@ private fun JumpToCardSheet(
                     isActive = idx == currentIndex,
                     isDragging = isDragging,
                     onClick = { onPick(idx) },
-                    onRemove = { onRemove(idx) },
-                    onLongPress = { onLongPress(idx) },
+                    onOpenMenu = { onOpenMenu(idx) },
                     dragHandle = dragHandle,
                 )
             }
@@ -1594,15 +1725,14 @@ private fun JumpRow(
     isActive: Boolean,
     isDragging: Boolean,
     onClick: () -> Unit,
-    onRemove: () -> Unit,
-    onLongPress: () -> Unit,
+    onOpenMenu: () -> Unit,
     dragHandle: Modifier,
 ) {
-    // Row layout — the leftmost "##" handle owns the drag-reorder long-press, the
-    // middle name area owns the row-level tap (jump-to) + long-press (context
-    // menu), and the right '✕' chip remove the entity. Splitting the gestures by
-    // sub-region avoids a single global long-press that would have to be either
-    // drag OR menu but not both.
+    // Drag-handle modifier wraps the whole row so the user can long-press anywhere
+    // on the row to grab it. r1Pressable for the tap-to-jump action sits on top —
+    // single tap fires onClick, long-press promotes to drag. The '…' chip on the
+    // right opens the per-card context menu (move-to-page, remove); its own
+    // r1Pressable absorbs the tap so it doesn't fall through to the row jump.
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1614,46 +1744,19 @@ private fun JumpRow(
                     isActive -> R1.AccentWarm
                     else -> R1.SurfaceMuted
                 },
-            ),
+            )
+            .then(dragHandle)
+            .r1Pressable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Drag handle — index number on a slightly wider hit area. Long-press
-            // on this zone enters the drag-reorder gesture. A subtle column of
-            // dots beside the number hints at "this is grabbable" without
-            // shouting; matches the lightweight chrome of the rest of the row.
-            Box(
-                modifier = Modifier
-                    .then(dragHandle)
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "⋮",
-                        style = R1.labelMicro,
-                        color = if (isActive) R1.Bg.copy(alpha = 0.7f) else R1.InkSoft,
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = "%2d".format(index + 1),
-                        style = R1.labelMicro,
-                        color = if (isActive) R1.Bg else R1.InkMuted,
-                    )
-                }
-            }
-            Spacer(Modifier.width(6.dp))
-            // Name + domain — tap to jump, long-press to open context menu. The
-            // r1RowPressable variant detects both gestures on the same sub-region
-            // without the conflict r1Pressable + a parent long-press would have.
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .r1RowPressable(onTap = onClick, onLongPress = onLongPress)
-                    .padding(vertical = 2.dp),
-            ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "%2d".format(index + 1),
+                style = R1.labelMicro,
+                color = if (isActive) R1.Bg else R1.InkMuted,
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = name,
                     style = R1.body,
@@ -1670,21 +1773,21 @@ private fun JumpRow(
                 Text(text = "●", style = R1.labelMicro, color = R1.Bg)
                 Spacer(Modifier.width(8.dp))
             }
-            // Remove '✕' chip — small surface-coloured square so the destructive
-            // action is visually distinct from the active highlight. Tinted with
-            // StatusRed so users at a glance know this is a 'delete' affordance
-            // rather than a generic close button.
+            // '…' chip — opens the per-card context menu. Replaces the previous
+            // inline '✕' remove button; the menu now holds every per-card action
+            // (move-to-page + remove) in one place so the row stays clean. Same
+            // sizing as the old remove chip so muscle memory carries over.
             Box(
                 modifier = Modifier
                     .clip(R1.ShapeS)
                     .background(R1.Bg.copy(alpha = if (isActive) 0.4f else 0.7f))
-                    .r1Pressable(onClick = onRemove)
+                    .r1Pressable(onClick = onOpenMenu)
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Text(
-                    text = "✕",
+                    text = "…",
                     style = R1.labelMicro,
-                    color = R1.StatusRed,
+                    color = if (isActive) R1.Bg else R1.InkSoft,
                 )
             }
         }

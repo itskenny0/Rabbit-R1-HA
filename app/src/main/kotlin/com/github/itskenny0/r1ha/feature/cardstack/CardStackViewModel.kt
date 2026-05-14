@@ -637,6 +637,14 @@ class CardStackViewModel(
         }
     }
 
+    /** Direct page reorder used by the tab strip's drag-reorder gesture.
+     *  Indices are interpreted in the current settings' page order; the
+     *  underlying [SettingsRepository.reorderPages] clamps + no-ops on
+     *  invalid combinations. */
+    fun reorderPages(fromIdx: Int, toIdx: Int) {
+        viewModelScope.launch { settings.reorderPages(fromIdx, toIdx) }
+    }
+
     /** Move the page at [pageId] one slot to the left, if possible. No-op when
      *  the page is already leftmost. Used by the manage modal's MOVE LEFT
      *  button — quicker than implementing drag-reorder on the tab strip itself,

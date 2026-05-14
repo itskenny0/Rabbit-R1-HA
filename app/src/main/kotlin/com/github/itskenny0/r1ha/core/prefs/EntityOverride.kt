@@ -10,6 +10,7 @@ package com.github.itskenny0.r1ha.core.prefs
  * own map because that field shipped earlier and renaming it would force a migration of
  * users' existing renames; this struct adds the rest of the customizable surface.
  */
+@kotlinx.serialization.Serializable
 data class EntityOverride(
     /**
      * Absolute text size in sp for the card's big readout (the percent number, the
@@ -125,6 +126,7 @@ data class EntityOverride(
  * EntityOverride already runs close to a screenful of pipe-separated fields and a
  * Set<Enum> stored as full names would dominate.
  */
+@kotlinx.serialization.Serializable
 enum class LightCardButton(val code: Char) {
     BRIGHTNESS('B'),
     WHITE('W'),

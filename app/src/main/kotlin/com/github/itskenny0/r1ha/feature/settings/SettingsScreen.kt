@@ -55,6 +55,63 @@ fun SettingsScreen(
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
 
+    // SAF launchers for backup export / import. Using CreateDocument / OpenDocument
+    // routes through the Android system file picker, so the user can save to the
+    // R1's local storage, a USB stick, or any cloud-storage app they have wired
+    // up (Drive, Nextcloud, etc.) without us shipping permissions for direct FS
+    // access. CreateDocument keeps the chosen MIME type as the file's display
+    // type so a downstream viewer can open it; we use application/json so
+    // editors recognise the format on a desktop too.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // Holds the JSON blob produced by exportBackupBlob until the user picks
+    // the destination file via SAF. The launcher reads this when its
+    // ActivityResult lands and writes to the picked URI.
+    val pendingBackupBlob = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
+    val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri: android.net.Uri? ->
+        val blob = pendingBackupBlob.value
+        pendingBackupBlob.value = null
+        if (uri == null || blob == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(blob.toByteArray(Charsets.UTF_8))
+            } ?: error("couldn't open output stream")
+            com.github.itskenny0.r1ha.core.util.Toaster.show("Backup saved")
+        }.onFailure { t ->
+            com.github.itskenny0.r1ha.core.util.R1Log.w(
+                "Settings.exportBackup", "write failed: ${t.message}",
+            )
+            com.github.itskenny0.r1ha.core.util.Toaster.showExpandable(
+                shortText = "Backup save failed",
+                fullText = "Couldn't write the backup file.\n\n${t.message ?: t.toString()}",
+            )
+        }
+    }
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri: android.net.Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                stream.readBytes().toString(Charsets.UTF_8)
+            } ?: error("couldn't open input stream")
+        }.fold(
+            onSuccess = { raw -> vm.importBackupBlob(raw) },
+            onFailure = { t ->
+                com.github.itskenny0.r1ha.core.util.R1Log.w(
+                    "Settings.importBackup", "read failed: ${t.message}",
+                )
+                com.github.itskenny0.r1ha.core.util.Toaster.showExpandable(
+                    shortText = "Backup read failed",
+                    fullText = "Couldn't read the backup file.\n\n${t.message ?: t.toString()}",
+                )
+            },
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -285,6 +342,46 @@ fun SettingsScreen(
                 )
             }
             item { ToastLogLevelRow(current = s.behavior.toastLogLevel, onSelect = { vm.setToastLogLevel(it) }) }
+
+            item { SectionDivider() }
+
+            // ── Backup & restore ───────────────────────────────────────────────────
+            item { Section("BACKUP & RESTORE") }
+            item {
+                InfoRow(
+                    label = "What's included",
+                    value = "Server URL · pages · favourites · all settings (no tokens)",
+                )
+            }
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    com.github.itskenny0.r1ha.ui.components.R1Button(
+                        text = "EXPORT",
+                        onClick = {
+                            vm.exportBackupBlob { blob ->
+                                pendingBackupBlob.value = blob
+                                val stamp = java.text.SimpleDateFormat(
+                                    "yyyyMMdd-HHmm",
+                                    java.util.Locale.US,
+                                ).format(java.util.Date())
+                                exportLauncher.launch("r1ha-backup-$stamp.json")
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    com.github.itskenny0.r1ha.ui.components.R1Button(
+                        text = "IMPORT",
+                        onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                        modifier = Modifier.weight(1f),
+                        variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+                    )
+                }
+            }
 
             item { SectionDivider() }
 

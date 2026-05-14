@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.github.itskenny0.r1ha.core.prefs.AppSettings
+import com.github.itskenny0.r1ha.core.prefs.toBackup
 import com.github.itskenny0.r1ha.core.prefs.DisplayMode
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.prefs.ThemeId
@@ -88,6 +89,59 @@ class SettingsViewModel(
             R1Log.i("Settings.signOut", "done")
             Toaster.show("Signed out")
             onAfter()
+        }
+    }
+
+    // ── Backup & restore ────────────────────────────────────────────────────
+
+    /**
+     * Capture the current settings as an [com.github.itskenny0.r1ha.core.prefs.AppBackup]
+     * JSON blob and hand it to [onReady] on the main thread. The caller — the
+     * Settings screen with a SAF CreateDocument launcher in hand — writes the
+     * blob to the user-picked file.
+     *
+     * We read the latest settings synchronously from the flow's current value
+     * rather than re-querying DataStore: the StateFlow has the up-to-date
+     * snapshot and avoids a second async hop that would race against any
+     * concurrent setting change.
+     */
+    fun exportBackupBlob(onReady: (String) -> Unit) {
+        viewModelScope.launch {
+            val now = java.time.Instant.now().toString()
+            val backup = state.value.toBackup(now)
+            val raw = com.github.itskenny0.r1ha.core.prefs.encodeBackup(backup)
+            onReady(raw)
+        }
+    }
+
+    /**
+     * Parse [raw] as an [com.github.itskenny0.r1ha.core.prefs.AppBackup] and
+     * apply it atomically. On success surfaces a confirmation toast; on
+     * malformed input fires an expandable failure toast with the parser's
+     * message so the user knows why the import didn't take.
+     */
+    fun importBackupBlob(raw: String) {
+        viewModelScope.launch {
+            val parsed = runCatching {
+                com.github.itskenny0.r1ha.core.prefs.decodeBackup(raw)
+            }
+            parsed.fold(
+                onSuccess = { backup ->
+                    settings.applyBackup(backup)
+                    R1Log.i(
+                        "Settings.importBackup",
+                        "restored v${backup.version} from ${backup.createdAt} (${backup.pages.size} pages, ${backup.favorites.size} favourites)",
+                    )
+                    Toaster.show("Backup restored")
+                },
+                onFailure = { t ->
+                    R1Log.w("Settings.importBackup", "parse failed: ${t.message}")
+                    Toaster.showExpandable(
+                        shortText = "Restore failed: ${t.message?.take(28) ?: "bad JSON"}",
+                        fullText = "Couldn't parse backup file.\n\n${t.message ?: t.toString()}",
+                    )
+                },
+            )
         }
     }
 
