@@ -60,6 +60,7 @@ fun SettingsScreen(
     onOpenSystemHealth: () -> Unit,
     onOpenDashboard: () -> Unit,
     onOpenAreas: () -> Unit,
+    onOpenServices: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -597,6 +598,9 @@ fun SettingsScreen(
             }
             item {
                 NavRow(label = "Service Caller", value = "Fire any service", onClick = onOpenServiceCaller)
+            }
+            item {
+                NavRow(label = "Services Browser", value = "Discover available services", onClick = onOpenServices)
             }
             item {
                 NavRow(label = "System Health", value = "HA version + error log", onClick = onOpenSystemHealth)

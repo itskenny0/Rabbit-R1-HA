@@ -1327,6 +1327,38 @@ class DefaultHaRepository(
         }
     }
 
+    override suspend fun listServices(): Result<List<HaServiceDomain>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val s = settings.settings.first()
+            val server = s.server ?: error("Server URL not configured.")
+            refresher?.ensureFresh()
+            val url = "${server.url.trimEnd('/')}/api/services"
+            val body = simpleAuthedGet(url) ?: run {
+                if (refresher?.forceRefresh() == true) {
+                    simpleAuthedGet(url) ?: error("HTTP 401 for /api/services after refresh.")
+                } else error("HTTP 401 for /api/services.")
+            }
+            // HA's response: a JSON array of {domain: String, services: {name: {description, fields}}}.
+            val arr = listStatesJson.decodeFromString<kotlinx.serialization.json.JsonArray>(body)
+            arr.mapNotNull { el ->
+                val obj = el as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                val domain = (obj["domain"] as? JsonPrimitive)?.content ?: return@mapNotNull null
+                val servicesObj = obj["services"] as? kotlinx.serialization.json.JsonObject
+                    ?: return@mapNotNull null
+                val services = servicesObj.entries.map { (name, value) ->
+                    val svcObj = value as? kotlinx.serialization.json.JsonObject
+                    val description = (svcObj?.get("description") as? JsonPrimitive)?.content
+                    val fieldsObj = svcObj?.get("fields") as? kotlinx.serialization.json.JsonObject
+                    val fieldNames = fieldsObj?.keys?.toList().orEmpty()
+                    HaService(name = name, description = description, fieldNames = fieldNames)
+                }.sortedBy { it.name }
+                HaServiceDomain(domain = domain, services = services)
+            }.sortedBy { it.domain }
+        }.onFailure { t ->
+            R1Log.w("HaRepo.services", "list failed: ${t.message}")
+        }
+    }
+
     override suspend fun fetchCalendarEvents(
         entityId: String,
         fromDaysBack: Int,

@@ -144,6 +144,12 @@ interface HaRepository {
         fromDaysBack: Int = 0,
         toDaysAhead: Int = 14,
     ): Result<List<CalendarEvent>>
+
+    /**
+     * GET `/api/services` — every service HA exposes, grouped by
+     * domain. Used by the Services Browser power-user surface.
+     */
+    suspend fun listServices(): Result<List<HaServiceDomain>>
     suspend fun start()
     suspend fun stop()
 
