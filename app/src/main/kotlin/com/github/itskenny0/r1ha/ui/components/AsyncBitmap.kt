@@ -1,6 +1,8 @@
 package com.github.itskenny0.r1ha.ui.components
 
+import android.content.Context
 import android.graphics.BitmapFactory
+import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -21,8 +23,10 @@ import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.core.util.R1Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 
 /**
  * Tiny image loader for the now-playing album art and any other one-off
@@ -30,11 +34,20 @@ import okhttp3.Request
  * one or two album covers visible at a time, so a per-composable LaunchedEffect
  * that fetches the bytes and decodes via BitmapFactory is plenty.
  *
+ * **Caching.** Backed by [AsyncBitmapCache] — an in-memory LRU of decoded
+ * [ImageBitmap]s (so swiping back to a previously-seen card paints instantly,
+ * no re-decode) plus an OkHttp disk cache shared by every fetch (so re-opening
+ * the app pulls the cover from disk instead of refetching over WLAN). On the
+ * R1's slow boot path the difference is the album cover appearing in the same
+ * frame as the rest of the card rather than ~300 ms later.
+ *
  * Handles three URL shapes coming from HA's `entity_picture` attribute:
  *  1. Absolute `http(s)://…` — used verbatim.
  *  2. Relative `/api/media_player_proxy/…` — prepended with the configured HA
  *     server URL.
- *  3. `data:image/…` data URIs — split and decoded as base64 in place.
+ *  3. `data:image/…` data URIs — split and decoded as base64 in place. Data
+ *     URIs are NOT cached on disk (they're inline already and the LRU is
+ *     enough) but DO go through the in-memory LRU.
  *
  * Failures (network down, decode error, 404 on the proxy) render a quiet
  * placeholder instead of throwing; the album cover is a nice-to-have, not a
@@ -49,18 +62,33 @@ fun AsyncBitmap(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
 ) {
-    var bitmap by remember(url, serverUrl) { mutableStateOf<ImageBitmap?>(null) }
-    var failed by remember(url, serverUrl) { mutableStateOf(false) }
+    val resolved = remember(url, serverUrl) { url?.let { resolveUrl(it, serverUrl) } }
+    // Seed bitmap from the memory cache so swiping back to a known cover paints
+    // in the same frame as the rest of the card — no flash of placeholder
+    // while the LaunchedEffect re-fetches. The cache returns null when the URL
+    // isn't seeded yet (or has been evicted); the effect below populates it.
+    var bitmap by remember(resolved) {
+        mutableStateOf(resolved?.let { AsyncBitmapCache.peek(it) })
+    }
+    var failed by remember(resolved) { mutableStateOf(false) }
 
-    LaunchedEffect(url, serverUrl, bearerToken) {
-        bitmap = null
-        failed = false
-        val raw = url ?: return@LaunchedEffect
-        val resolved = resolveUrl(raw, serverUrl) ?: run { failed = true; return@LaunchedEffect }
+    LaunchedEffect(resolved, bearerToken) {
+        if (resolved == null) {
+            failed = true
+            return@LaunchedEffect
+        }
+        // Memory-hit fast path — keep the existing bitmap (already seeded above)
+        // and skip the IO dispatch entirely.
+        if (AsyncBitmapCache.peek(resolved) != null) return@LaunchedEffect
         val image = runCatching { fetchAndDecode(resolved, bearerToken) }
             .onFailure { R1Log.d("AsyncBitmap", "fetch failed $resolved: ${it.message}") }
             .getOrNull()
-        if (image != null) bitmap = image else failed = true
+        if (image != null) {
+            AsyncBitmapCache.put(resolved, image)
+            bitmap = image
+        } else {
+            failed = true
+        }
     }
 
     Box(modifier = modifier.background(R1.SurfaceMuted)) {
@@ -81,7 +109,8 @@ fun AsyncBitmap(
         }
         // Loading state intentionally renders as the empty SurfaceMuted box —
         // album art typically loads in <300 ms over LAN, and a spinner during
-        // that window would feel busier than the brief blank frame.
+        // that window would feel busier than the brief blank frame. With the
+        // memory cache, subsequent loads are 0 ms anyway.
     }
 }
 
@@ -110,7 +139,7 @@ private suspend fun fetchAndDecode(url: String, bearerToken: String?): ImageBitm
                 .getOrNull() ?: return@withContext null
             return@withContext BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
         }
-        val client = SharedHttpClient.instance
+        val client = AsyncBitmapCache.httpClient()
         val builder = Request.Builder().url(url)
         if (!bearerToken.isNullOrBlank()) {
             builder.header("Authorization", "Bearer $bearerToken")
@@ -123,10 +152,65 @@ private suspend fun fetchAndDecode(url: String, bearerToken: String?): ImageBitm
     }
 
 /**
- * Process-scoped OkHttp instance for ad-hoc one-shot fetches that don't need to
- * share state with the main repository's client. Lazy so test contexts that
- * never load an album cover don't pay the construction cost.
+ * Process-scoped cache for decoded album-art bitmaps + the OkHttp client that
+ * backs them. Initialised once from [com.github.itskenny0.r1ha.App.onCreate]
+ * via [init] — the application Context is needed for the disk-cache directory
+ * but we never hold a longer-lived reference than that. Calls before [init]
+ * fall back to an in-memory-only OkHttp instance, so test code that never
+ * wires the application context still functions.
+ *
+ * Memory LRU sized for **16 entries**: each decoded ARGB_8888 album cover at
+ * the typical 240×240 R1 size is ~225 KB, so the upper bound is ~3.6 MB — well
+ * inside the R1's working set without crowding out the rest of the app.
+ *
+ * Disk cache **10 MB** in the app's cache directory. Honoured by OkHttp's
+ * CacheControl machinery + HA's standard image-proxy ETags so a 304 short-
+ * circuits the body transfer entirely on revisits.
  */
-private object SharedHttpClient {
-    val instance: OkHttpClient by lazy { OkHttpClient() }
+internal object AsyncBitmapCache {
+
+    private const val MEMORY_LRU_ENTRIES = 16
+    private const val DISK_CACHE_BYTES = 10L * 1024 * 1024
+
+    private val memory = LruCache<String, ImageBitmap>(MEMORY_LRU_ENTRIES)
+
+    @Volatile private var sharedClient: OkHttpClient? = null
+
+    /** Called from App.onCreate. Wires the disk cache under the application's
+     *  cache dir; safe to call more than once (subsequent calls no-op). */
+    fun init(context: Context) {
+        if (sharedClient != null) return
+        synchronized(this) {
+            if (sharedClient != null) return
+            val cacheDir = File(context.cacheDir, "r1ha-images")
+            sharedClient = OkHttpClient.Builder()
+                .cache(Cache(cacheDir, DISK_CACHE_BYTES))
+                .build()
+        }
+    }
+
+    /** OkHttp instance with the disk cache attached. Falls back to a plain
+     *  client when [init] hasn't run yet (e.g. tests) so callers never NPE. */
+    fun httpClient(): OkHttpClient = sharedClient ?: fallbackClient
+
+    /** Peek the in-memory LRU without touching the IO path. Used by the
+     *  composable's `remember` seed so a previously-decoded cover paints in
+     *  the same frame as the surrounding card. */
+    fun peek(url: String): ImageBitmap? = memory.get(url)
+
+    /** Insert a decoded bitmap into the LRU. The OkHttp disk cache picks up
+     *  the raw bytes side; we only track decoded ImageBitmaps in memory to
+     *  amortise the BitmapFactory.decodeByteArray cost on warm hits. */
+    fun put(url: String, image: ImageBitmap) {
+        memory.put(url, image)
+    }
+
+    /** Drop everything. Useful for the dev menu's "clear caches" affordance
+     *  if we ever surface one; not wired today. */
+    fun clear() {
+        memory.evictAll()
+        runCatching { sharedClient?.cache?.evictAll() }
+    }
+
+    private val fallbackClient: OkHttpClient by lazy { OkHttpClient() }
 }

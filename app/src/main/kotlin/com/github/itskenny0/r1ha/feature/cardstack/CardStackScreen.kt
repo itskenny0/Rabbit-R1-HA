@@ -815,22 +815,32 @@ private fun PageDeck(
 
 /**
  * Cold-start splash shown until [CardStackUiState.settingsLoaded] flips true.
- * Plain centred throbber on the dashboard background — no copy, because at
- * this point we don't yet know whether the user has favourites, has set up a
- * server, or is opening the app for the first time. Once settings arrive the
- * screen routes into either [EmptyState] (with onboarding copy) or
- * [VerticalCardPager] (with the user's deck) as appropriate. Holds the screen
- * stable through the brief DataStore read so the user doesn't see a flash of
- * 'No favourites yet' right after launch.
+ * Wordmark over a throbber so the user knows the app is loading (a bare
+ * spinner during the brief DataStore read window could look like the device
+ * froze; on the R1's slow boot path the splash can sit visible for a couple
+ * of hundred ms). Once settings arrive the screen routes into either
+ * [EmptyState] (with onboarding copy) or [VerticalCardPager] (with the
+ * user's deck) as appropriate.
+ *
+ * Tag-style 'R1 · HA' uses the same uppercase letterspaced numeral the rest
+ * of the dashboard uses for section headers, so the splash reads as part of
+ * the design language rather than a generic loader.
  */
 @Composable
 private fun StartupSplash() {
-    Box(
+    Column(
         modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Text(
+            text = "R1 · HA",
+            style = R1.sectionHeader,
+            color = R1.AccentWarm,
+        )
+        Spacer(Modifier.height(14.dp))
         CircularProgressIndicator(
-            modifier = Modifier.size(28.dp),
+            modifier = Modifier.size(22.dp),
             strokeWidth = 2.dp,
             color = R1.AccentWarm,
         )
@@ -1095,15 +1105,21 @@ private fun TabStrip(
                         val right = left + coords.size.width
                         chipBounds[page.id] = left..right
                     }
-                    // Slight lift while dragging so the user has visual
-                    // confirmation the chip is in flight. Scale > 1 keeps the
-                    // tap target the same physical size; alpha drop signals
-                    // 'this is being moved'.
+                    // While dragging: translate the chip along the user's
+                    // finger via the accumulated offset, lift it slightly with
+                    // a scale > 1 (keeps the tap target physically the same)
+                    // and dim the alpha so adjacent chips read as 'in the
+                    // background'. The translation makes the gesture feel
+                    // physical — the finger drags the chip rather than the
+                    // chip teleporting between slots on threshold-cross. The
+                    // accumulated offset resets toward 0 after each swap, so
+                    // the translation magnitude stays bounded.
                     .graphicsLayer {
                         if (isDragging) {
+                            translationX = dragOffsetPx.floatValue
                             scaleX = 1.06f
                             scaleY = 1.06f
-                            this.alpha = 0.85f
+                            this.alpha = 0.88f
                         }
                     }
                     .clip(R1.ShapeS)
@@ -1803,7 +1819,20 @@ private fun JumpRow(
 private fun VerticalPagePip(count: Int, current: Int, onClick: (() -> Unit)? = null) {
     val trackHeight = 22.dp
     val thumbHeight = 6.dp
-    val frac = if (count <= 1) 0f else current.toFloat() / (count - 1).toFloat()
+    val targetFrac = if (count <= 1) 0f else current.toFloat() / (count - 1).toFloat()
+    // Smooth the thumb between positions so a wheel-driven nav (or a jump-to-
+    // card sheet pick) reads as a glide instead of a teleport. Spring tuning
+    // matches the card pager's own animateScrollToPage — they end at the same
+    // moment, so the thumb and the deck travel together. Low stiffness keeps
+    // it physical-feeling without overshooting on fast multi-card jumps.
+    val animatedFrac by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = targetFrac,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+        ),
+        label = "r1-pip-thumb",
+    )
     Row(
         modifier = Modifier
             .clip(R1.ShapeRound)
@@ -1829,12 +1858,12 @@ private fun VerticalPagePip(count: Int, current: Int, onClick: (() -> Unit)? = n
                     .width(2.dp)
                     .background(R1.Hairline),
             )
-            // Thumb — offset down by frac of available travel.
+            // Thumb — offset down by the animated fraction of available travel.
             val travel = trackHeight - thumbHeight
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = travel * frac)
+                    .padding(top = travel * animatedFrac)
                     .height(thumbHeight)
                     .width(4.dp)
                     .background(R1.AccentWarm),

@@ -19,6 +19,10 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         Toaster.init(this)
+        // Wire the album-art cache to the app's cache dir so HA media_player
+        // entity_pictures persist across launches. Disk hit ≈ 0 ms vs the ~300
+        // ms LAN round-trip every fresh fetch costs on the R1's slow stack.
+        com.github.itskenny0.r1ha.ui.components.AsyncBitmapCache.init(this)
         R1Log.i("App.onCreate", "application starting")
         appScope.launch {
             graph.haRepository.start()
