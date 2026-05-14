@@ -2,6 +2,8 @@ package com.github.itskenny0.r1ha.ui.components
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -279,6 +281,7 @@ fun EntityCard(
                         state.rawState.equals("playing", ignoreCase = true),
                     mediaIsMuted = state.id.domain == Domain.MEDIA_PLAYER && state.isVolumeMuted,
                     mediaSupportedFeatures = state.mediaSupportedFeatures,
+                    lastChangedAt = state.lastChanged,
                 ),
                 modifier = Modifier
                     .fillMaxSize()
@@ -300,6 +303,24 @@ fun EntityCard(
                     color = R1.StatusRed,
                 )
             }
+        }
+        // Long-press indicator — a tiny '⋯' glyph in the bottom-right corner
+        // when the card has a long-press target configured. Discoverability
+        // for the per-card long-press action (e.g. long-press the kitchen
+        // light to trigger scene.dinner) — without this affordance the
+        // feature is invisible until the user accidentally happens upon it.
+        // Inkmuted so it doesn't compete with the value readout; sits 8 dp
+        // from the card edges so it doesn't crowd the on/off pill in the
+        // opposite corner.
+        if (onLongPress != null && state.isAvailable) {
+            Text(
+                text = "⋯",
+                style = R1.labelMicro,
+                color = R1.InkMuted,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 8.dp, bottom = 6.dp),
+            )
         }
     }
     }

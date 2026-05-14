@@ -95,6 +95,11 @@ data class CardRenderModel(
      *  doesn't advertise NEXT_TRACK / PREVIOUS_TRACK we hide those buttons rather
      *  than show them and let HA reject the call with a Validation error. */
     val mediaSupportedFeatures: Int = 0,
+    /** Mirrors [com.github.itskenny0.r1ha.core.ha.EntityState.lastChanged] —
+     *  surfaces the state's age to themes that want to render a small
+     *  'X min ago' label so users can tell at a glance whether a sensor is
+     *  fresh. Null when the cache hasn't seen the entity yet. */
+    val lastChangedAt: java.time.Instant? = null,
     /**
      * Tick labels for the vertical tape meter (right side of the card). Top→bottom
      * order, typically five strings. Null falls back to the default `100/75/50/25/0`

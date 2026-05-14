@@ -273,6 +273,33 @@ private fun LogViewer() {
     val tick by R1LogBuffer.updates.collectAsStateWithLifecycle()
     val expanded = remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
     val entries = remember(tick) { R1LogBuffer.snapshot().reversed() }
+    // SAF launcher for the EXPORT button — writes the log buffer as a plain
+    // text file the user can share for diagnostics. Held outside the button's
+    // onClick so it's stable across recompositions (the activity-result
+    // contract registers once per composition).
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val pendingExport = remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
+    val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri: android.net.Uri? ->
+        val blob = pendingExport.value
+        pendingExport.value = null
+        if (uri == null || blob == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(blob.toByteArray(Charsets.UTF_8))
+            } ?: error("couldn't open output stream")
+            com.github.itskenny0.r1ha.core.util.Toaster.show("Logs saved")
+        }.onFailure { t ->
+            R1Log.w("DevMenu.exportLogs", "write failed: ${t.message}")
+            com.github.itskenny0.r1ha.core.util.Toaster.errorExpandable(
+                shortText = "Log export failed",
+                fullText = "Couldn't write the log file.\n\n${t.message ?: t.toString()}",
+            )
+        }
+    }
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -322,6 +349,48 @@ private fun LogViewer() {
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 Text("IMG CACHE", style = R1.labelMicro, color = R1.InkSoft)
+            }
+            Spacer(Modifier.width(6.dp))
+            // EXPORT — drop the entire log buffer to a SAF-picked file the
+            // user can share for diagnostics. Plain text (one line per
+            // entry) so non-developers can read it; timestamps in ISO
+            // format for grep-friendliness; throwables appended after their
+            // message with indented stack frames.
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(R1.SurfaceMuted)
+                    .r1Pressable(onClick = {
+                        val now = R1LogBuffer.snapshot()
+                        val blob = buildString {
+                            append("R1HA log export · ")
+                            append(java.time.Instant.now().toString())
+                            append('\n')
+                            append("App ${com.github.itskenny0.r1ha.BuildConfig.VERSION_NAME} (${com.github.itskenny0.r1ha.BuildConfig.VERSION_CODE})\n")
+                            append("${now.size} entries\n\n")
+                            for (e in now) {
+                                val ts = java.time.Instant.ofEpochMilli(e.timestampMillis).toString()
+                                append("[$ts] ${e.level} ${e.tag} — ${e.message}\n")
+                                e.throwable?.let { t ->
+                                    append("    ").append(t::class.java.name)
+                                    t.message?.let { append(": ").append(it) }
+                                    append('\n')
+                                    for (line in t.stackTraceToString().lines().take(20)) {
+                                        append("    ").append(line).append('\n')
+                                    }
+                                }
+                            }
+                        }
+                        pendingExport.value = blob
+                        val stamp = java.text.SimpleDateFormat(
+                            "yyyyMMdd-HHmm",
+                            java.util.Locale.US,
+                        ).format(java.util.Date())
+                        exportLauncher.launch("r1ha-logs-$stamp.txt")
+                    })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text("EXPORT", style = R1.labelMicro, color = R1.InkSoft)
             }
         }
         Spacer(Modifier.height(8.dp))

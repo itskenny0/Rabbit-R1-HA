@@ -135,6 +135,36 @@ fun SettingsScreen(
             item {
                 s.server?.haVersion?.let { InfoRow(label = "HA version", value = it, mono = true) }
             }
+            // Live connection state — collected from HaRepository.connection
+            // and rendered as a small human label so the user can spot a
+            // connection issue from the Settings screen without flipping back
+            // to the main deck to read the chrome dot. Refreshes live as the
+            // state machine moves.
+            item {
+                val conn by haRepository.connection.collectAsStateWithLifecycle()
+                val label = when (val c = conn) {
+                    is com.github.itskenny0.r1ha.core.ha.ConnectionState.Connected -> "Connected"
+                    com.github.itskenny0.r1ha.core.ha.ConnectionState.Idle -> "Idle"
+                    com.github.itskenny0.r1ha.core.ha.ConnectionState.Connecting -> "Connecting…"
+                    com.github.itskenny0.r1ha.core.ha.ConnectionState.Authenticating -> "Authenticating…"
+                    is com.github.itskenny0.r1ha.core.ha.ConnectionState.Disconnected ->
+                        "Disconnected (attempt ${c.attempt})"
+                    is com.github.itskenny0.r1ha.core.ha.ConnectionState.AuthLost ->
+                        "Auth lost — sign in again"
+                }
+                InfoRow(label = "Status", value = label)
+            }
+            // App version line — pulls from BuildConfig so it always matches
+            // the running APK. Pairs the marketing version + integer
+            // versionCode so the user can tell which exact build this is
+            // when filing an issue.
+            item {
+                InfoRow(
+                    label = "App version",
+                    value = "${com.github.itskenny0.r1ha.BuildConfig.VERSION_NAME} (${com.github.itskenny0.r1ha.BuildConfig.VERSION_CODE})",
+                    mono = true,
+                )
+            }
             // RECONNECT NOW — force-flush the WS + re-fetch fresh state without
             // touching tokens. Useful when the connection has gone stale (HA
             // restarted, Wi-Fi dropped briefly, etc.) and the user wants live

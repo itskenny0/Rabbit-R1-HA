@@ -103,6 +103,20 @@ object PragmaticHybridTheme : R1Theme {
                     color = R1.Ink,
                     maxLines = 2,
                 )
+                // Auto-ticking 'last changed' label — only renders when the
+                // entity has a known lastChangedAt (the cache has seen it).
+                // Sits directly under the friendly name as a small dim line so
+                // sensor users can tell at a glance whether their reading is
+                // fresh without it competing with the big value readout.
+                val rel = com.github.itskenny0.r1ha.ui.components.rememberRelativeTime(model.lastChangedAt)
+                if (rel.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = rel,
+                        style = R1.labelMicro,
+                        color = R1.InkMuted,
+                    )
+                }
                 Spacer(Modifier.height(20.dp))
                 // Hide the giant percent readout on media_player cards that are
                 // currently playing — the now-playing block + the right-side meter
