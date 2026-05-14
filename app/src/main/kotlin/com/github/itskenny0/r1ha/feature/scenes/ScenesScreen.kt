@@ -35,6 +35,7 @@ import com.github.itskenny0.r1ha.ui.components.R1TextField
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import com.github.itskenny0.r1ha.ui.components.r1RowPressable
 
 /**
  * Fast-fire launcher for HA scenes + scripts. Pulls the full entity list
@@ -128,7 +129,11 @@ fun ScenesScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(items = ui.entries, key = { it.id.value }) { entry ->
-                        SceneRow(entry, onFire = { vm.fire(entry) })
+                        SceneRow(
+                            entry,
+                            onFire = { vm.fire(entry) },
+                            onLongPress = { vm.showDetail(entry) },
+                        )
                     }
                 }
             }
@@ -137,13 +142,20 @@ fun ScenesScreen(
 }
 
 @Composable
-private fun SceneRow(entry: ScenesViewModel.Entry, onFire: () -> Unit) {
+private fun SceneRow(
+    entry: ScenesViewModel.Entry,
+    onFire: () -> Unit,
+    onLongPress: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(R1.ShapeS)
             .background(R1.SurfaceMuted)
-            .r1Pressable(onClick = onFire)
+            // Tap = fire the scene/script; long-press = expand detail toast with
+            // entity_id + service name. Long press is the right home for the
+            // metadata affordance: it's the non-destructive gesture.
+            .r1RowPressable(onTap = onFire, onLongPress = onLongPress)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

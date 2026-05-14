@@ -127,6 +127,28 @@ class ScenesViewModel(
     }
 
     /**
+     * Surface the entity_id + a hint at how to wire this into an HA
+     * automation. Useful when the user wants to reference a script from
+     * Node-RED, an automation YAML, or a webhook. Long-press is the
+     * non-destructive gesture (tap fires the entity) so it's the right
+     * place for an information affordance.
+     */
+    fun showDetail(entry: Entry) {
+        val short = entry.id.value
+        val full = buildString {
+            append(entry.name).append('\n')
+            append(entry.id.value).append('\n')
+            append(
+                when (entry.kind) {
+                    Kind.SCENE -> "service: scene.turn_on"
+                    Kind.SCRIPT -> "service: script.turn_on"
+                },
+            )
+        }
+        Toaster.showExpandable(shortText = short, fullText = full)
+    }
+
+    /**
      * Master "all lights off" — dispatches `light.turn_off` with no target,
      * which HA treats as "every entity in the light domain". Same trick
      * HA's own frontend dashboards use for the "All Lights Off" tile.
