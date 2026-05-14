@@ -441,6 +441,14 @@ private fun LogViewer() {
                                 shortText = "Last crash · ${raw.lineSequence().firstOrNull()?.take(40) ?: "(empty)"}",
                                 fullText = raw,
                             )
+                            // Delete both files after surfacing so the red
+                            // chip clears on next dev-menu visit. The user
+                            // has the trace in the toast; no reason to keep
+                            // it on disk after they've seen it.
+                            runCatching {
+                                if (unseen.exists()) unseen.delete()
+                                if (seen.exists()) seen.delete()
+                            }
                         }
                     })
                     .padding(horizontal = 10.dp, vertical = 6.dp),
