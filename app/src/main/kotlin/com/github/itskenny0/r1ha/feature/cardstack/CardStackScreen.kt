@@ -258,6 +258,33 @@ fun CardStackScreen(
         onDispose { view.keepScreenOn = false }
     }
 
+    // Auto-surface the last crash report if one exists on disk. Fires once
+    // per CardStackScreen composition (i.e. once per launch). The expandable
+    // error toast carries the full trace; tapping it expands so the user can
+    // share with the developer. Deletes the file after surfacing so we don't
+    // re-pop on every recomposition.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        runCatching {
+            val crashFile = java.io.File(context.filesDir, "last_crash.txt")
+            if (crashFile.exists() && crashFile.length() > 0L) {
+                val raw = crashFile.readText(Charsets.UTF_8)
+                com.github.itskenny0.r1ha.core.util.Toaster.errorExpandable(
+                    shortText = "Crash detected — tap for trace",
+                    fullText = raw,
+                )
+                // Don't delete — keep it accessible via the dev menu's
+                // LAST CRASH button in case the user wants to revisit. Just
+                // mark the file with a 'seen' suffix so we don't auto-pop
+                // again on next launch.
+                runCatching {
+                    java.io.File(context.filesDir, "last_crash_seen.txt").writeText(raw)
+                    crashFile.delete()
+                }
+            }
+        }
+    }
+
     // Customize-dialog entry from the card stack. `customizingId` is the entity_id under
     // edit; null means the dialog is closed. We hold it locally because the dialog is a
     // transient UI overlay — no need to thread it through the VM state.
@@ -711,7 +738,18 @@ private fun PageDeck(
     // cards.size) means adding a fresh card doesn't rebuild the pager state and
     // bounce the user back to the start of the deck.
     val infiniteScroll = appSettings.ui.infiniteScroll
-    val pagerState = androidx.compose.runtime.key(pageId, infiniteScroll, cards.isNotEmpty()) {
+    // Capture cards.size at composition time. Including it in the
+    // rememberPagerState key means the pager state rebuilds whenever the
+    // deck shrinks or grows — fixes a class of bug where the pageCount
+    // lambda closed over a stale `cards` reference (Compose preserves the
+    // first-composition closure inside a remembered PagerState) and the
+    // pager kept reporting the old size for currentPage validation.
+    // Reported symptom: 'scroll-up crash, especially on the first card'
+    // — when state mutations (entity add/remove via the new '…' menu, or
+    // periodic state-changed events) shifted the deck, the next scroll
+    // hit a size mismatch and Compose's Pager would throw on internal
+    // invariants. Re-keying on size restores invariant safety.
+    val pagerState = androidx.compose.runtime.key(pageId, infiniteScroll, cards.size) {
         androidx.compose.foundation.pager.rememberPagerState(
             initialPage = if (infiniteScroll && cards.isNotEmpty()) {
                 val anchor = INFINITE_PAGER_VIRTUAL_PAGES / 2
@@ -2167,20 +2205,12 @@ private fun JumpRow(
 private fun VerticalPagePip(count: Int, current: Int, onClick: (() -> Unit)? = null) {
     val trackHeight = 22.dp
     val thumbHeight = 6.dp
-    val targetFrac = if (count <= 1) 0f else current.toFloat() / (count - 1).toFloat()
-    // Smooth the thumb between positions so a wheel-driven nav (or a jump-to-
-    // card sheet pick) reads as a glide instead of a teleport. Spring tuning
-    // matches the card pager's own animateScrollToPage — they end at the same
-    // moment, so the thumb and the deck travel together. Low stiffness keeps
-    // it physical-feeling without overshooting on fast multi-card jumps.
-    val animatedFrac by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = targetFrac,
-        animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
-            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
-        ),
-        label = "r1-pip-thumb",
-    )
+    // Pip thumb animation temporarily reverted to static value — recent
+    // animateFloatAsState addition that runs during every scroll-triggered
+    // currentIndex change. Reverting as part of the binary-search for the
+    // scroll-up crash; will restore once LAST CRASH narrows down the
+    // culprit. Static value still tracks the current page; just no spring.
+    val animatedFrac = if (count <= 1) 0f else current.toFloat() / (count - 1).toFloat()
     Row(
         modifier = Modifier
             .clip(R1.ShapeRound)
