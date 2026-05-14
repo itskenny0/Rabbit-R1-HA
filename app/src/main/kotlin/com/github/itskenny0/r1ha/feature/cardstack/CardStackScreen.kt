@@ -530,6 +530,13 @@ fun CardStackScreen(
         // virtual page that maps to the chosen index (relative to current page) so
         // the wrap-around scroll stays seamless; in finite mode we just animate to
         // that page directly.
+        // Per-row context menu opened by long-pressing a JumpRow. Holds the index
+        // of the card whose menu is open; null = closed. Lifted to screen scope
+        // so the menu can render above the JumpToCardSheet itself (matches the
+        // pattern used by [tabManagementForId]).
+        val cardContextMenuIdx = androidx.compose.runtime.remember {
+            androidx.compose.runtime.mutableStateOf<Int?>(null)
+        }
         if (jumpPickerOpen.value && cards.size > 1) {
             JumpToCardSheet(
                 cards = cards,
@@ -547,8 +554,38 @@ fun CardStackScreen(
                 onRemove = { idx ->
                     cards.getOrNull(idx)?.let { vm.removeFavorite(it.id.value) }
                 },
+                onLongPress = { idx -> cardContextMenuIdx.value = idx },
                 onDismiss = { jumpPickerOpen.value = false },
             )
+        }
+
+        // Context menu on the long-pressed JumpRow. Surfaces page-move actions
+        // and a duplicate of the remove affordance in a focused modal. Hidden
+        // when there's only one page (nowhere to move to AND remove already on
+        // the row) so the long-press is a no-op rather than opening an empty
+        // sheet.
+        val ctxIdx = cardContextMenuIdx.value
+        if (ctxIdx != null) {
+            val ctxCard = cards.getOrNull(ctxIdx)
+            if (ctxCard == null) {
+                cardContextMenuIdx.value = null
+            } else {
+                CardContextMenu(
+                    entityName = ctxCard.friendlyName,
+                    entityId = ctxCard.id.value,
+                    pages = appSettings.pages,
+                    sourcePageId = appSettings.activePageId,
+                    onMove = { targetPageId ->
+                        vm.moveFavoriteToPage(ctxCard.id.value, targetPageId)
+                        cardContextMenuIdx.value = null
+                    },
+                    onRemove = {
+                        vm.removeFavorite(ctxCard.id.value)
+                        cardContextMenuIdx.value = null
+                    },
+                    onDismiss = { cardContextMenuIdx.value = null },
+                )
+            }
         }
 
         // ── Tab manage modal ────────────────────────────────────────────────────────
@@ -1156,6 +1193,112 @@ private fun TabManageDialog(
 }
 
 /**
+ * Per-card context menu opened by long-pressing a JumpRow. Currently surfaces
+ * page-move actions ("Move to PAGE_NAME" once per page other than the source)
+ * plus a duplicate REMOVE so the menu is the canonical 'do something to this
+ * card' surface. Dismisses on backdrop tap or BackHandler.
+ *
+ * Visual styling mirrors [TabManageDialog]: dim full-screen backdrop, sharp
+ * 2 dp inner panel with hairline border, warm-accent section header, monospace
+ * entity_id reminder beneath the friendly name. Keeps the modal language
+ * consistent across the dashboard.
+ */
+@Composable
+private fun CardContextMenu(
+    entityName: String,
+    entityId: String,
+    pages: List<com.github.itskenny0.r1ha.core.prefs.FavoritePage>,
+    sourcePageId: String,
+    onMove: (targetPageId: String) -> Unit,
+    onRemove: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.activity.compose.BackHandler(onBack = onDismiss)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(R1.Bg.copy(alpha = 0.92f))
+            .r1Pressable(onClick = onDismiss, hapticOnClick = false)
+            .systemBarsPadding(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp)
+                .clip(R1.ShapeS)
+                .background(R1.Surface)
+                .border(1.dp, R1.Hairline, R1.ShapeS)
+                .r1Pressable(onClick = {}, hapticOnClick = false)
+                .padding(16.dp)
+                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+        ) {
+            Text(text = "CARD ACTIONS", style = R1.sectionHeader, color = R1.AccentWarm)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = entityName,
+                style = R1.body,
+                color = R1.Ink,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Text(
+                text = entityId,
+                style = R1.labelMicro.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                color = R1.InkMuted,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            // Move-to-page entries. Filtered to pages OTHER than the source so
+            // we never offer a self-move. When there's only one page total,
+            // this section collapses to a 'no other pages' affordance pointing
+            // at the '+' chip so the user discovers the page-creation route.
+            val targetPages = pages.filter { it.id != sourcePageId }
+            Spacer(Modifier.height(14.dp))
+            Text(text = "MOVE TO", style = R1.labelMicro, color = R1.InkSoft)
+            Spacer(Modifier.height(6.dp))
+            if (targetPages.isEmpty()) {
+                Text(
+                    text = "No other pages yet — add one with the '+' chip on the tab strip.",
+                    style = R1.body,
+                    color = R1.InkMuted,
+                )
+            } else {
+                for (p in targetPages) {
+                    R1Button(
+                        text = p.name.uppercase(),
+                        onClick = { onMove(p.id) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
+                        variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+                    )
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            // Remove from this page — same destructive action surfaced via the
+            // inline '✕' chip. Duplicated here so the long-press menu is a
+            // complete 'manage this card' surface; a user who long-pressed
+            // expecting to remove (and missed that the inline chip existed)
+            // still finds the affordance.
+            R1Button(
+                text = "REMOVE FROM PAGE",
+                onClick = onRemove,
+                modifier = Modifier.fillMaxWidth(),
+                accent = R1.StatusRed,
+            )
+            Spacer(Modifier.height(8.dp))
+            R1Button(
+                text = "CANCEL",
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+            )
+        }
+    }
+}
+
+/**
  * Top chrome — hamburger left, vertical position pip + counter centre, settings gear right
  * with a small connection-state dot overlay. Sits *above* the pager so the peek strip
  * doesn't bleed visually into the icons.
@@ -1363,6 +1506,10 @@ private fun JumpToCardSheet(
      *  it. Lets the user prune their deck without round-tripping through the full
      *  favourites picker. */
     onRemove: (index: Int) -> Unit,
+    /** Long-press anywhere outside the drag handle on a row opens the per-card
+     *  context menu — used for moving the card to another page or other
+     *  per-entity actions that don't have an inline affordance. */
+    onLongPress: (index: Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     androidx.activity.compose.BackHandler(onBack = onDismiss)
@@ -1397,7 +1544,7 @@ private fun JumpToCardSheet(
                 }
             }
             Text(
-                text = "TAP TO JUMP · LONG-PRESS + DRAG TO REORDER · WHEEL SCROLLS",
+                text = "TAP JUMP · LONG-PRESS MENU · DRAG # TO REORDER · WHEEL SCROLLS",
                 style = R1.labelMicro,
                 color = R1.InkMuted,
                 modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
@@ -1425,6 +1572,7 @@ private fun JumpToCardSheet(
                     isDragging = isDragging,
                     onClick = { onPick(idx) },
                     onRemove = { onRemove(idx) },
+                    onLongPress = { onLongPress(idx) },
                     dragHandle = dragHandle,
                 )
             }
@@ -1447,14 +1595,14 @@ private fun JumpRow(
     isDragging: Boolean,
     onClick: () -> Unit,
     onRemove: () -> Unit,
+    onLongPress: () -> Unit,
     dragHandle: Modifier,
 ) {
-    // Drag-handle modifier wraps the whole row so the user can long-press anywhere
-    // on the row to grab it. r1Pressable for the tap-to-jump action sits on top —
-    // single tap fires onClick, long-press promotes to drag. The '✕' chip on the
-    // right has its own r1Pressable so a tap there unfavourites the entity
-    // without also firing the row's onClick (Compose's gesture priority resolves
-    // the inner chip first).
+    // Row layout — the leftmost "##" handle owns the drag-reorder long-press, the
+    // middle name area owns the row-level tap (jump-to) + long-press (context
+    // menu), and the right '✕' chip remove the entity. Splitting the gestures by
+    // sub-region avoids a single global long-press that would have to be either
+    // drag OR menu but not both.
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1466,21 +1614,46 @@ private fun JumpRow(
                     isActive -> R1.AccentWarm
                     else -> R1.SurfaceMuted
                 },
-            )
-            .then(dragHandle)
-            .r1Pressable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            ),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Position number on the left so the user can see their currentIndex in
-            // context (and scan for a specific one).
-            Text(
-                text = "%2d".format(index + 1),
-                style = R1.labelMicro,
-                color = if (isActive) R1.Bg else R1.InkMuted,
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Drag handle — index number on a slightly wider hit area. Long-press
+            // on this zone enters the drag-reorder gesture. A subtle column of
+            // dots beside the number hints at "this is grabbable" without
+            // shouting; matches the lightweight chrome of the rest of the row.
+            Box(
+                modifier = Modifier
+                    .then(dragHandle)
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "⋮",
+                        style = R1.labelMicro,
+                        color = if (isActive) R1.Bg.copy(alpha = 0.7f) else R1.InkSoft,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "%2d".format(index + 1),
+                        style = R1.labelMicro,
+                        color = if (isActive) R1.Bg else R1.InkMuted,
+                    )
+                }
+            }
+            Spacer(Modifier.width(6.dp))
+            // Name + domain — tap to jump, long-press to open context menu. The
+            // r1RowPressable variant detects both gestures on the same sub-region
+            // without the conflict r1Pressable + a parent long-press would have.
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .r1RowPressable(onTap = onClick, onLongPress = onLongPress)
+                    .padding(vertical = 2.dp),
+            ) {
                 Text(
                     text = name,
                     style = R1.body,

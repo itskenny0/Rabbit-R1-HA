@@ -604,6 +604,39 @@ class CardStackViewModel(
         }
     }
 
+    /**
+     * Move [entityId] from its current page to [targetPageId]. Atomic — both the
+     * source-page removal and the target-page append land in a single
+     * [SettingsRepository.update] so the favourites union never sees the entity
+     * in zero pages or in two pages at once. Append-at-end on the target page
+     * (rather than insert-at-current-index) matches how the picker adds new
+     * favourites: predictable, no surprise reorder of the target deck. No-op if
+     * the source page can't be resolved (rare race with delete) or if [targetPageId]
+     * doesn't exist.
+     */
+    fun moveFavoriteToPage(entityId: String, targetPageId: String) {
+        viewModelScope.launch {
+            settings.update { s ->
+                if (s.pages.none { it.id == targetPageId }) return@update s
+                val updatedPages = s.pages.map { page ->
+                    when {
+                        page.id == targetPageId -> {
+                            // Skip the append if the target already contains the
+                            // id — guards against the user moving a card into its
+                            // own page via a stale menu entry.
+                            if (entityId in page.favorites) page
+                            else page.copy(favorites = page.favorites + entityId)
+                        }
+                        entityId in page.favorites ->
+                            page.copy(favorites = page.favorites.filter { it != entityId })
+                        else -> page
+                    }
+                }
+                s.copy(pages = updatedPages)
+            }
+        }
+    }
+
     /** Move the page at [pageId] one slot to the left, if possible. No-op when
      *  the page is already leftmost. Used by the manage modal's MOVE LEFT
      *  button — quicker than implementing drag-reorder on the tab strip itself,
