@@ -60,6 +60,22 @@ class AppGraph(context: Context) {
         TokenRefresher(http = okHttp, settings = settings, tokens = tokens)
     }
 
+    /** Single-process scope for the persister's debounce loop. Same SupervisorJob
+     *  pattern as the WS client so a crash in the disk writer can't kill the rest
+     *  of the app. */
+    private val persisterScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Disk-backed snapshot of the HA entity cache — used by [haRepository] to
+     *  paint cards at cold start from the user's last-known state, before the
+     *  WS connects. Tiny JSON file in the app's files dir; lazy so test
+     *  contexts that never build the repository don't pay the construction
+     *  cost. */
+    val entityCachePersister: com.github.itskenny0.r1ha.core.ha.EntityStateCachePersister by lazy {
+        com.github.itskenny0.r1ha.core.ha.EntityStateCachePersister.forContext(
+            appContext, persisterScope,
+        )
+    }
+
     val haRepository: HaRepository by lazy {
         DefaultHaRepository(
             ws = wsClient,
@@ -67,6 +83,7 @@ class AppGraph(context: Context) {
             settings = settings,
             tokens = tokens,
             refresher = tokenRefresher,
+            persister = entityCachePersister,
         )
     }
 

@@ -55,6 +55,13 @@ class DefaultHaRepository(
     private val refresher: TokenRefresher? = null,
     private val backoff: BackoffPolicy = BackoffPolicy(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /**
+     * Optional disk persister for the entity cache — seeds [cache] on start
+     * with the last-seen snapshot so the card stack paints immediately at
+     * cold-start, before the WS even connects. Null in tests so they don't
+     * accidentally read a developer's snapshot from /tmp.
+     */
+    private val persister: EntityStateCachePersister? = null,
 ) : HaRepository {
 
     override val connection: StateFlow<ConnectionState> = ws.state
@@ -150,6 +157,24 @@ class DefaultHaRepository(
 
     override suspend fun start() {
         if (supervisorJob != null) return
+        // Seed the in-memory cache from disk BEFORE we start the WS. Means the
+        // card stack screen subscribes to a cache that already has the user's
+        // last-known states — first paint shows actual cards, not the
+        // 'Connecting…' EmptyState. Fresh HA data merges in as soon as the WS
+        // delivers it.
+        persister?.let { p ->
+            val restored = withContext(Dispatchers.IO) { p.load() }
+            if (restored.isNotEmpty()) {
+                cache.value = restored
+                R1Log.i("HaRepo", "seeded cache from disk: ${restored.size} entities")
+            }
+            // Bind the persister to start collecting markDirty ticks. The
+            // bind() call kicks off the debounce loop on [scope].
+            p.bind()
+            // Mirror every cache change into the persister so the snapshot
+            // stays current. Debouncing happens inside markDirty's flow.
+            cache.onEach { p.markDirty(it) }.launchIn(scope)
+        }
         supervisorJob = scope.launch {
             ws.inbound.onEach { msg ->
                 when (msg) {
