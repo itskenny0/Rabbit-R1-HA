@@ -13,6 +13,7 @@ An Android app for the Rabbit R1 (running LineageOS) that turns the scroll wheel
 - **Recent Activity feed** — HA's logbook reverse-chronologically, with 12 h / 24 h / 3 d windows and full-text search. Tap any row for a long-form detail toast; long-press to open that entity's `/history` view in HA's web UI. Settings → Recent Activity.
 - **Master OFF actions** — one-tap mass off for *all lights*, *all media*, or *all switches* from the Scenes & Scripts screen. HA's `entity_id: "all"` trick under the hood.
 - **Templates evaluator** — POST a Jinja2 template to HA's `/api/template` and render against live state. Side-by-side example chips ("Sun elevation", "On lights count") for one-tap discovery. Settings → Templates.
+- **Service Caller** — fire any HA service (`automation.reload`, `homeassistant.check_config`, `persistent_notification.create`, …) without leaving the device. JSON data payload editor + result panel with copy-to-clipboard. Settings → Service Caller.
 - **Gesture-first navigation** — swipe left for Settings, right for the Favourites picker, tap the value area to toggle on/off; small chevron-back buttons on every sub-screen plus full system-back support.
 - **OAuth sign-in** — enter your HA URL once and authenticate in an in-app WebView; tokens encrypted at rest with an AndroidKeystore-wrapped AES-256/GCM key.
 - **Three themes** — *Pragmatic Hybrid* (default), *Minimal Dark*, *Colourful Cards*. Switch live in Settings with a side-by-side preview.
