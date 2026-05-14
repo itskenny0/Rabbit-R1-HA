@@ -69,14 +69,16 @@ fun ScenesScreen(
             .systemBarsPadding(),
     ) {
         R1TopBar(title = "SCENES & SCRIPTS", onBack = onBack)
-        // ALL LIGHTS OFF master action — sticky at the top, single tap.
-        // Lives here because mass-actions sit at the same conceptual layer
-        // as scene activations (fire-and-forget, no scalar). Disabled while
-        // a previous tap is still in flight so a double-tap doesn't queue
-        // two dispatches.
-        AllLightsOffButton(
+        // Master off actions — sticky at the top, single tap each. Lives
+        // here because mass-actions sit at the same conceptual layer as
+        // scene activations (fire-and-forget, no scalar). The buttons
+        // disable themselves while a previous tap is still in flight so
+        // a double-tap doesn't queue two dispatches.
+        MasterActionsRow(
             inFlight = ui.allLightsOffInFlight,
-            onClick = { vm.allLightsOff() },
+            onLightsOff = { vm.allLightsOff() },
+            onMediaPause = { vm.allMediaPause() },
+            onSwitchesOff = { vm.allSwitchesOff() },
         )
         // Search bar — substring match against entry name + entity_id. Big
         // HA installs have 30+ scenes and 50+ scripts; without search the
@@ -184,27 +186,65 @@ private fun SceneRow(
 }
 
 @Composable
-private fun AllLightsOffButton(inFlight: Boolean, onClick: () -> Unit) {
+private fun MasterActionsRow(
+    inFlight: Boolean,
+    onLightsOff: () -> Unit,
+    onMediaPause: () -> Unit,
+    onSwitchesOff: () -> Unit,
+) {
+    // Three side-by-side master actions. Equal weight so the row reads as
+    // "panel of mass actions" rather than a primary + secondaries.
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp)
-                .clip(R1.ShapeS)
-                .background(if (inFlight) R1.SurfaceMuted else R1.StatusRed.copy(alpha = 0.18f))
-                .r1Pressable(onClick = { if (!inFlight) onClick() }),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = if (inFlight) "DISPATCHING…" else "ALL LIGHTS OFF",
-                style = R1.labelMicro,
-                color = if (inFlight) R1.InkMuted else R1.StatusRed,
-            )
-        }
+        MasterActionPill(
+            modifier = Modifier.weight(1f),
+            label = "LIGHTS",
+            accent = R1.StatusRed,
+            inFlight = inFlight,
+            onClick = onLightsOff,
+        )
+        MasterActionPill(
+            modifier = Modifier.weight(1f),
+            label = "MEDIA",
+            accent = R1.AccentCool,
+            inFlight = inFlight,
+            onClick = onMediaPause,
+        )
+        MasterActionPill(
+            modifier = Modifier.weight(1f),
+            label = "SWITCHES",
+            accent = R1.AccentWarm,
+            inFlight = inFlight,
+            onClick = onSwitchesOff,
+        )
+    }
+}
+
+@Composable
+private fun MasterActionPill(
+    modifier: Modifier,
+    label: String,
+    accent: androidx.compose.ui.graphics.Color,
+    inFlight: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .height(36.dp)
+            .clip(R1.ShapeS)
+            .background(if (inFlight) R1.SurfaceMuted else accent.copy(alpha = 0.18f))
+            .r1Pressable(onClick = { if (!inFlight) onClick() }),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = if (inFlight) "…" else label,
+            style = R1.labelMicro,
+            color = if (inFlight) R1.InkMuted else accent,
+        )
     }
 }
 

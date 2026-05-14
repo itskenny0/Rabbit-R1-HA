@@ -149,51 +149,83 @@ class ScenesViewModel(
     }
 
     /**
-     * Master "all lights off" — dispatches `light.turn_off` with no target,
-     * which HA treats as "every entity in the light domain". Same trick
-     * HA's own frontend dashboards use for the "All Lights Off" tile.
-     * Other domains have their own master variants (`switch.turn_off`,
-     * `media_player.media_pause`) we could add later; lights are the
-     * most-requested mass-action by far.
+     * Master "all lights off" — dispatches `light.turn_off` with
+     * `entity_id: "all"`, which HA treats as "every entity in the
+     * light domain". Same trick HA's own frontend dashboards use for
+     * the "All Lights Off" tile.
      *
-     * Why this lives on the Scenes screen: it's the same conceptual
-     * surface — fire-and-forget mass actions. A user reaching for
-     * "all lights off" is in the same flow as reaching for a "bedtime"
-     * scene; putting them together saves a navigation hop.
+     * Why these master actions live on the Scenes screen: same
+     * conceptual surface as scene activation — fire-and-forget mass
+     * actions. Saves a navigation hop when the user just wants
+     * "everything off" or "stop the music".
      */
-    fun allLightsOff() {
+    fun allLightsOff() = fireMasterOff(
+        domain = Domain.LIGHT,
+        service = "turn_off",
+        emptyMessage = "No light entities — nothing to turn off",
+        successMessage = "All lights off",
+        failurePrefix = "All-lights-off",
+    )
+
+    /** Master "all media pause" — fires `media_player.media_pause` for
+     *  every media_player entity. Some integrations honour pause as
+     *  stop; that's HA's responsibility, not ours. */
+    fun allMediaPause() = fireMasterOff(
+        domain = Domain.MEDIA_PLAYER,
+        service = "media_pause",
+        emptyMessage = "No media players — nothing to pause",
+        successMessage = "All media paused",
+        failurePrefix = "All-media-pause",
+    )
+
+    /** Master "all switches off" — fires `switch.turn_off` across the
+     *  switch domain. Useful for "kill the plugs" before bed. */
+    fun allSwitchesOff() = fireMasterOff(
+        domain = Domain.SWITCH,
+        service = "turn_off",
+        emptyMessage = "No switches — nothing to turn off",
+        successMessage = "All switches off",
+        failurePrefix = "All-switches-off",
+    )
+
+    /** Common dispatcher for the "all X off" master buttons. Picks any
+     *  entity in [domain] from the cached states so the [ServiceCall]
+     *  constructor can carry a target — the actual scope is set via
+     *  the `entity_id: "all"` data field which HA recognises as
+     *  "every entity in this domain". */
+    private fun fireMasterOff(
+        domain: Domain,
+        service: String,
+        emptyMessage: String,
+        successMessage: String,
+        failurePrefix: String,
+    ) {
         if (_ui.value.allLightsOffInFlight) return
         _ui.value = _ui.value.copy(allLightsOffInFlight = true)
         viewModelScope.launch {
-            // Construct a domain-wide call by targeting any light entity
-            // we know of and overriding the target afterwards. Cheaper than
-            // adding a "no-target" branch to ServiceCall.
-            val anyLight = haRepository.listAllEntities().getOrNull()
-                ?.firstOrNull { it.id.domain == Domain.LIGHT }
+            val anyEntity = haRepository.listAllEntities().getOrNull()
+                ?.firstOrNull { it.id.domain == domain }
                 ?.id
-            if (anyLight == null) {
-                Toaster.show("No light entities — nothing to turn off")
+            if (anyEntity == null) {
+                Toaster.show(emptyMessage)
                 _ui.value = _ui.value.copy(allLightsOffInFlight = false)
                 return@launch
             }
-            // The ServiceCall plumbing wants a target. We pass anyLight, but
-            // include `entity_id: "all"` in the data payload — HA accepts
-            // either form and prefers the data field when set.
             val call = ServiceCall(
-                target = anyLight,
-                service = "turn_off",
+                target = anyEntity,
+                service = service,
                 data = kotlinx.serialization.json.buildJsonObject {
                     put("entity_id", kotlinx.serialization.json.JsonPrimitive("all"))
                 },
             )
             haRepository.call(call).fold(
                 onSuccess = {
-                    R1Log.i("Scenes", "all lights off dispatched")
-                    Toaster.show("All lights off")
+                    R1Log.i("Scenes", "$failurePrefix dispatched")
+                    Toaster.show(successMessage)
                 },
                 onFailure = { t ->
-                    R1Log.w("Scenes", "all lights off failed: ${t.message}")
-                    Toaster.error("All-off failed: ${t.message ?: "unknown"}")
+                    R1Log.w("Scenes", "$failurePrefix failed: ${t.message}")
+                    Toaster.error("$failurePrefix failed: ${t.message ?: "unknown"}")
                 },
             )
             _ui.value = _ui.value.copy(allLightsOffInFlight = false)
