@@ -95,6 +95,7 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ui.weather?.let { WeatherCard(it, onClick = onOpenWeather) }
+                ui.sun?.let { SunCard(it) }
                 ui.persons?.let { PersonsCard(it, onClick = onOpenPersons) }
                 ui.nextEvent?.let { CalendarCard(it, onClick = onOpenCalendars) }
                 MetricsRow(
@@ -154,6 +155,55 @@ private fun WeatherCard(
                 style = R1.numeralXl,
                 color = R1.Ink,
             )
+        }
+    }
+}
+
+@Composable
+private fun SunCard(s: DashboardViewModel.SunSummary) {
+    // Read-only: there's no useful tap action on the sun. (Could route
+    // to a /history?entity_id=sun.sun web view but the dashboard is
+    // already exposing the salient fields.)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Sun glyph state — above_horizon = ☀, below_horizon = ☾ +
+            // muted tint so the night state reads as quiet.
+            val isUp = s.state == "above_horizon"
+            Text(
+                text = if (isUp) "☀" else "☾",
+                style = R1.numeralXl,
+                color = if (isUp) R1.AccentWarm else R1.AccentCool,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "SUN", style = R1.labelMicro, color = R1.InkSoft)
+                Text(
+                    text = (if (isUp) "ABOVE HORIZON" else "BELOW HORIZON") +
+                        (s.elevation?.let { " · ${"%.1f".format(it)}°" } ?: ""),
+                    style = R1.body.copy(fontWeight = FontWeight.SemiBold),
+                    color = R1.Ink,
+                )
+            }
+        }
+        // Next rise / set — show whichever is upcoming (already past for
+        // the other half of the day cycle, no point repeating).
+        Row {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "NEXT RISE", style = R1.labelMicro, color = R1.InkMuted)
+                RelativeTimeLabel(at = s.nextRising, color = R1.AccentWarm, style = R1.labelMicro)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "NEXT SET", style = R1.labelMicro, color = R1.InkMuted)
+                RelativeTimeLabel(at = s.nextSetting, color = R1.AccentCool, style = R1.labelMicro)
+            }
         }
     }
 }

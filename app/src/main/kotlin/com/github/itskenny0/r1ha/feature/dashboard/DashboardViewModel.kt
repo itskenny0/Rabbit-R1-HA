@@ -55,11 +55,20 @@ class DashboardViewModel(
     )
 
     @androidx.compose.runtime.Stable
+    data class SunSummary(
+        val state: String,
+        val elevation: Double?,
+        val nextRising: Instant?,
+        val nextSetting: Instant?,
+    )
+
+    @androidx.compose.runtime.Stable
     data class UiState(
         val loading: Boolean = true,
         val weather: WeatherSummary? = null,
         val persons: PersonsSummary? = null,
         val nextEvent: CalendarSummary? = null,
+        val sun: SunSummary? = null,
         val cameraCount: Int = 0,
         val notifications: List<PersistentNotification> = emptyList(),
         val error: String? = null,
@@ -77,7 +86,8 @@ class DashboardViewModel(
                 val calendarJob = async { haRepository.listRawEntitiesByDomain("calendar") }
                 val cameraJob = async { haRepository.listRawEntitiesByDomain("camera") }
                 val notifJob = async { haRepository.listPersistentNotifications() }
-                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob)
+                val sunJob = async { haRepository.listRawEntitiesByDomain("sun") }
+                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob)
                 val weather = weatherJob.await().getOrNull()?.firstOrNull()?.let { row ->
                     WeatherSummary(
                         name = row.friendlyName,
@@ -118,6 +128,16 @@ class DashboardViewModel(
                 }
                 val cameras = cameraJob.await().getOrNull().orEmpty()
                 val notifs = notifJob.await().getOrNull().orEmpty()
+                val sun = sunJob.await().getOrNull()?.firstOrNull()?.let { row ->
+                    SunSummary(
+                        state = row.state,
+                        elevation = (row.attributes["elevation"] as? JsonPrimitive)?.content?.toDoubleOrNull(),
+                        nextRising = (row.attributes["next_rising"] as? JsonPrimitive)?.content
+                            ?.let { runCatching { Instant.parse(it) }.getOrNull() },
+                        nextSetting = (row.attributes["next_setting"] as? JsonPrimitive)?.content
+                            ?.let { runCatching { Instant.parse(it) }.getOrNull() },
+                    )
+                }
                 R1Log.i(
                     "Dashboard",
                     "weather=${weather != null} persons=${persons?.rows?.size ?: 0} " +
@@ -128,6 +148,7 @@ class DashboardViewModel(
                     weather = weather,
                     persons = persons,
                     nextEvent = nextEvent,
+                    sun = sun,
                     cameraCount = cameras.size,
                     notifications = notifs,
                     error = null,
