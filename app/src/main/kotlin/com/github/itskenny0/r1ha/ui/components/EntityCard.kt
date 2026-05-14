@@ -304,24 +304,11 @@ fun EntityCard(
                 )
             }
         }
-        // Long-press indicator — a tiny '⋯' glyph in the bottom-right corner
-        // when the card has a long-press target configured. Discoverability
-        // for the per-card long-press action (e.g. long-press the kitchen
-        // light to trigger scene.dinner) — without this affordance the
-        // feature is invisible until the user accidentally happens upon it.
-        // Inkmuted so it doesn't compete with the value readout; sits 8 dp
-        // from the card edges so it doesn't crowd the on/off pill in the
-        // opposite corner.
-        if (onLongPress != null && state.isAvailable) {
-            Text(
-                text = "⋯",
-                style = R1.labelMicro,
-                color = R1.InkMuted,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 8.dp, bottom = 6.dp),
-            )
-        }
+        // Long-press indicator temporarily disabled — recent EntityCard
+        // structural change that lands inside the same outer Box as the
+        // card body + unavailable overlay. Reverting as part of the binary
+        // search for the scroll-up crash. Will re-add once the LAST CRASH
+        // dev menu affordance gives us a trace.
     }
     }
 }

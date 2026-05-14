@@ -1787,17 +1787,17 @@ private fun ChromeRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Top-left: favourites hamburger (custom 3-stroke glyph, not Material's filled icon).
-        // Tap: open the favourites picker. Long-press: open the quick-actions
-        // sheet (currently just 'all off' on the active page). r1RowPressable
-        // gives both gestures on the same tile.
+        // Reverted to tap-only r1Pressable as part of the binary-search for
+        // the scroll-up crash — long-press on the hamburger was a recent
+        // addition and its r1RowPressable gesture detector lives in the
+        // chrome area, which could in principle interact with the pager
+        // gesture if the user starts a swipe near the top. The quick-actions
+        // sheet entry will be restored once the crash root cause is known.
         Box(
             modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .r1RowPressable(
-                    onTap = onOpenFavoritesPicker,
-                    onLongPress = onLongPressHamburger,
-                ),
+                .r1Pressable(onOpenFavoritesPicker),
             contentAlignment = Alignment.Center,
         ) {
             HamburgerGlyph(size = 18.dp)
