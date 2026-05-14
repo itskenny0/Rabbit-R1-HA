@@ -426,6 +426,14 @@ fun SettingsScreen(
             }
             item {
                 SwitchRow(
+                    label = "Start on Dashboard",
+                    subtitle = "Open the app on the TODAY dashboard (weather / people / next event) instead of the card stack. Useful for wall-mounted / kiosk R1s.",
+                    checked = s.behavior.startOnDashboard,
+                    onCheckedChange = { vm.setStartOnDashboard(it) },
+                )
+            }
+            item {
+                SwitchRow(
                     label = "Wheel toggles switches",
                     subtitle = "On (default): wheel-up turns locks, covers, vacuums, plain " +
                         "switches on; wheel-down turns them off. Off: wheel does nothing on " +

@@ -69,9 +69,16 @@ class MainActivity : ComponentActivity() {
             }
 
             // Lock the start destination to the FIRST loaded value so theme changes, server
-            // changes, etc. don't re-graph the NavHost mid-session.
+            // changes, etc. don't re-graph the NavHost mid-session. Two paths:
+            //   - server == null         → ONBOARDING
+            //   - server + startOnDashboard → DASHBOARD (wall-mounted / kiosk R1 path)
+            //   - server + default        → CARD_STACK (handheld R1 path)
             val startDestination = remember(initial) {
-                if (initial.server != null) Routes.CARD_STACK else Routes.ONBOARDING
+                when {
+                    initial.server == null -> Routes.ONBOARDING
+                    initial.behavior.startOnDashboard -> Routes.DASHBOARD
+                    else -> Routes.CARD_STACK
+                }
             }
             val navController = rememberNavController()
             R1Log.d("MainActivity.setContent", "startDestination=$startDestination server=${initial.server?.url ?: "null"}")

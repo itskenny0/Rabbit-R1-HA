@@ -59,6 +59,7 @@ data class AppBackup(
     val behaviorTapToToggle: Boolean = false,
     val behaviorHideStatusBar: Boolean = false,
     val behaviorShowBatteryWhenStatusBarHidden: Boolean = false,
+    val behaviorStartOnDashboard: Boolean = false,
     val behaviorWheelTogglesSwitches: Boolean = true,
     val behaviorToastLogLevel: ToastLogLevel = ToastLogLevel.OFF,
 
@@ -119,6 +120,7 @@ fun AppSettings.toBackup(createdAt: String): AppBackup = AppBackup(
     behaviorTapToToggle = behavior.tapToToggle,
     behaviorHideStatusBar = behavior.hideStatusBar,
     behaviorShowBatteryWhenStatusBarHidden = behavior.showBatteryWhenStatusBarHidden,
+    behaviorStartOnDashboard = behavior.startOnDashboard,
     behaviorWheelTogglesSwitches = behavior.wheelTogglesSwitches,
     behaviorToastLogLevel = behavior.toastLogLevel,
     advanced = advanced,
@@ -171,6 +173,7 @@ fun AppBackup.applyOnto(prev: AppSettings): AppSettings {
             tapToToggle = behaviorTapToToggle,
             hideStatusBar = behaviorHideStatusBar,
             showBatteryWhenStatusBarHidden = behaviorShowBatteryWhenStatusBarHidden,
+            startOnDashboard = behaviorStartOnDashboard,
             wheelTogglesSwitches = behaviorWheelTogglesSwitches,
             toastLogLevel = behaviorToastLogLevel,
         ),

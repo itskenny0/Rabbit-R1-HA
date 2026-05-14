@@ -107,6 +107,15 @@ data class Behavior(
      */
     val showBatteryWhenStatusBarHidden: Boolean = false,
     /**
+     * When on, the app opens on the TODAY dashboard rather than the
+     * card stack. Useful for wall-mounted / kiosk R1 setups where the
+     * device's primary purpose is information radiation (weather,
+     * who's home, calendar) rather than active control. Defaults to
+     * off because the card stack is the more-frequent use case for
+     * handheld R1s.
+     */
+    val startOnDashboard: Boolean = false,
+    /**
      * When on (the default), scrolling the wheel on a non-scalar card (lock,
      * cover-without-position, vacuum, plain switch) flips it on/off — wheel-up =
      * on, wheel-down = off. Earlier versions flipped this to off after one user

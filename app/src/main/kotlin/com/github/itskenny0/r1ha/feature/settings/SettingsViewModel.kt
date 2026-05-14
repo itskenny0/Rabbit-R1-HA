@@ -59,6 +59,9 @@ class SettingsViewModel(
     fun setShowBatteryWhenStatusBarHidden(enabled: Boolean) = update {
         it.copy(behavior = it.behavior.copy(showBatteryWhenStatusBarHidden = enabled))
     }
+    fun setStartOnDashboard(enabled: Boolean) = update {
+        it.copy(behavior = it.behavior.copy(startOnDashboard = enabled))
+    }
     fun setWheelTogglesSwitches(enabled: Boolean) =
         update { it.copy(behavior = it.behavior.copy(wheelTogglesSwitches = enabled)) }
 
