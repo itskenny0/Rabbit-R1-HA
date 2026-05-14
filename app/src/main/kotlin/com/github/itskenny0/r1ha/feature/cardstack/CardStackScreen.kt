@@ -669,6 +669,7 @@ fun CardStackScreen(
                 onMoveLeft = { id -> vm.movePageLeft(id) },
                 onMoveRight = { id -> vm.movePageRight(id) },
                 onSetAccent = { id, argb -> vm.setPageAccent(id, argb) },
+                onSetIcon = { id, icon -> vm.setPageIcon(id, icon) },
                 onDismiss = { tabManagementForId.value = null },
             )
         }
@@ -1348,6 +1349,7 @@ private fun TabManageDialog(
     onMoveLeft: (String) -> Unit,
     onMoveRight: (String) -> Unit,
     onSetAccent: (pageId: String, accentArgb: Int?) -> Unit,
+    onSetIcon: (pageId: String, icon: String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val initial = if (isAdd) "NEW" else (page?.name ?: "")
@@ -1510,6 +1512,50 @@ private fun TabManageDialog(
                                     color = R1.InkMuted,
                                 )
                             }
+                        }
+                    }
+                }
+            }
+            // Icon row — curated set of Unicode glyphs that read cleanly on
+            // the R1's mono-style display. Tap to apply; '—' clears the
+            // override (no icon prepended to the chip). Edit mode only,
+            // mirroring the accent row's gating.
+            if (!isAdd && page != null) {
+                Spacer(Modifier.height(10.dp))
+                Text(text = "ICON", style = R1.labelMicro, color = R1.InkSoft)
+                Spacer(Modifier.height(6.dp))
+                val iconPresets = listOf<String?>(
+                    null, "⌂", "★", "◆", "◇", "☀", "☾", "♪", "⚙",
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    for (preset in iconPresets) {
+                        val selected = page.icon == preset
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(28.dp)
+                                .clip(R1.ShapeS)
+                                .background(R1.SurfaceMuted)
+                                .then(
+                                    if (selected) Modifier.border(1.5.dp, R1.Ink, R1.ShapeS)
+                                    else Modifier.border(1.dp, R1.Hairline, R1.ShapeS),
+                                )
+                                .r1Pressable(onClick = {
+                                    com.github.itskenny0.r1ha.core.util.R1Log.d(
+                                        "TabManage", "setPageIcon ${page.id} -> ${preset ?: "(clear)"}",
+                                    )
+                                    onSetIcon(page.id, preset)
+                                }),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = preset ?: "—",
+                                style = R1.labelMicro,
+                                color = if (preset == null) R1.InkMuted else R1.Ink,
+                            )
                         }
                     }
                 }
