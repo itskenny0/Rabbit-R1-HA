@@ -49,6 +49,12 @@ class TokenRefresher(
      */
     suspend fun ensureFresh(skewMillis: Long = 60_000L): Boolean {
         val current = tokens.load() ?: return false
+        // Long-lived access token path: refreshToken is the empty sentinel and
+        // expiresAtMillis is Long.MAX_VALUE. There's no refresh to do; the
+        // caller can proceed with the stored access token as-is. If the LLAT
+        // is in fact revoked or expired, HTTP 401s will surface from the
+        // repository layer with the usual sign-out toast.
+        if (current.refreshToken.isBlank()) return true
         if (current.expiresAtMillis > System.currentTimeMillis() + skewMillis) return true
         return refresh(current)
     }
@@ -56,6 +62,9 @@ class TokenRefresher(
     /** Force a refresh regardless of remaining lifetime. Used after [ConnectionState.AuthLost]. */
     suspend fun forceRefresh(): Boolean {
         val current = tokens.load() ?: return false
+        // LLAT path — there's nothing to refresh. Return false so callers
+        // surface "sign out & reconnect" toasts rather than silently looping.
+        if (current.refreshToken.isBlank()) return false
         return refresh(current)
     }
 

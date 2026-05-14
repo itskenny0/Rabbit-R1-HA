@@ -19,4 +19,5 @@ object Routes {
     const val WEATHER = "weather"
     const val PERSONS = "persons"
     const val CALENDARS = "calendars"
+    const val LONG_LIVED_TOKEN = "long_lived_token"
 }

@@ -56,6 +56,7 @@ fun SettingsScreen(
     onOpenWeather: () -> Unit,
     onOpenPersons: () -> Unit,
     onOpenCalendars: () -> Unit,
+    onOpenLongLivedToken: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -173,6 +174,17 @@ fun SettingsScreen(
                     label = "App version",
                     value = "${com.github.itskenny0.r1ha.BuildConfig.VERSION_NAME} (${com.github.itskenny0.r1ha.BuildConfig.VERSION_CODE})",
                     mono = true,
+                )
+            }
+            // Long-lived token entry — alternative to the OAuth flow for
+            // kiosk-style setups or users who prefer pasting a token from
+            // HA's profile page. Lives in the SERVER section so users
+            // looking to change auth find it co-located with sign-out.
+            item {
+                NavRow(
+                    label = "Use long-lived token",
+                    value = "Paste instead of OAuth",
+                    onClick = onOpenLongLivedToken,
                 )
             }
             // RECONNECT NOW — force-flush the WS + re-fetch fresh state without
