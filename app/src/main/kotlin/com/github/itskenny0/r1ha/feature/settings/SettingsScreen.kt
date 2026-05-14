@@ -59,6 +59,7 @@ fun SettingsScreen(
     onOpenLongLivedToken: () -> Unit,
     onOpenSystemHealth: () -> Unit,
     onOpenDashboard: () -> Unit,
+    onOpenAreas: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -583,6 +584,9 @@ fun SettingsScreen(
             }
             item {
                 NavRow(label = "Notifications", value = "HA persistent alerts", onClick = onOpenNotifications)
+            }
+            item {
+                NavRow(label = "Areas", value = "HA area registry", onClick = onOpenAreas)
             }
 
             // ── Power tools — diagnostic / advanced surfaces ─────────────

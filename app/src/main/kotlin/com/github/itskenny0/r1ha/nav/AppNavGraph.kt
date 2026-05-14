@@ -114,6 +114,9 @@ fun AppNavGraph(
                 onOpenDashboard = {
                     navController.navigate(Routes.DASHBOARD) { launchSingleTop = true }
                 },
+                onOpenAreas = {
+                    navController.navigate(Routes.AREAS) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
@@ -235,6 +238,14 @@ fun AppNavGraph(
         composable(Routes.SYSTEM_HEALTH) {
             com.github.itskenny0.r1ha.feature.systemhealth.SystemHealthScreen(
                 haRepository = haRepository,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.AREAS) {
+            com.github.itskenny0.r1ha.feature.areas.AreasScreen(
+                haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }
