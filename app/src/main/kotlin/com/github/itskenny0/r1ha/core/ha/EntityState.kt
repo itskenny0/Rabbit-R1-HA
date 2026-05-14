@@ -110,6 +110,32 @@ data class EntityState(
      * for these domains. Null only when the state is unknown/unavailable.
      */
     val currentOption: String? = null,
+    /** Media-player-only: now-playing track title. Null when idle / off. */
+    val mediaTitle: String? = null,
+    /** Media-player-only: now-playing artist name. */
+    val mediaArtist: String? = null,
+    /** Media-player-only: now-playing album. */
+    val mediaAlbumName: String? = null,
+    /** Media-player-only: total media duration in seconds. */
+    val mediaDuration: Int? = null,
+    /**
+     * Media-player-only: last-reported playback position in seconds, anchored at
+     * [mediaPositionUpdatedAt]. To get a live position, interpolate against the
+     * wall-clock time since the anchor — that's how HA's own dashboards do it.
+     */
+    val mediaPosition: Int? = null,
+    /** Media-player-only: when [mediaPosition] was last reported. */
+    val mediaPositionUpdatedAt: Instant? = null,
+    /**
+     * Media-player-only: HA `entity_picture` attribute. Typically a relative path
+     * like `/api/media_player_proxy/media_player.X?token=…` (HA's proxied art); can
+     * also be an absolute URL or a `data:` URI for some integrations. Card renders
+     * these inline via [com.github.itskenny0.r1ha.ui.components.AsyncBitmap].
+     */
+    val mediaPicture: String? = null,
+    /** Media-player-only: current mute state. Needed so the MUTE button can toggle
+     *  (HA's `volume_mute` service requires an explicit `is_volume_muted` value). */
+    val isVolumeMuted: Boolean = false,
 ) {
     companion object {
         fun normaliseLightBrightness(raw: Int): Int = ((raw.coerceIn(0, 255)) * 100.0 / 255.0).roundToInt()

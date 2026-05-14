@@ -268,6 +268,15 @@ fun EntityCard(
                     } else emptyList(),
                     lightButtonsHidden = perCardOverride.lightButtonsHidden,
                     meterLabels = meterLabels,
+                    mediaTitle = state.mediaTitle,
+                    mediaArtist = state.mediaArtist,
+                    mediaAlbumName = state.mediaAlbumName,
+                    mediaDurationSec = state.mediaDuration,
+                    mediaPositionSec = state.mediaPosition,
+                    mediaPositionUpdatedAt = state.mediaPositionUpdatedAt,
+                    mediaPicture = state.mediaPicture,
+                    mediaIsPlaying = state.id.domain == Domain.MEDIA_PLAYER &&
+                        state.rawState.equals("playing", ignoreCase = true),
                 ),
                 modifier = Modifier
                     .fillMaxSize()

@@ -134,12 +134,25 @@ object PragmaticHybridTheme : R1Theme {
                         hidden = model.lightButtonsHidden,
                     )
                 }
-                // Media-player controls — play/pause/next/prev + vol- / vol+ buttons.
-                // Surfaced on every media_player card; the volume wheel is still the
-                // primary way to set absolute volume but the explicit buttons match
-                // the user's HA-dashboard mental model and make small adjustments much
-                // faster than wheeling.
+                // Media-player extras: now-playing block (album art + title/artist +
+                // live progress) above the transport row. Both render only on
+                // media_player cards; the now-playing block hides cleanly when nothing
+                // is playing (no media_title means nothing to show).
                 if (model.domainGlyph == CardRenderModel.Glyph.MEDIA_PLAYER) {
+                    if (!model.mediaTitle.isNullOrBlank() || !model.mediaPicture.isNullOrBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        com.github.itskenny0.r1ha.ui.components.MediaNowPlayingCompact(
+                            title = model.mediaTitle,
+                            artist = model.mediaArtist,
+                            album = model.mediaAlbumName,
+                            picture = model.mediaPicture,
+                            durationSec = model.mediaDurationSec,
+                            positionSec = model.mediaPositionSec,
+                            positionUpdatedAt = model.mediaPositionUpdatedAt,
+                            isPlaying = model.mediaIsPlaying,
+                            accent = accent,
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     MediaControlsRow(
                         entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
@@ -611,66 +624,46 @@ internal fun MediaControlsRow(
     accent: Color,
 ) {
     val onTransport = com.github.itskenny0.r1ha.core.theme.LocalOnMediaTransport.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Transport row — back / play-pause / next. The play-pause glyph swaps based
-        // on the current state (▶ when paused/idle, ⏸ when playing) so the user can
-        // tell at a glance what tapping it will do.
-        Row(modifier = Modifier.fillMaxWidth()) {
-            MediaButton(
-                glyph = "◀",
-                label = "BACK",
-                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PREVIOUS) },
-                accent = accent,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(4.dp))
-            MediaButton(
-                glyph = if (isPlaying) "⏸" else "▶",
-                label = if (isPlaying) "PAUSE" else "PLAY",
-                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PLAY_PAUSE) },
-                accent = accent,
-                emphasis = true,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(4.dp))
-            MediaButton(
-                glyph = "▶",
-                label = "NEXT",
-                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.NEXT) },
-                accent = accent,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        // Volume row — vol- / mute / vol+. Each tap is a discrete step; the wheel
-        // still drives absolute volume_level for fine-grained adjustments.
-        Row(modifier = Modifier.fillMaxWidth()) {
-            MediaButton(
-                glyph = "−",
-                label = "VOL-",
-                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.VOLUME_DOWN) },
-                accent = accent,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(4.dp))
-            MediaButton(
-                glyph = "∅",
-                label = "MUTE",
-                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.MUTE_TOGGLE) },
-                accent = accent,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(4.dp))
-            MediaButton(
-                glyph = "+",
-                label = "VOL+",
-                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.VOLUME_UP) },
-                accent = accent,
-                modifier = Modifier.weight(1f),
-            )
-        }
+    // Single row — BACK / PLAY-PAUSE / NEXT / MUTE. Vol± dropped because the slider
+    // already covers volume; doubling the affordance just used vertical space and
+    // confused the layout. MUTE keeps its own slot because the slider can't
+    // express "muted at any volume level".
+    Row(modifier = Modifier.fillMaxWidth()) {
+        MediaButton(
+            glyph = "◀",
+            label = "BACK",
+            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PREVIOUS) },
+            accent = accent,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(4.dp))
+        MediaButton(
+            glyph = if (isPlaying) "⏸" else "▶",
+            label = if (isPlaying) "PAUSE" else "PLAY",
+            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PLAY_PAUSE) },
+            accent = accent,
+            emphasis = true,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(4.dp))
+        MediaButton(
+            glyph = "▶",
+            label = "NEXT",
+            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.NEXT) },
+            accent = accent,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(4.dp))
+        MediaButton(
+            glyph = "∅",
+            label = "MUTE",
+            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.MUTE_TOGGLE) },
+            accent = accent,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
+
 
 /**
  * Single media-control button — glyph on the left, small uppercase label on the

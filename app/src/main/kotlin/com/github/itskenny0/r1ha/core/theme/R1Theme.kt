@@ -71,6 +71,21 @@ data class CardRenderModel(
      */
     val lightButtonsHidden: Set<com.github.itskenny0.r1ha.core.prefs.LightCardButton> = emptySet(),
     /**
+     * Media-player-only: now-playing snapshot for the rich track-info row. The card
+     * renders an album cover, title / artist, and a progress bar that ticks live by
+     * interpolating [mediaPosition] forward from [mediaPositionUpdatedAt]. Fields
+     * default to null / 0 / 0 so non-media cards (and idle media_players) skip the
+     * row entirely without consuming layout space.
+     */
+    val mediaTitle: String? = null,
+    val mediaArtist: String? = null,
+    val mediaAlbumName: String? = null,
+    val mediaDurationSec: Int? = null,
+    val mediaPositionSec: Int? = null,
+    val mediaPositionUpdatedAt: java.time.Instant? = null,
+    val mediaPicture: String? = null,
+    val mediaIsPlaying: Boolean = false,
+    /**
      * Tick labels for the vertical tape meter (right side of the card). Top→bottom
      * order, typically five strings. Null falls back to the default `100/75/50/25/0`
      * percent labels. Climate / water_heater cards override this with the actual

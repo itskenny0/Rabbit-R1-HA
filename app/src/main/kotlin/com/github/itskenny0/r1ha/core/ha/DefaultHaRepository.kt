@@ -447,6 +447,17 @@ class DefaultHaRepository(
             // Select-domain bits — options list + current option track via state.
             selectOptions = if (id.domain.isSelect) extractStringList(raw.attributes["options"]) else emptyList(),
             currentOption = if (id.domain.isSelect) raw.state.takeIf { it.isNotBlank() && it != "unknown" && it != "unavailable" } else null,
+            mediaTitle = if (id.domain == Domain.MEDIA_PLAYER) raw.attributes["media_title"].asString() else null,
+            mediaArtist = if (id.domain == Domain.MEDIA_PLAYER) raw.attributes["media_artist"].asString() else null,
+            mediaAlbumName = if (id.domain == Domain.MEDIA_PLAYER) raw.attributes["media_album_name"].asString() else null,
+            mediaDuration = if (id.domain == Domain.MEDIA_PLAYER) raw.attributes["media_duration"].asInt() else null,
+            mediaPosition = if (id.domain == Domain.MEDIA_PLAYER) raw.attributes["media_position"].asInt() else null,
+            mediaPositionUpdatedAt = if (id.domain == Domain.MEDIA_PLAYER) {
+                raw.attributes["media_position_updated_at"].asString()?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            } else null,
+            mediaPicture = if (id.domain == Domain.MEDIA_PLAYER) raw.attributes["entity_picture"].asString() else null,
+            isVolumeMuted = id.domain == Domain.MEDIA_PLAYER &&
+                (raw.attributes["is_volume_muted"] as? JsonPrimitive)?.content == "true",
         )
         cache.update { it + (id to newState) }
     }
@@ -831,6 +842,17 @@ class DefaultHaRepository(
                     // other domains.
                     selectOptions = if (id.domain.isSelect) extractStringList(attrs["options"]) else emptyList(),
                     currentOption = if (id.domain.isSelect) stateStr.takeIf { it.isNotBlank() && it != "unknown" && it != "unavailable" } else null,
+                    mediaTitle = if (id.domain == Domain.MEDIA_PLAYER) attrs["media_title"].asString() else null,
+                    mediaArtist = if (id.domain == Domain.MEDIA_PLAYER) attrs["media_artist"].asString() else null,
+                    mediaAlbumName = if (id.domain == Domain.MEDIA_PLAYER) attrs["media_album_name"].asString() else null,
+                    mediaDuration = if (id.domain == Domain.MEDIA_PLAYER) attrs["media_duration"].asInt() else null,
+                    mediaPosition = if (id.domain == Domain.MEDIA_PLAYER) attrs["media_position"].asInt() else null,
+                    mediaPositionUpdatedAt = if (id.domain == Domain.MEDIA_PLAYER) {
+                        attrs["media_position_updated_at"].asString()?.let { runCatching { Instant.parse(it) }.getOrNull() }
+                    } else null,
+                    mediaPicture = if (id.domain == Domain.MEDIA_PLAYER) attrs["entity_picture"].asString() else null,
+                    isVolumeMuted = id.domain == Domain.MEDIA_PLAYER &&
+                        (attrs["is_volume_muted"] as? JsonPrimitive)?.content == "true",
                 )
                 }.getOrElse { t ->
                     R1Log.w("HaRepo.listAll", "construction failed for ${row.entity_id}: ${t.message}")

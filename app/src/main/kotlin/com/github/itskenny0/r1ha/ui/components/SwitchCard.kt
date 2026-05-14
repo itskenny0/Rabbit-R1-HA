@@ -133,13 +133,14 @@ fun SwitchCard(
 
         // Media-player extras — when a media_player lands on the SwitchCard path
         // (no VOLUME_SET feature / null volume_level), it would otherwise have no
-        // transport at all. Render the same MediaControlsRow as the scalar path so
-        // play/pause/next/prev/vol± still work end-to-end. The volume buttons here
-        // call `media_player.volume_up` / `volume_down`, which HA accepts on most
-        // players that report any volume_step capability — distinct from the
-        // VOLUME_SET requirement that gated the scalar path.
+        // transport at all. Render now-playing info + the same MediaControlsRow as
+        // the scalar path so play/pause/next/prev/mute still work end-to-end.
         if (state.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.MEDIA_PLAYER) {
-            Spacer(Modifier.height(14.dp))
+            if (!state.mediaTitle.isNullOrBlank() || !state.mediaPicture.isNullOrBlank()) {
+                Spacer(Modifier.height(14.dp))
+                MediaNowPlayingInline(state = state, accent = accent)
+            }
+            Spacer(Modifier.height(10.dp))
             com.github.itskenny0.r1ha.core.theme.MediaControlsRow(
                 entityId = state.id,
                 isPlaying = state.isOn,
@@ -238,6 +239,53 @@ private fun SwitchTrack(
                     .clip(RoundedCornerShape(4.dp))
                     .background(if (isOn) accent else R1.InkSoft),
             )
+        }
+    }
+}
+
+/**
+ * Inline now-playing row for media_player entities that landed on the SwitchCard
+ * variant (no VOLUME_SET capability). Title + artist text, plus the album cover
+ * when HA provided one. No progress bar here — the SwitchCard's vertical real
+ * estate is already taken by the switch track; a third row would crowd the
+ * layout. The PragmaticHybridTheme's scalar-path variant has the full progress
+ * UI.
+ */
+@Composable
+private fun MediaNowPlayingInline(state: EntityState, accent: Color) {
+    val serverUrl = com.github.itskenny0.r1ha.core.theme.LocalHaServerUrl.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (!state.mediaPicture.isNullOrBlank()) {
+            AsyncBitmap(
+                url = state.mediaPicture,
+                serverUrl = serverUrl,
+                bearerToken = null,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(R1.ShapeS),
+                contentDescription = "Album art",
+            )
+            Spacer(Modifier.width(10.dp))
+        }
+        Column(modifier = Modifier.fillMaxWidth()) {
+            if (!state.mediaTitle.isNullOrBlank()) {
+                Text(
+                    text = state.mediaTitle,
+                    style = R1.bodyEmph,
+                    color = R1.Ink,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            if (!state.mediaArtist.isNullOrBlank()) {
+                Text(
+                    text = state.mediaArtist,
+                    style = R1.body,
+                    color = R1.InkSoft,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

@@ -134,6 +134,20 @@ object ColorfulCardsTheme : R1Theme {
                     )
                 }
                 if (model.domainGlyph == CardRenderModel.Glyph.MEDIA_PLAYER) {
+                    if (!model.mediaTitle.isNullOrBlank() || !model.mediaPicture.isNullOrBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        com.github.itskenny0.r1ha.ui.components.MediaNowPlayingCompact(
+                            title = model.mediaTitle,
+                            artist = model.mediaArtist,
+                            album = model.mediaAlbumName,
+                            picture = model.mediaPicture,
+                            durationSec = model.mediaDurationSec,
+                            positionSec = model.mediaPositionSec,
+                            positionUpdatedAt = model.mediaPositionUpdatedAt,
+                            isPlaying = model.mediaIsPlaying,
+                            accent = accent,
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     MediaControlsRow(
                         entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),

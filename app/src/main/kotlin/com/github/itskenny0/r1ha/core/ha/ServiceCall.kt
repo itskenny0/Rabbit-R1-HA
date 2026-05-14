@@ -192,7 +192,16 @@ data class ServiceCall(
          * wheel. media_play_pause is the universal toggle (HA picks play vs pause
          * based on the current state).
          */
-        fun mediaTransport(target: EntityId, action: MediaTransport): ServiceCall =
+        /**
+         * @param currentlyMuted Only meaningful for [MediaTransport.MUTE_TOGGLE] —
+         *   HA's `volume_mute` service requires an explicit `is_volume_muted` value,
+         *   so we send the inversion of the current state. Other actions ignore it.
+         */
+        fun mediaTransport(
+            target: EntityId,
+            action: MediaTransport,
+            currentlyMuted: Boolean = false,
+        ): ServiceCall =
             ServiceCall(
                 target,
                 when (action) {
@@ -204,12 +213,11 @@ data class ServiceCall(
                     MediaTransport.MUTE_TOGGLE -> "volume_mute"
                 },
                 if (action == MediaTransport.MUTE_TOGGLE) {
-                    // volume_mute requires `is_volume_muted: true`. We always pass
-                    // `true` — there's no per-call state inversion; the user gets a
-                    // dedicated unmute via the same button if the media_player echoes
-                    // back as muted (HA accepts is_volume_muted=true repeatedly).
-                    // A future enhancement could read the muted attr and invert here.
-                    buildJsonObject { put("is_volume_muted", JsonPrimitive(true)) }
+                    // Send the inversion of the current mute state so a second tap
+                    // actually unmutes. Previously this always sent `true`, which
+                    // made the MUTE button a one-way trip — the only way to unmute
+                    // was via vol+ landing above zero on some integrations.
+                    buildJsonObject { put("is_volume_muted", JsonPrimitive(!currentlyMuted)) }
                 } else {
                     JsonObject(emptyMap())
                 },

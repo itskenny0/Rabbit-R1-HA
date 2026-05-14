@@ -598,10 +598,14 @@ class CardStackViewModel(
     fun mediaTransport(entityId: EntityId, action: com.github.itskenny0.r1ha.core.ha.MediaTransport) {
         val entity = _state.value.cards.firstOrNull { it.id == entityId } ?: return
         if (entity.id.domain != Domain.MEDIA_PLAYER) return
-        R1Log.i("CardStack.media", "$entityId $action")
+        R1Log.i("CardStack.media", "$entityId $action (muted=${entity.isVolumeMuted})")
         viewModelScope.launch {
             haRepository.call(
-                com.github.itskenny0.r1ha.core.ha.ServiceCall.mediaTransport(entityId, action),
+                com.github.itskenny0.r1ha.core.ha.ServiceCall.mediaTransport(
+                    entityId,
+                    action,
+                    currentlyMuted = entity.isVolumeMuted,
+                ),
             )
         }
     }

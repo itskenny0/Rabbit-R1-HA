@@ -34,6 +34,15 @@ val LocalUiOptions = compositionLocalOf { UiOptions() }
 val LocalHaRepository = staticCompositionLocalOf<com.github.itskenny0.r1ha.core.ha.HaRepository?> { null }
 
 /**
+ * HA server URL (e.g. `http://homeassistant.local:8123`) surfaced for components
+ * that need to resolve relative HA-side URLs — primarily the album-art AsyncBitmap
+ * on media_player cards, which receives `entity_picture` as a relative path. Null
+ * when no server is configured (onboarding flow). Updated by CardStackScreen /
+ * FavoritesPickerScreen from settings.server?.url.
+ */
+val LocalHaServerUrl = staticCompositionLocalOf<String?> { null }
+
+/**
  * Per-entity overrides surfaced to deep card composables so the rename / display /
  * long-press customizations can apply without each theme threading them through. The
  * EntityCard wrapper looks up the override for its entity_id and merges visibility

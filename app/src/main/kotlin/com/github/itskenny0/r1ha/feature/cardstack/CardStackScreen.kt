@@ -267,6 +267,7 @@ fun CardStackScreen(
     }
     androidx.compose.runtime.CompositionLocalProvider(
         com.github.itskenny0.r1ha.core.theme.LocalHaRepository provides haRepository,
+        com.github.itskenny0.r1ha.core.theme.LocalHaServerUrl provides appSettings.server?.url,
         com.github.itskenny0.r1ha.core.theme.LocalEntityOverrides provides appSettings.entityOverrides,
         com.github.itskenny0.r1ha.core.theme.LocalOnCycleLightMode provides { id -> vm.cycleLightWheelMode(id) },
         com.github.itskenny0.r1ha.core.theme.LocalOnSetLightWheelMode provides { id, mode -> vm.setLightWheelMode(id, mode) },
