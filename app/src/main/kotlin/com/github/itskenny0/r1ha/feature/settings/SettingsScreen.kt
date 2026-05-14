@@ -58,6 +58,7 @@ fun SettingsScreen(
     onOpenCalendars: () -> Unit,
     onOpenLongLivedToken: () -> Unit,
     onOpenSystemHealth: () -> Unit,
+    onOpenDashboard: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -533,6 +534,14 @@ fun SettingsScreen(
                         .replaceFirstChar { it.uppercase() },
                     onClick = onOpenThemePicker,
                 )
+            }
+
+            item { SectionDivider() }
+
+            // ── Today — at-a-glance dashboard ─────────────────────────────
+            item { Section("TODAY") }
+            item {
+                NavRow(label = "Dashboard", value = "Weather · People · Next event", onClick = onOpenDashboard)
             }
 
             item { SectionDivider() }

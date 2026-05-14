@@ -1,0 +1,333 @@
+package com.github.itskenny0.r1ha.feature.dashboard
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.github.itskenny0.r1ha.core.ha.HaRepository
+import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.ui.components.R1TopBar
+import com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
+
+/**
+ * Today dashboard — single at-a-glance home screen composed from
+ * outdoor weather, persons home/away, next calendar event, camera
+ * count, and notification count. Each section is its own tappable
+ * card that drills into the corresponding full-list screen.
+ *
+ * The dashboard is **read-only**; no toggles, no service calls. Its
+ * job is to answer "what should I know right now?" in one glance,
+ * then route the user to the right detail surface for follow-up.
+ */
+@Composable
+fun DashboardScreen(
+    haRepository: HaRepository,
+    onBack: () -> Unit,
+    onOpenWeather: () -> Unit,
+    onOpenPersons: () -> Unit,
+    onOpenCalendars: () -> Unit,
+    onOpenCameras: () -> Unit,
+    onOpenNotifications: () -> Unit,
+) {
+    val vm: DashboardViewModel = viewModel(factory = DashboardViewModel.factory(haRepository))
+    val ui by vm.ui.collectAsState()
+    LaunchedEffect(Unit) { vm.refresh() }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(R1.Bg)
+            .systemBarsPadding(),
+    ) {
+        R1TopBar(title = "TODAY", onBack = onBack)
+        if (ui.loading && ui.weather == null && ui.persons == null && ui.nextEvent == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                    color = R1.AccentWarm,
+                )
+            }
+            return@Column
+        }
+        androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+            isRefreshing = ui.loading,
+            onRefresh = { vm.refresh() },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ui.weather?.let { WeatherCard(it, onClick = onOpenWeather) }
+                ui.persons?.let { PersonsCard(it, onClick = onOpenPersons) }
+                ui.nextEvent?.let { CalendarCard(it, onClick = onOpenCalendars) }
+                MetricsRow(
+                    cameraCount = ui.cameraCount,
+                    notificationCount = ui.notifications.size,
+                    onCameras = onOpenCameras,
+                    onNotifications = onOpenNotifications,
+                )
+                // If there are notifications, show the first 2 inline below
+                // the metrics row so the user sees what HA is shouting about
+                // without having to drill in.
+                if (ui.notifications.isNotEmpty()) {
+                    Spacer(Modifier.size(2.dp))
+                    Text(text = "RECENT ALERTS", style = R1.labelMicro, color = R1.InkSoft)
+                    for (notif in ui.notifications.take(2)) {
+                        NotificationPreview(notif, onClick = onOpenNotifications)
+                    }
+                }
+                Spacer(Modifier.size(24.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeatherCard(
+    w: DashboardViewModel.WeatherSummary,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .r1Pressable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = conditionGlyph(w.condition),
+            style = R1.numeralXl,
+            color = conditionAccent(w.condition),
+        )
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = w.name.uppercase(), style = R1.labelMicro, color = R1.InkSoft)
+            Text(
+                text = w.condition.replace('-', ' ').uppercase(),
+                style = R1.body.copy(fontWeight = FontWeight.SemiBold),
+                color = R1.Ink,
+            )
+        }
+        if (w.temperature != null) {
+            Text(
+                text = "${"%.0f".format(w.temperature)}${w.temperatureUnit ?: "°"}",
+                style = R1.numeralXl,
+                color = R1.Ink,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PersonsCard(
+    p: DashboardViewModel.PersonsSummary,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .r1Pressable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = "PEOPLE", style = R1.labelMicro, color = R1.InkSoft)
+            Spacer(Modifier.weight(1f))
+            Text(text = "${p.homeCount} HOME", style = R1.labelMicro, color = R1.AccentGreen)
+            Spacer(Modifier.width(8.dp))
+            Text(text = "${p.awayCount} AWAY", style = R1.labelMicro, color = R1.StatusAmber)
+        }
+        for ((name, state) in p.rows) {
+            Row {
+                Text(text = name, style = R1.body, color = R1.Ink, modifier = Modifier.weight(1f), maxLines = 1)
+                Spacer(Modifier.width(8.dp))
+                val color = when (state.lowercase()) {
+                    "home" -> R1.AccentGreen
+                    "not_home", "away" -> R1.StatusAmber
+                    "unknown", "unavailable" -> R1.StatusRed
+                    else -> R1.AccentCool
+                }
+                Text(text = state.uppercase(), style = R1.labelMicro, color = color)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarCard(
+    c: DashboardViewModel.CalendarSummary,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .r1Pressable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (c.happeningNow) {
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.AccentGreen.copy(alpha = 0.22f))
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                ) {
+                    Text(text = "NOW", style = R1.labelMicro, color = R1.AccentGreen)
+                }
+                Spacer(Modifier.width(8.dp))
+            } else {
+                Text(text = "NEXT", style = R1.labelMicro, color = R1.InkSoft)
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(
+                text = c.calendarName.uppercase(),
+                style = R1.labelMicro,
+                color = R1.InkMuted,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+            )
+            RelativeTimeLabel(at = c.eventStart, color = R1.InkMuted, style = R1.labelMicro)
+        }
+        Text(text = c.eventTitle, style = R1.body, color = R1.Ink, maxLines = 2)
+    }
+}
+
+@Composable
+private fun MetricsRow(
+    cameraCount: Int,
+    notificationCount: Int,
+    onCameras: () -> Unit,
+    onNotifications: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Metric(
+            modifier = Modifier.weight(1f),
+            label = "CAMERAS",
+            value = cameraCount.toString(),
+            accent = R1.AccentCool,
+            onClick = onCameras,
+        )
+        Metric(
+            modifier = Modifier.weight(1f),
+            label = "ALERTS",
+            value = notificationCount.toString(),
+            accent = if (notificationCount > 0) R1.StatusRed else R1.InkSoft,
+            onClick = onNotifications,
+        )
+    }
+}
+
+@Composable
+private fun Metric(
+    modifier: Modifier,
+    label: String,
+    value: String,
+    accent: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .r1Pressable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(text = label, style = R1.labelMicro, color = R1.InkSoft)
+        Text(text = value, style = R1.numeralXl, color = accent)
+    }
+}
+
+@Composable
+private fun NotificationPreview(
+    n: com.github.itskenny0.r1ha.core.ha.PersistentNotification,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.StatusRed.copy(alpha = 0.10f))
+            .border(1.dp, R1.StatusRed.copy(alpha = 0.35f), R1.ShapeS)
+            .r1Pressable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = n.title?.takeIf { it.isNotBlank() } ?: n.notificationId,
+            style = R1.body.copy(fontWeight = FontWeight.SemiBold),
+            color = R1.Ink,
+            maxLines = 1,
+        )
+        Text(
+            text = n.message,
+            style = R1.labelMicro,
+            color = R1.InkSoft,
+            maxLines = 2,
+        )
+    }
+}
+
+private fun conditionGlyph(condition: String): String = when (condition.lowercase()) {
+    "sunny", "clear" -> "☀"
+    "clear-night" -> "☾"
+    "partlycloudy" -> "⛅"
+    "cloudy" -> "☁"
+    "rainy" -> "☂"
+    "pouring" -> "☔"
+    "snowy", "snowy-rainy" -> "❄"
+    "fog" -> "≋"
+    "lightning", "lightning-rainy" -> "⚡"
+    "windy", "windy-variant" -> "🌬"
+    "hail" -> "•"
+    else -> "·"
+}
+
+private fun conditionAccent(condition: String): androidx.compose.ui.graphics.Color =
+    when (condition.lowercase()) {
+        "sunny", "clear" -> R1.AccentWarm
+        "rainy", "pouring", "snowy", "snowy-rainy", "fog" -> R1.AccentCool
+        "lightning", "lightning-rainy" -> R1.StatusAmber
+        "windy", "windy-variant" -> R1.AccentNeutral
+        else -> R1.InkSoft
+    }
