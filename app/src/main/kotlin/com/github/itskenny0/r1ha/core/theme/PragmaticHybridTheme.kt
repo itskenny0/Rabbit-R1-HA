@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -635,27 +636,32 @@ internal fun MediaControlsRow(
     accent: Color,
     isMuted: Boolean = false,
     /** [com.github.itskenny0.r1ha.core.ha.EntityState.mediaSupportedFeatures]
-     *  bitmask. 0 means 'no info' and falls back to showing every button (older
-     *  builds + integrations that omit `supported_features` get the same UI as
-     *  before). Bits gate individual buttons so e.g. a Subsonic / Feishin client
-     *  that doesn't advertise NEXT_TRACK doesn't render a button that would
-     *  always fail with 'Validation error: Entity X doesn't support media_next_track'. */
+     *  bitmask. Used for *dimming* unadvertised buttons rather than hiding them
+     *  outright — a previous version hid buttons when their bit wasn't set, but
+     *  some integrations don't advertise transport bits even though their
+     *  services do work (and others rely on user-experimentation to discover
+     *  what's wired up). Visually dimming gives the user a hint that the action
+     *  *might* not be supported without removing the affordance entirely. The
+     *  expandable toast still surfaces HA's validation error when the call is
+     *  rejected so the user knows why nothing happened. */
     supportedFeatures: Int = 0,
 ) {
     val onTransport = com.github.itskenny0.r1ha.core.theme.LocalOnMediaTransport.current
-    // Per-button visibility derived from supported_features. 0 → 'unknown', show
-    // everything so we don't regress on integrations that omit the bitmask.
+    // 0 = 'no info' (integration didn't advertise) — treat every action as
+    // potentially-supported. Non-zero bitmask gives us bit-precision: missing
+    // bits dim the corresponding button but it stays tappable so the user can
+    // try anyway (and see the expandable error if HA rejects).
     val noInfo = supportedFeatures == 0
-    val hasPrev = noInfo ||
+    val advertisesPrev = noInfo ||
         (supportedFeatures and com.github.itskenny0.r1ha.core.ha.EntityState.MediaPlayerFeature.PREVIOUS_TRACK) != 0
-    val hasNext = noInfo ||
+    val advertisesNext = noInfo ||
         (supportedFeatures and com.github.itskenny0.r1ha.core.ha.EntityState.MediaPlayerFeature.NEXT_TRACK) != 0
-    val hasPlayPause = noInfo ||
+    val advertisesPlayPause = noInfo ||
         (supportedFeatures and (
             com.github.itskenny0.r1ha.core.ha.EntityState.MediaPlayerFeature.PLAY or
                 com.github.itskenny0.r1ha.core.ha.EntityState.MediaPlayerFeature.PAUSE
         )) != 0
-    val hasMute = noInfo ||
+    val advertisesMute = noInfo ||
         (supportedFeatures and com.github.itskenny0.r1ha.core.ha.EntityState.MediaPlayerFeature.VOLUME_MUTE) != 0
 
     // Glyph-only row — ⏮ / ⏯ / ⏭ / speaker. Previous version paired each glyph
@@ -663,62 +669,55 @@ internal fun MediaControlsRow(
     // slot is ~50 px wide and the labels wrapped mid-word (BAC/K, PAU/SE,
     // NEX/T, MUT/E). The music-control glyphs are universal and read better
     // without the text. Vol± buttons were dropped earlier since the slider
-    // covers volume. The mute button uses a custom canvas-drawn speaker glyph
-    // that flips between 'emitting' (two waves) and 'slashed' so the user
-    // can tell at a glance whether mute is on. Each transport tile is hidden
-    // when its supported_features bit is missing — calling e.g. media_next_track
-    // on a player that doesn't advertise NEXT_TRACK fails HA's validator with a
-    // 'Validation error: Entity X doesn't support service Y' and leaves the user
-    // staring at a button that does nothing.
+    // covers volume. Buttons whose features aren't advertised render with a
+    // dim alpha so the user has a visual hint, but they still fire — HA's
+    // expandable validation error tells them when something genuinely isn't
+    // wired up.
     Row(modifier = Modifier.fillMaxWidth()) {
-        if (hasPrev) {
-            MediaButton(
-                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PREVIOUS) },
-                accent = accent,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(text = "⏮", style = R1.numeralM, color = accent)
-            }
-            Spacer(Modifier.width(4.dp))
+        MediaButton(
+            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PREVIOUS) },
+            accent = accent,
+            modifier = Modifier.weight(1f),
+            dimmed = !advertisesPrev,
+        ) {
+            Text(text = "⏮", style = R1.numeralM, color = accent)
         }
-        if (hasPlayPause) {
-            MediaButton(
-                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PLAY_PAUSE) },
-                accent = accent,
-                emphasis = true,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(text = if (isPlaying) "⏸" else "▶", style = R1.numeralM, color = R1.Bg)
-            }
-            Spacer(Modifier.width(4.dp))
+        Spacer(Modifier.width(4.dp))
+        MediaButton(
+            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PLAY_PAUSE) },
+            accent = accent,
+            emphasis = true,
+            modifier = Modifier.weight(1f),
+            dimmed = !advertisesPlayPause,
+        ) {
+            Text(text = if (isPlaying) "⏸" else "▶", style = R1.numeralM, color = R1.Bg)
         }
-        if (hasNext) {
-            MediaButton(
-                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.NEXT) },
-                accent = accent,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(text = "⏭", style = R1.numeralM, color = accent)
-            }
-            Spacer(Modifier.width(4.dp))
+        Spacer(Modifier.width(4.dp))
+        MediaButton(
+            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.NEXT) },
+            accent = accent,
+            modifier = Modifier.weight(1f),
+            dimmed = !advertisesNext,
+        ) {
+            Text(text = "⏭", style = R1.numeralM, color = accent)
         }
-        if (hasMute) {
-            // Mute toggle. When currently muted, render with emphasis (accent fill +
-            // slashed speaker glyph in Bg). When unmuted, surface-muted background
-            // with the speaker emitting two waves in accent. Two independent cues
-            // (background fill + glyph shape) so state is unambiguous.
-            MediaButton(
-                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.MUTE_TOGGLE) },
-                accent = accent,
-                emphasis = isMuted,
-                modifier = Modifier.weight(1f),
-            ) {
-                com.github.itskenny0.r1ha.ui.components.SpeakerGlyph(
-                    isMuted = isMuted,
-                    tint = if (isMuted) R1.Bg else accent,
-                    size = 22.dp,
-                )
-            }
+        Spacer(Modifier.width(4.dp))
+        // Mute toggle. When currently muted, render with emphasis (accent fill +
+        // slashed speaker glyph in Bg). When unmuted, surface-muted background
+        // with the speaker emitting two waves in accent. Two independent cues
+        // (background fill + glyph shape) so state is unambiguous.
+        MediaButton(
+            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.MUTE_TOGGLE) },
+            accent = accent,
+            emphasis = isMuted,
+            modifier = Modifier.weight(1f),
+            dimmed = !advertisesMute,
+        ) {
+            com.github.itskenny0.r1ha.ui.components.SpeakerGlyph(
+                isMuted = isMuted,
+                tint = if (isMuted) R1.Bg else accent,
+                size = 22.dp,
+            )
         }
     }
 }
@@ -732,6 +731,13 @@ internal fun MediaControlsRow(
  * comfortable tap target without crowding the rest of the card. The slot is a
  * composable so callers can pass either a Text (transport glyphs) or a custom
  * Canvas-drawn icon (the speaker glyph for mute).
+ *
+ * [dimmed] paints the whole tile at reduced alpha to hint that the action
+ * isn't advertised as supported by the integration — but the tap still fires,
+ * because some integrations under-report features yet handle the call fine,
+ * and the user benefits from a try-and-see affordance over a hidden one. When
+ * HA rejects, the expandable toast surfaces the validation error so the user
+ * learns what happened.
  */
 @Composable
 private fun MediaButton(
@@ -739,10 +745,12 @@ private fun MediaButton(
     accent: Color,
     modifier: Modifier = Modifier,
     emphasis: Boolean = false,
+    dimmed: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     Box(
         modifier = modifier
+            .alpha(if (dimmed) 0.38f else 1f)
             .clip(R1.ShapeS)
             .background(if (emphasis) accent else R1.SurfaceMuted)
             .r1Pressable(onClick = onClick)
