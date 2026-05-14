@@ -406,11 +406,21 @@ private fun LogViewer() {
             // through the expandable error toast. After-the-fact diagnostics
             // for the most-recent crash; the file persists until overwritten
             // by the next crash, so the user has a window to retrieve it
-            // after re-launching.
+            // after re-launching. The chip tints with StatusRed when a
+            // crash file exists so it's obvious there's something to look
+            // at; otherwise stays SurfaceMuted like the other dev chips.
+            val crashFilesExist = remember {
+                val a = java.io.File(context.filesDir, "last_crash.txt").let { it.exists() && it.length() > 0L }
+                val b = java.io.File(context.filesDir, "last_crash_seen.txt").let { it.exists() && it.length() > 0L }
+                a || b
+            }
             Box(
                 modifier = Modifier
                     .clip(R1.ShapeS)
-                    .background(R1.SurfaceMuted)
+                    .background(
+                        if (crashFilesExist) R1.StatusRed.copy(alpha = 0.25f)
+                        else R1.SurfaceMuted
+                    )
                     .r1Pressable(onClick = {
                         // Try the un-seen file first (most-recent crash that
                         // wasn't auto-surfaced yet), then the seen file (the
@@ -435,7 +445,11 @@ private fun LogViewer() {
                     })
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
-                Text("LAST CRASH", style = R1.labelMicro, color = R1.InkSoft)
+                Text(
+                    text = "LAST CRASH",
+                    style = R1.labelMicro,
+                    color = if (crashFilesExist) R1.StatusRed else R1.InkSoft,
+                )
             }
         }
         Spacer(Modifier.height(8.dp))
