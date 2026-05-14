@@ -214,6 +214,41 @@ fun SettingsScreen(
                     )
                 }
             }
+            // 'Open HA web UI' — fires an ACTION_VIEW intent with the
+            // configured server URL. Useful when the user wants to drop
+            // into the full HA web frontend for things this app doesn't
+            // cover (long-form automation editor, area/device configs,
+            // backups). No-op when server isn't configured.
+            item {
+                val url = s.server?.url
+                if (url != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 22.dp, vertical = 6.dp),
+                    ) {
+                        com.github.itskenny0.r1ha.ui.components.R1Button(
+                            text = "OPEN HA WEB UI",
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(url),
+                                        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }.onFailure {
+                                    com.github.itskenny0.r1ha.core.util.Toaster.error(
+                                        "No browser to open $url",
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+                        )
+                    }
+                }
+            }
             item {
                 Box(
                     modifier = Modifier
