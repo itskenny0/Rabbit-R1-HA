@@ -92,7 +92,29 @@ fun ServiceCallerScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.padding(top = 6.dp))
-            FieldLabel("DATA (JSON, optional)")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "DATA (JSON, optional)", style = R1.labelMicro, color = R1.InkSoft)
+                Spacer(Modifier.weight(1f))
+                // PASTE chip — pulls the clipboard contents into the DATA
+                // field. Common workflow: copy a service_data JSON snippet
+                // from HA's developer-tools page on a tablet, paste it
+                // here on the R1.
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.SurfaceMuted)
+                        .border(1.dp, R1.Hairline, R1.ShapeS)
+                        .r1Pressable(onClick = {
+                            val text = clipboard.getText()?.toString().orEmpty()
+                            if (text.isBlank()) Toaster.show("Clipboard empty")
+                            else vm.setData(text)
+                        })
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(text = "PASTE", style = R1.labelMicro, color = R1.InkSoft)
+                }
+            }
+            Spacer(Modifier.padding(top = 4.dp))
             R1TextField(
                 value = ui.data,
                 onValueChange = { vm.setData(it) },
