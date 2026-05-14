@@ -182,9 +182,47 @@ data class ServerConfig(
     val haVersion: String? = null,
 )
 
+/**
+ * One tab on the card stack — a named page of entity IDs that get rendered as a
+ * vertical deck of cards. The user can swipe left/right between pages to switch
+ * decks; within a deck, swipe up/down navigates cards as before. Pages let users
+ * organise larger HA installs by room / scenario / time-of-day without all the
+ * favourites collapsing into one long scroll.
+ *
+ * Identity is by [id] (a stable random string), not by [name] — renaming a page
+ * doesn't reset its order or contents. [favorites] is a list of HA entity IDs in
+ * the user's desired display order, identical in shape to the legacy single-
+ * page [AppSettings.favorites] list it migrates from.
+ */
+@kotlinx.serialization.Serializable
+data class FavoritePage(
+    val id: String,
+    val name: String,
+    val favorites: List<String> = emptyList(),
+)
+
 data class AppSettings(
     val server: ServerConfig? = null,
+    /**
+     * Legacy single-page favourites list. Pre-tabs builds wrote here directly. New
+     * builds keep this as a flat union of every page's [FavoritePage.favorites]
+     * so any code path that still reads [favorites] (About, picker filters that
+     * predate the schema, etc.) sees a coherent list without needing to know
+     * about pages. The authoritative source is [pages]; this field is derived
+     * from it on every save.
+     */
     val favorites: List<String> = emptyList(),
+    /**
+     * Tabs on the card stack — at least one page is always present (the migration
+     * path materialises a 'HOME' page from legacy [favorites] on first read).
+     * Empty in storage triggers the migration; the [SettingsRepository] flow
+     * never emits an [AppSettings] with an empty pages list.
+     */
+    val pages: List<FavoritePage> = emptyList(),
+    /** [FavoritePage.id] of the currently-displayed tab, persisted so reopening the
+     *  app lands on the user's last-viewed page. Falls back to the first page on
+     *  load when the saved id no longer exists. */
+    val activePageId: String = "",
     val wheel: WheelSettings = WheelSettings(),
     val ui: UiOptions = UiOptions(),
     val behavior: Behavior = Behavior(),

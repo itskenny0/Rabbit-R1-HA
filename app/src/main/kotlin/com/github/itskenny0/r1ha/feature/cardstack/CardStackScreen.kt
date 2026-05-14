@@ -1,6 +1,7 @@
 package com.github.itskenny0.r1ha.feature.cardstack
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -29,6 +31,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,7 +53,9 @@ import com.github.itskenny0.r1ha.ui.components.EntityCard
 import com.github.itskenny0.r1ha.ui.components.HamburgerGlyph
 import com.github.itskenny0.r1ha.ui.components.R1Button
 import com.github.itskenny0.r1ha.ui.components.SettingsCogGlyph
+import androidx.compose.foundation.horizontalScroll
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import com.github.itskenny0.r1ha.ui.components.r1RowPressable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.animateScrollBy
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -111,6 +116,13 @@ fun CardStackScreen(
     // would fall through to the active card's onWheel and adjust e.g. brightness
     // behind the overlay, which the user noticed and reported.
     val jumpListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Tab-management overlay state. Holds the page id being managed; the sentinel
+    // [NEW_PAGE_SENTINEL] means "add a fresh page" rather than editing an existing
+    // one. Null = overlay closed. Lifted to screen scope so the management modal
+    // can render above the TabStrip + card stack.
+    val tabManagementForId = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
     // Jump-to-card overlay visibility — tapped open from the chrome counter to let
     // the user pick a target card by name rather than scrolling through the deck.
     // Declared here (rather than at the chrome-render site) so the wheel-events
@@ -308,21 +320,46 @@ fun CardStackScreen(
             )
         }
 
-        ChromeRow(
-            connection = connection,
-            cardsCount = cards.size,
-            currentIndex = state.currentIndex,
-            showCounter = cards.size > 1,
-            onOpenFavoritesPicker = onOpenFavoritesPicker,
-            onOpenSettings = onOpenSettings,
-            onEditActive = {
-                // Only allow editing when there's an active card to edit — empty deck
-                // is a no-op.
-                state.activeState?.let { customizingId.value = it.id.value }
-            },
-            onTapCounter = { jumpPickerOpen.value = true },
-            solidBackdrop = appSettings.ui.hideCardTailAbove,
-        )
+        // Top chrome stack: ChromeRow on top, TabStrip directly under it. The two
+        // are siblings inside the outer Box so the page chips sit above the active
+        // card without affecting the pager's contentPadding (which is already
+        // tuned for ChromeRow's 64 dp tall area). When there's only one page the
+        // strip is empty visual chrome — collapses to zero height.
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            ChromeRow(
+                connection = connection,
+                cardsCount = cards.size,
+                currentIndex = state.currentIndex,
+                showCounter = cards.size > 1,
+                onOpenFavoritesPicker = onOpenFavoritesPicker,
+                onOpenSettings = onOpenSettings,
+                onEditActive = {
+                    // Only allow editing when there's an active card to edit — empty deck
+                    // is a no-op.
+                    state.activeState?.let { customizingId.value = it.id.value }
+                },
+                onTapCounter = { jumpPickerOpen.value = true },
+                solidBackdrop = appSettings.ui.hideCardTailAbove,
+            )
+            // Tab strip — chip per page. Tap to switch active. Long-press opens a
+            // management overlay (add / rename / delete). The '+' chip on the
+            // right is the discovery surface for adding more pages, so the strip
+            // is rendered whenever there's at least one page (always, post-
+            // migration). On single-page installs the user just sees "HOME" plus
+            // the '+' chip — a low-noise hint that more pages are possible.
+            if (appSettings.pages.isNotEmpty()) {
+                TabStrip(
+                    pages = appSettings.pages,
+                    activePageId = appSettings.activePageId,
+                    onTapPage = { id -> vm.setActivePage(id) },
+                    onLongPressPage = { id -> tabManagementForId.value = id },
+                    onAddPage = { tabManagementForId.value = NEW_PAGE_SENTINEL },
+                    solidBackdrop = appSettings.ui.hideCardTailAbove,
+                )
+            }
+        }
 
         // ── Wheel-no-op hint ────────────────────────────────────────────────────────
         // When the active card has nothing for the wheel to drive (sensors, actions,
@@ -444,6 +481,37 @@ fun CardStackScreen(
                 },
                 onReorder = { from, to -> vm.reorderFavorite(from, to) },
                 onDismiss = { jumpPickerOpen.value = false },
+            )
+        }
+
+        // ── Tab manage modal ────────────────────────────────────────────────────────
+        // Opened from a long-press on a page chip (edit mode) or a tap on the '+'
+        // chip (add mode, signalled by NEW_PAGE_SENTINEL). The dialog renders ABOVE
+        // every other overlay in this Box stack so the user can never lose track of
+        // it behind the chrome or a picker sheet.
+        val manageId = tabManagementForId.value
+        if (manageId != null) {
+            TabManageDialog(
+                isAdd = manageId == NEW_PAGE_SENTINEL,
+                page = if (manageId == NEW_PAGE_SENTINEL) {
+                    null
+                } else {
+                    appSettings.pages.firstOrNull { it.id == manageId }
+                },
+                canDelete = appSettings.pages.size > 1,
+                onAdd = { name ->
+                    vm.addPage(name)
+                    tabManagementForId.value = null
+                },
+                onRename = { id, name ->
+                    vm.renamePage(id, name)
+                    tabManagementForId.value = null
+                },
+                onDelete = { id ->
+                    vm.deletePage(id)
+                    tabManagementForId.value = null
+                },
+                onDismiss = { tabManagementForId.value = null },
             )
         }
     }
@@ -720,6 +788,186 @@ private const val STALLED_AFTER_MS = 10_000L
  *  before hitting an end), small enough that the pager's per-page Compose bookkeeping
  *  stays cheap. Capped well under Int.MAX_VALUE to avoid arithmetic overflow corners. */
 private const val INFINITE_PAGER_VIRTUAL_PAGES = 200_000
+
+/** Sentinel id meaning 'open the TabManageDialog in "add new page" mode'. Real
+ *  page ids are random UUIDs so this fixed string never collides. */
+private const val NEW_PAGE_SENTINEL = "__new_page__"
+
+/**
+ * Tab strip — one chip per page, plus a trailing '+' chip to add a new page. The
+ * active page chip fills with accent; others sit on the muted surface. Tap to
+ * switch active; long-press to open the manage modal (rename / delete).
+ *
+ * Sits directly under the chrome row when there's more than one page. Hidden on
+ * single-page installs so the pre-tabs aesthetic is preserved for users who
+ * never opt into multi-page.
+ */
+@Composable
+private fun TabStrip(
+    pages: List<com.github.itskenny0.r1ha.core.prefs.FavoritePage>,
+    activePageId: String,
+    onTapPage: (String) -> Unit,
+    onLongPressPage: (String) -> Unit,
+    onAddPage: () -> Unit,
+    solidBackdrop: Boolean,
+) {
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (solidBackdrop) Modifier.background(R1.Bg) else Modifier)
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = {},
+            )
+            .horizontalScroll(scroll)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        pages.forEach { page ->
+            val active = page.id == activePageId
+            Box(
+                modifier = Modifier
+                    .padding(end = 4.dp)
+                    .clip(R1.ShapeS)
+                    .background(if (active) R1.AccentWarm else R1.SurfaceMuted)
+                    .r1RowPressable(
+                        onTap = { onTapPage(page.id) },
+                        onLongPress = { onLongPressPage(page.id) },
+                    )
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = page.name,
+                    style = R1.labelMicro,
+                    color = if (active) R1.Bg else R1.InkSoft,
+                )
+            }
+        }
+        // '+' chip — always last. Tap → open the manage modal in 'add' mode.
+        Box(
+            modifier = Modifier
+                .padding(end = 4.dp)
+                .clip(R1.ShapeS)
+                .background(R1.SurfaceMuted)
+                .r1Pressable(onClick = onAddPage)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Text(text = "+", style = R1.labelMicro, color = R1.InkSoft)
+        }
+    }
+}
+
+/**
+ * Modal for adding, renaming, or deleting a page. Two modes share the same panel
+ * so users learn one surface instead of three:
+ *
+ *  * **Add mode** ([isAdd] = true, [page] = null) — single text field defaulting
+ *    to "NEW", a SAVE button and a CANCEL chip. No DELETE row.
+ *  * **Edit mode** ([isAdd] = false, [page] non-null) — text field pre-filled
+ *    with the page's current name; SAVE renames, CANCEL discards. A DELETE
+ *    button appears below when [canDelete] is true (i.e. there's more than one
+ *    page — the user can never delete their last page out from under the deck).
+ *
+ * Styling follows the rename-dialog conventions: dim backdrop, sharp 2 dp panel,
+ * hairline border, monospace where it helps. Back press dismisses, matching the
+ * other R1 modals.
+ */
+@Composable
+private fun TabManageDialog(
+    isAdd: Boolean,
+    page: com.github.itskenny0.r1ha.core.prefs.FavoritePage?,
+    canDelete: Boolean,
+    onAdd: (String) -> Unit,
+    onRename: (String, String) -> Unit,
+    onDelete: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val initial = if (isAdd) "NEW" else (page?.name ?: "")
+    var name by androidx.compose.runtime.remember(isAdd, page?.id) {
+        androidx.compose.runtime.mutableStateOf(initial)
+    }
+    androidx.activity.compose.BackHandler(onBack = onDismiss)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(R1.Bg.copy(alpha = 0.92f))
+            .r1Pressable(onClick = onDismiss, hapticOnClick = false)
+            .systemBarsPadding()
+            .imePadding(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp)
+                .clip(R1.ShapeS)
+                .background(R1.Surface)
+                .border(1.dp, R1.Hairline, R1.ShapeS)
+                .r1Pressable(onClick = {}, hapticOnClick = false)
+                .padding(16.dp),
+        ) {
+            Text(
+                text = if (isAdd) "NEW PAGE" else "EDIT PAGE",
+                style = R1.sectionHeader,
+                color = R1.AccentWarm,
+            )
+            if (!isAdd && page != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = page.id,
+                    style = R1.body.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                    color = R1.InkMuted,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            com.github.itskenny0.r1ha.ui.components.R1TextField(
+                value = name,
+                onValueChange = { name = it.take(20) },
+                placeholder = "PAGE NAME",
+                monospace = false,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                R1Button(
+                    text = "CANCEL",
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+                )
+                R1Button(
+                    text = "SAVE",
+                    onClick = {
+                        val trimmed = name.trim().ifBlank { if (isAdd) "NEW" else (page?.name ?: "PAGE") }
+                        if (isAdd) onAdd(trimmed) else page?.let { onRename(it.id, trimmed) }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            // DELETE only shows in edit-mode AND when at least one other page would
+            // remain afterward. Deleting the last page would leave the user with an
+            // empty deck and no way to switch back to a page, so we hide the option
+            // entirely rather than relying on a runtime block. Tinted with StatusRed
+            // as the accent so the destructive action reads as destructive at a
+            // glance — the rest of the dialog stays on the warm accent.
+            if (!isAdd && page != null && canDelete) {
+                Spacer(Modifier.height(8.dp))
+                R1Button(
+                    text = "DELETE",
+                    onClick = { onDelete(page.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                    accent = R1.StatusRed,
+                )
+            }
+        }
+    }
+}
 
 /**
  * Top chrome — hamburger left, vertical position pip + counter centre, settings gear right

@@ -134,6 +134,8 @@ class SettingsRepository private constructor(
         val behaviorWheelTogglesSwitches = booleanPreferencesKey("behavior.wheel_toggles_switches")
         val behaviorToastLogLevel = stringPreferencesKey("behavior.toast_log_level")
         val advancedJson = stringPreferencesKey("advanced.json")
+        val pagesJson = stringPreferencesKey("pages.json")
+        val activePageId = stringPreferencesKey("active_page_id")
         val uiTextHistoryLen = intPreferencesKey("ui.text_history_length")
         val uiHideCardTail = booleanPreferencesKey("ui.hide_card_tail")
         val uiMaxDecimals = intPreferencesKey("ui.max_decimals")
@@ -231,6 +233,8 @@ class SettingsRepository private constructor(
                         }.getOrNull()
                     }
                     ?: AdvancedSettings(),
+                pages = decodePages(p[K.pagesJson], favorites),
+                activePageId = p[K.activePageId].orEmpty(),
             )
         }
         .onEach { s ->
@@ -239,7 +243,40 @@ class SettingsRepository private constructor(
 
     suspend fun update(transform: (AppSettings) -> AppSettings): Unit = updateMutex.withLock {
         val current = currentBlocking()
-        val next = transform(current)
+        val transformed = transform(current)
+        // Reconcile pages ↔ favorites so the legacy single-list reader stays in
+        // sync without the caller needing to know about both. Two cases:
+        //  1. Caller mutated `pages` (or `pages` was empty pre-migration) — derive
+        //     favorites from the union.
+        //  2. Caller mutated only the legacy `favorites` field (older call sites,
+        //     tests) — push those favorites into the active page and rebuild the
+        //     union. Without this branch a caller that copies just `favorites`
+        //     would silently lose the write because [pages] already covered it
+        //     before with empty contents.
+        // Also clamp [activePageId] to an actually-existing page so an old saved id
+        // (deleted page) doesn't leave the card stack pointing at nothing.
+        val pagesUntouched = transformed.pages == current.pages
+        val favoritesChanged = transformed.favorites != current.favorites
+        val seededPages = transformed.pages.ifEmpty {
+            listOf(FavoritePage("home", "HOME", transformed.favorites))
+        }
+        val activeIdResolved = seededPages.firstOrNull { it.id == transformed.activePageId }?.id
+            ?: seededPages.first().id
+        val effectivePages = if (pagesUntouched && favoritesChanged) {
+            // Legacy-style write — only `favorites` changed. Treat it as a write
+            // to the active page so the data lands in the new schema cleanly.
+            seededPages.map { p ->
+                if (p.id == activeIdResolved) p.copy(favorites = transformed.favorites) else p
+            }
+        } else {
+            seededPages
+        }
+        val unionFavorites = effectivePages.flatMap { it.favorites }.distinct()
+        val next = transformed.copy(
+            pages = effectivePages,
+            favorites = unionFavorites,
+            activePageId = activeIdResolved,
+        )
         R1Log.i("SettingsRepo.update", "current.server=${current.server?.url ?: "null"} -> next.server=${next.server?.url ?: "null"}")
 
         // Write shadow synchronously FIRST so a SharedPreferences commit lands even if the
@@ -284,6 +321,14 @@ class SettingsRepository private constructor(
                     AdvancedSettings.serializer(),
                     next.advanced,
                 )
+                // Pages — encoded as JSON. Keep next.pages canonical and recompute
+                // [favorites] as their flat union before writing so any legacy
+                // single-list reader sees a consistent fallback.
+                p[K.pagesJson] = advancedJson.encodeToString(
+                    kotlinx.serialization.builtins.ListSerializer(FavoritePage.serializer()),
+                    next.pages,
+                )
+                p[K.activePageId] = next.activePageId
             }
             R1Log.i("SettingsRepo.update", "DataStore edit completed; next.server=${next.server?.url ?: "null"}")
         } catch (t: Throwable) {
@@ -294,6 +339,85 @@ class SettingsRepository private constructor(
             // OnboardingViewModel) should not be forced to error out the user's flow if only the
             // DataStore commit failed.
         }
+    }
+
+    /**
+     * Mutate the currently-active page in place. Most favourites-list operations
+     * (toggle, reorder, move) historically targeted [AppSettings.favorites] as a
+     * single global list; with tabs they target the active page only. This helper
+     * keeps the call sites unchanged in shape while threading the right page id.
+     * No-op when the active page id doesn't resolve (rare race during page delete).
+     */
+    suspend fun updateActivePage(transform: (FavoritePage) -> FavoritePage) {
+        update { s ->
+            val idx = s.pages.indexOfFirst { it.id == s.activePageId }
+            if (idx < 0) return@update s
+            val updated = s.pages.toMutableList()
+            updated[idx] = transform(updated[idx])
+            s.copy(pages = updated)
+        }
+    }
+
+    /** Append a fresh empty page and switch the active id to it. Returns the new
+     *  page's id so callers can immediately render its (empty) deck. */
+    suspend fun addPage(name: String): String {
+        val newId = "p" + java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+        update { s ->
+            s.copy(
+                pages = s.pages + FavoritePage(id = newId, name = name, favorites = emptyList()),
+                activePageId = newId,
+            )
+        }
+        return newId
+    }
+
+    /** Rename [pageId] to [name]. No-op when the id doesn't exist. */
+    suspend fun renamePage(pageId: String, name: String) {
+        update { s ->
+            val idx = s.pages.indexOfFirst { it.id == pageId }
+            if (idx < 0) return@update s
+            val updated = s.pages.toMutableList()
+            updated[idx] = updated[idx].copy(name = name)
+            s.copy(pages = updated)
+        }
+    }
+
+    /**
+     * Delete [pageId]. Refuses to delete the only page (every install always has
+     * at least one). If the deleted page was active, the previous page becomes
+     * active (or the first one when there's no previous).
+     */
+    suspend fun deletePage(pageId: String) {
+        update { s ->
+            if (s.pages.size <= 1) return@update s
+            val idx = s.pages.indexOfFirst { it.id == pageId }
+            if (idx < 0) return@update s
+            val updated = s.pages.toMutableList().apply { removeAt(idx) }
+            val newActive = if (s.activePageId == pageId) {
+                updated.getOrNull(idx - 1)?.id ?: updated.first().id
+            } else s.activePageId
+            s.copy(pages = updated, activePageId = newActive)
+        }
+    }
+
+    /** Move the page at [from] to [to] in the page list. Used by a future
+     *  page-reorder UI; safe no-op when indices are out of range or equal. */
+    suspend fun reorderPages(from: Int, to: Int) {
+        update { s ->
+            if (from !in s.pages.indices) return@update s
+            val clamped = to.coerceIn(0, s.pages.size - 1)
+            if (from == clamped) return@update s
+            val moved = s.pages.toMutableList()
+            val item = moved.removeAt(from)
+            moved.add(clamped, item)
+            s.copy(pages = moved)
+        }
+    }
+
+    /** Set [pageId] as the active tab. Persisted so a relaunch lands on the same
+     *  page; clamped to a valid page in [update]. */
+    suspend fun setActivePage(pageId: String) {
+        update { it.copy(activePageId = pageId) }
     }
 
     private fun writeShadow(server: ServerConfig?, favorites: List<String>) {
@@ -335,6 +459,35 @@ class SettingsRepository private constructor(
  * stays small (one entry per renamed entity, never more than a few dozen) and the
  * format round-trips cleanly via [decodeNameOverrides].
  */
+/**
+ * Decode the persisted [AppSettings.pages] list. Three branches:
+ *  1. Stored JSON exists → decode and return as-is.
+ *  2. No stored JSON but legacy [legacyFavorites] is non-empty → migrate to a
+ *     single 'HOME' page so the user keeps their existing list.
+ *  3. Nothing at all → return a single empty 'HOME' page so downstream code
+ *     never has to handle the empty-pages case.
+ * The id 'home' is reserved for the migration page so even users who later
+ * delete and re-create get a stable default id.
+ */
+private fun decodePages(raw: String?, legacyFavorites: List<String>): List<FavoritePage> {
+    val parser = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    val parsed = raw
+        ?.takeIf { it.isNotBlank() }
+        ?.let {
+            runCatching {
+                parser.decodeFromString(
+                    kotlinx.serialization.builtins.ListSerializer(FavoritePage.serializer()),
+                    it,
+                )
+            }.getOrNull()
+        }
+    return when {
+        !parsed.isNullOrEmpty() -> parsed
+        legacyFavorites.isNotEmpty() -> listOf(FavoritePage("home", "HOME", legacyFavorites))
+        else -> listOf(FavoritePage("home", "HOME", emptyList()))
+    }
+}
+
 private fun encodeNameOverrides(map: Map<String, String>): String {
     if (map.isEmpty()) return ""
     return map.entries.joinToString("\n") { (id, name) ->

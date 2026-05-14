@@ -98,8 +98,16 @@ class FavoritesPickerViewModel(
         // picker should reflect it. Subscribed for the VM lifetime; cheap because the
         // upstream Flow is distinctUntilChanged'd on the data we care about.
         viewModelScope.launch {
+            // Subscribe to the active page's favourites — not the legacy global
+            // [favorites]. The flat-union favourites field is still maintained but
+            // a 'favourite' in picker terms means 'is in the currently-active page'.
+            // Switching pages from the card stack will flow a new active-page id
+            // here, the picker re-renders with that page's contents.
             settings.settings
-                .map { it.nameOverrides to it.favorites }
+                .map {
+                    val active = it.pages.firstOrNull { p -> p.id == it.activePageId }
+                    it.nameOverrides to active?.favorites.orEmpty()
+                }
                 .distinctUntilChanged()
                 .collect { (overrides, favs) ->
                     if (entitiesCache.isNotEmpty()) {
@@ -119,7 +127,13 @@ class FavoritesPickerViewModel(
             val snapshot = settings.settings.first()
             R1Log.i("FavoritesPicker.refresh", "server=${snapshot.server?.url ?: "null"} favoritesSoFar=${snapshot.favorites.size}")
             val all = repo.listAllEntities()
-            val favs = snapshot.favorites
+            // Picker shows favourites of the ACTIVE page (other pages aren't visible
+            // here; the user would switch pages on the card stack first). Falls back
+            // to flat-union when there's no active page resolved (shouldn't happen
+            // after migration, but defensive).
+            val favs = snapshot.pages.firstOrNull { it.id == snapshot.activePageId }
+                ?.favorites
+                ?: snapshot.favorites
             all.fold(
                 onSuccess = { list ->
                     // Keep BOTH scalar-controllable and on/off-only entities — on/off ones
@@ -156,12 +170,15 @@ class FavoritesPickerViewModel(
         _ui.value = cur.copy(query = q)
         viewModelScope.launch {
             val snapshot = settings.settings.first()
+            val favs = snapshot.pages.firstOrNull { it.id == snapshot.activePageId }
+                ?.favorites
+                ?: snapshot.favorites
             // Read the LATEST query and filter (not the captured `cur`) — by the time
             // this coroutine runs the user may have typed more characters, and we want
             // the result list to reflect that.
             val now = _ui.value
             _ui.value = now.copy(
-                rows = buildRows(entitiesCache, snapshot.favorites, now.filter, now.query, snapshot.nameOverrides),
+                rows = buildRows(entitiesCache, favs, now.filter, now.query, snapshot.nameOverrides),
             )
         }
     }
@@ -210,9 +227,12 @@ class FavoritesPickerViewModel(
         if (cur.filter == filter) return
         viewModelScope.launch {
             val snapshot = settings.settings.first()
+            val favs = snapshot.pages.firstOrNull { it.id == snapshot.activePageId }
+                ?.favorites
+                ?: snapshot.favorites
             _ui.value = cur.copy(
                 filter = filter,
-                rows = buildRows(entitiesCache, snapshot.favorites, filter, cur.query, snapshot.nameOverrides),
+                rows = buildRows(entitiesCache, favs, filter, cur.query, snapshot.nameOverrides),
             )
         }
     }
@@ -288,21 +308,21 @@ class FavoritesPickerViewModel(
 
     fun toggle(entityId: String) {
         viewModelScope.launch {
-            // Read-modify-write must happen INSIDE settings.update so the SettingsRepository
-            // mutex serialises concurrent toggles; otherwise two rapid taps could each capture
-            // the pre-tap favourites and overwrite each other's change.
-            var newFavs: List<String> = emptyList()
-            settings.update { cur ->
-                val l = cur.favorites.toMutableList()
+            // Toggle the entity in the ACTIVE PAGE only — pre-tabs builds had a
+            // single global favourites list; with tabs, add/remove operations are
+            // scoped to whichever page the user has selected in the card stack.
+            // updateActivePage handles the mutex + favourites-union recalculation.
+            settings.updateActivePage { page ->
+                val l = page.favorites.toMutableList()
                 if (entityId in l) l.remove(entityId) else l.add(entityId)
-                newFavs = l
-                cur.copy(favorites = l)
+                page.copy(favorites = l)
             }
-            // Local re-render without re-fetching the entity list.
+            // Local re-render reads from the active page after the write completes.
+            val snapshot = settings.settings.first()
+            val newFavs = snapshot.pages.firstOrNull { it.id == snapshot.activePageId }?.favorites.orEmpty()
             val cur = _ui.value
-            val overrides = settings.settings.first().nameOverrides
             _ui.value = cur.copy(
-                rows = buildRows(entitiesCache, newFavs, cur.filter, cur.query, overrides),
+                rows = buildRows(entitiesCache, newFavs, cur.filter, cur.query, snapshot.nameOverrides),
                 countsByFilter = countsByFilter(entitiesCache, newFavs),
             )
         }
@@ -310,66 +330,56 @@ class FavoritesPickerViewModel(
 
     fun moveUp(entityId: String) {
         viewModelScope.launch {
-            var newFavs: List<String> = emptyList()
-            settings.update { cur ->
-                val l = cur.favorites.toMutableList()
+            settings.updateActivePage { page ->
+                val l = page.favorites.toMutableList()
                 val idx = l.indexOf(entityId)
                 if (idx > 0) { l.removeAt(idx); l.add(idx - 1, entityId) }
-                newFavs = l
-                cur.copy(favorites = l)
+                page.copy(favorites = l)
             }
+            val snapshot = settings.settings.first()
+            val newFavs = snapshot.pages.firstOrNull { it.id == snapshot.activePageId }?.favorites.orEmpty()
             val cur = _ui.value
-            val overrides = settings.settings.first().nameOverrides
-            _ui.value = cur.copy(rows = buildRows(entitiesCache, newFavs, cur.filter, cur.query, overrides))
+            _ui.value = cur.copy(rows = buildRows(entitiesCache, newFavs, cur.filter, cur.query, snapshot.nameOverrides))
         }
     }
 
     /**
      * Absolute reorder — moves [entityId] from its current position to [toIndex].
      * Backs the drag-reorder gesture in the FAVS view; the up/down arrows still
-     * use [moveUp] / [moveDown] for single-step nudges. The mutation goes through
-     * the same settings.update path so subscribers (the card stack, this picker's
-     * own buildRows pipeline) observe a single coherent emission.
+     * use [moveUp] / [moveDown] for single-step nudges. Affects only the active
+     * page's favourites list.
      */
     fun moveTo(entityId: String, toIndex: Int) {
         viewModelScope.launch {
-            var newFavs: List<String> = emptyList()
-            settings.update { cur ->
-                val l = cur.favorites.toMutableList()
+            settings.updateActivePage { page ->
+                val l = page.favorites.toMutableList()
                 val fromIdx = l.indexOf(entityId)
-                if (fromIdx < 0) {
-                    newFavs = l
-                    return@update cur
-                }
+                if (fromIdx < 0) return@updateActivePage page
                 val clamped = toIndex.coerceIn(0, l.size - 1)
-                if (fromIdx == clamped) {
-                    newFavs = l
-                    return@update cur
-                }
+                if (fromIdx == clamped) return@updateActivePage page
                 l.removeAt(fromIdx)
                 l.add(clamped, entityId)
-                newFavs = l
-                cur.copy(favorites = l)
+                page.copy(favorites = l)
             }
+            val snapshot = settings.settings.first()
+            val newFavs = snapshot.pages.firstOrNull { it.id == snapshot.activePageId }?.favorites.orEmpty()
             val cur = _ui.value
-            val overrides = settings.settings.first().nameOverrides
-            _ui.value = cur.copy(rows = buildRows(entitiesCache, newFavs, cur.filter, cur.query, overrides))
+            _ui.value = cur.copy(rows = buildRows(entitiesCache, newFavs, cur.filter, cur.query, snapshot.nameOverrides))
         }
     }
 
     fun moveDown(entityId: String) {
         viewModelScope.launch {
-            var newFavs: List<String> = emptyList()
-            settings.update { cur ->
-                val l = cur.favorites.toMutableList()
+            settings.updateActivePage { page ->
+                val l = page.favorites.toMutableList()
                 val idx = l.indexOf(entityId)
                 if (idx in 0 until l.size - 1) { l.removeAt(idx); l.add(idx + 1, entityId) }
-                newFavs = l
-                cur.copy(favorites = l)
+                page.copy(favorites = l)
             }
+            val snapshot = settings.settings.first()
+            val newFavs = snapshot.pages.firstOrNull { it.id == snapshot.activePageId }?.favorites.orEmpty()
             val cur = _ui.value
-            val overrides = settings.settings.first().nameOverrides
-            _ui.value = cur.copy(rows = buildRows(entitiesCache, newFavs, cur.filter, cur.query, overrides))
+            _ui.value = cur.copy(rows = buildRows(entitiesCache, newFavs, cur.filter, cur.query, snapshot.nameOverrides))
         }
     }
 

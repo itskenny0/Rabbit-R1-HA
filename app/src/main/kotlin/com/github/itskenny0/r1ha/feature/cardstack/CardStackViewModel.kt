@@ -265,20 +265,30 @@ class CardStackViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeFavorites() {
-        // The favourites list is the source of truth for both membership and order; the
-        // override map is the source of truth for display names. Combined so a rename
-        // surfaces on the card-stack screen immediately, without needing to re-fetch HA.
+        // With tabs, the visible cards come from the ACTIVE page's favourites — not
+        // the flat union. The HA observe set is still the union across all pages
+        // so every page's entities live-update in the background; switching pages
+        // is instant and never re-subscribes. Renames flow through the same
+        // sourceFlow because override changes need to re-render the active page.
         val sourceFlow = settings.settings
-            .map { it.favorites to it.nameOverrides }
+            .map { s ->
+                val active = s.pages.firstOrNull { it.id == s.activePageId }
+                val activeFavorites = active?.favorites.orEmpty()
+                val unionFavorites = s.pages.flatMap { it.favorites }.distinct()
+                Triple(activeFavorites, unionFavorites, s.nameOverrides)
+            }
             .distinctUntilChanged()
 
         sourceFlow
-            .flatMapLatest { (favouriteIds, overrides) ->
-                val ids = favouriteIds.mapNotNull { runCatching { EntityId(it) }.getOrNull() }.toSet()
+            .flatMapLatest { (activeFavs, unionFavs, overrides) ->
+                // Subscribe to the UNION of every page so switching pages doesn't
+                // re-resubscribe; observe state is fast that way. The visible cards
+                // come from activeFavs only.
+                val ids = unionFavs.mapNotNull { runCatching { EntityId(it) }.getOrNull() }.toSet()
                 if (ids.isEmpty()) {
-                    flowOf(Triple(favouriteIds, overrides, emptyMap<EntityId, EntityState>()))
+                    flowOf(Triple(activeFavs, overrides, emptyMap<EntityId, EntityState>()))
                 } else {
-                    haRepository.observe(ids).map { Triple(favouriteIds, overrides, it) }
+                    haRepository.observe(ids).map { Triple(activeFavs, overrides, it) }
                 }
             }
             .onEach { (favouriteIds, overrides, entityMap) ->
@@ -440,13 +450,15 @@ class CardStackViewModel(
     fun reorderFavorite(fromIndex: Int, toIndex: Int) {
         if (fromIndex == toIndex) return
         viewModelScope.launch {
-            settings.update { cur ->
-                val l = cur.favorites.toMutableList()
-                if (fromIndex !in l.indices) return@update cur
+            // Tabs: reorder only the active page's favourites; other pages' lists
+            // are untouched.
+            settings.updateActivePage { page ->
+                val l = page.favorites.toMutableList()
+                if (fromIndex !in l.indices) return@updateActivePage page
                 val clamped = toIndex.coerceIn(0, l.size - 1)
                 val item = l.removeAt(fromIndex)
                 l.add(clamped, item)
-                cur.copy(favorites = l)
+                page.copy(favorites = l)
             }
         }
     }
@@ -454,6 +466,29 @@ class CardStackViewModel(
     /** Sync the VM's active-card index with the pager's settled page. The wheel/tap handlers
      *  read activeState off of this index, so it has to track whatever page the user has just
      *  paged to. */
+    /** Switch the active tab — fires a settings.update which flows through to the
+     *  card stack via observeFavorites's active-page derivation, re-rendering with
+     *  the new page's cards within a frame. */
+    fun setActivePage(pageId: String) {
+        viewModelScope.launch { settings.setActivePage(pageId) }
+    }
+
+    /** Add a fresh empty page and make it the active one. */
+    fun addPage(name: String) {
+        viewModelScope.launch { settings.addPage(name) }
+    }
+
+    /** Rename an existing page in place. */
+    fun renamePage(pageId: String, name: String) {
+        viewModelScope.launch { settings.renamePage(pageId, name) }
+    }
+
+    /** Delete a page. No-op when only one page remains (every install always has
+     *  at least one to land on). */
+    fun deletePage(pageId: String) {
+        viewModelScope.launch { settings.deletePage(pageId) }
+    }
+
     fun setCurrentIndex(index: Int) {
         val size = _state.value.cards.size
         if (size == 0) return
