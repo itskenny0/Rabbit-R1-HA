@@ -99,6 +99,17 @@ fun CardStackScreen(
             onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
         )
     }
+    // Jump-target index pushed from the jump-to-card sheet. Each PageDeck collects
+    // this flow and animates its VerticalPager to the target index when the deck
+    // belongs to the active page. Decoupling this from a directly-held PagerState
+    // (the prior single-deck model) lets every page maintain its own pager state
+    // while still being addressable from screen scope.
+    val jumpRequests = remember {
+        kotlinx.coroutines.flow.MutableSharedFlow<Int>(
+            extraBufferCapacity = 4,
+            onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+        )
+    }
     // Sliding-window of wheel timestamps for the nav acceleration ramp. Mirrors the
     // VM's own deque (which accelerates scalar percent steps) but lives at the screen
     // layer because navigation is a screen concern, not a per-card one.
@@ -131,41 +142,6 @@ fun CardStackScreen(
         androidx.compose.runtime.mutableStateOf(false)
     }
     val pagerScope = androidx.compose.runtime.rememberCoroutineScope()
-    // Pager state hoisted to screen scope so the wheel handler can route navigation
-    // requests through pagerNavRequests for read-only / action cards (whose wheel
-    // should move between cards rather than mutate state).
-    //
-    // Infinite-scroll mode: the pager uses a much larger virtual pageCount so swipe
-    // gestures don't hit a hard boundary at either end. Pages are mapped back to the
-    // real card list via `page mod cards.size` everywhere the index is consumed. The
-    // initial page is placed in the middle of the virtual range so there's plenty of
-    // travel in both directions before the user could feasibly hit the edge. When the
-    // user toggles the infinite-scroll setting we wrap the pager state in a key() so
-    // the underlying PagerState is rebuilt with the new pageCount — without this the
-    // existing currentPage would survive into the new mode and behave erratically.
-    val infiniteScroll = appSettings.ui.infiniteScroll
-    val cardCount = state.displayedCards.size
-    val pagerState = androidx.compose.runtime.key(infiniteScroll, cardCount > 0) {
-        androidx.compose.foundation.pager.rememberPagerState(
-            initialPage = if (infiniteScroll && cardCount > 0) {
-                // Anchor the start at a multiple of cardCount so `page mod cardCount`
-                // lines up with the user's currentIndex from the moment the pager
-                // opens. Without the multiple-of-cardCount alignment, the initial card
-                // would be cards[(anchor + currentIndex) mod cardCount] = some random
-                // entity from their favourites list.
-                val anchor = INFINITE_PAGER_VIRTUAL_PAGES / 2
-                val aligned = anchor - (anchor % cardCount)
-                aligned + vm.state.value.currentIndex.coerceAtLeast(0).coerceAtMost(cardCount - 1)
-            } else {
-                vm.state.value.currentIndex
-                    .coerceAtMost((cardCount - 1).coerceAtLeast(0))
-                    .coerceAtLeast(0)
-            },
-            pageCount = {
-                if (infiniteScroll && cardCount > 0) INFINITE_PAGER_VIRTUAL_PAGES else cardCount
-            },
-        )
-    }
     LaunchedEffect(Unit) {
         wheelInput.events.collect { event ->
             val active = vm.state.value.activeState
@@ -299,22 +275,16 @@ fun CardStackScreen(
         val cards = state.displayedCards
         when {
             // Cold-start splash. DataStore is async on first read so for a brief
-            // window the VM has its default state (favouritesCount = 0,
-            // cards = empty). Without this branch the user momentarily saw the
-            // 'No favourites yet' EmptyState before the real data arrived, which
-            // they read as a permanent error. Plain throbber, no copy — once
-            // settings load we route into either the pager or EmptyState as
-            // appropriate.
+            // window the VM has its default state. Without this branch the user
+            // momentarily saw the 'No favourites yet' EmptyState before the real
+            // data arrived, which they read as a permanent error. Plain throbber,
+            // no copy — once settings load we route into the horizontal pager.
             !state.settingsLoaded -> StartupSplash()
-            cards.isNotEmpty() -> VerticalCardPager(
-                cards = cards,
-                vm = vm,
-                appSettings = appSettings,
-                navRequests = pagerNavRequests,
-                pagerState = pagerState,
-                lightWheelModes = state.lightWheelMode,
-            )
-            else -> {
+            state.pages.isEmpty() -> {
+                // Defensive: settings loaded but pages list is empty (shouldn't
+                // happen post-migration, but the migration runs on first read so a
+                // half-loaded state could theoretically slip through here). Fall
+                // through to the legacy single-deck rendering.
                 val reconnectAt by haRepository.reconnectNextAttemptAtMillis
                     .collectAsStateWithLifecycle()
                 EmptyState(
@@ -326,6 +296,98 @@ fun CardStackScreen(
                     onOpenSettings = onOpenSettings,
                     onRetry = { haRepository.reconnectNow() },
                 )
+            }
+            else -> {
+                // Horizontal pager — one slot per FavoritePage. The user swipes
+                // left/right to switch decks; the active page's id syncs back to
+                // the VM so wheel routing and chrome state follow the visible
+                // page. Each PageDeck holds its own VerticalPager state so a
+                // swipe-away-and-back lands on the user's previous card.
+                val activePageIndex = state.pages.indexOfFirst { it.id == state.activePageId }
+                    .coerceAtLeast(0)
+                val pageIds = state.pages.map { it.id }
+                // Rebuild the horizontal pager state whenever the page set changes
+                // (add/delete/rename moves indices around). Keyed on the list of
+                // ids so re-ordering ALSO rebuilds — otherwise the pager would
+                // remember its previous currentPage while pageIds shifted under
+                // it and we'd land on the wrong page.
+                val horizontalPagerState = androidx.compose.runtime.key(pageIds) {
+                    androidx.compose.foundation.pager.rememberPagerState(
+                        initialPage = activePageIndex,
+                        pageCount = { state.pages.size },
+                    )
+                }
+                // Sync activePageId → horizontal pager: when the user taps a tab
+                // chip or a page is added programmatically, animate the pager so
+                // the chrome and the deck stay in lockstep.
+                androidx.compose.runtime.LaunchedEffect(
+                    horizontalPagerState, state.activePageId, pageIds,
+                ) {
+                    val idx = state.pages.indexOfFirst { it.id == state.activePageId }
+                    if (idx >= 0 && idx != horizontalPagerState.currentPage) {
+                        horizontalPagerState.animateScrollToPage(idx)
+                    }
+                }
+                // Sync horizontal pager → activePageId: when the user swipes to a
+                // different page, push the new active id back into the VM so the
+                // tab strip's active highlight follows and wheel routing targets
+                // the visible deck.
+                androidx.compose.runtime.LaunchedEffect(horizontalPagerState, pageIds) {
+                    snapshotFlow { horizontalPagerState.settledPage }
+                        .distinctUntilChanged()
+                        .collect { idx ->
+                            val pageId = state.pages.getOrNull(idx)?.id
+                            if (pageId != null && pageId != state.activePageId) {
+                                vm.setActivePage(pageId)
+                            }
+                        }
+                }
+                androidx.compose.foundation.pager.HorizontalPager(
+                    state = horizontalPagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { pageIdx ->
+                    val page = state.pages.getOrNull(pageIdx) ?: return@HorizontalPager
+                    val pageCardsRaw = state.cardsByPage[page.id].orEmpty()
+                    // Apply optimistic overrides to this page's cards so wheel
+                    // changes track instantly even when the page becomes active
+                    // mid-edit. Same path the legacy displayedCards used; just
+                    // scoped per-page.
+                    val pageCards = pageCardsRaw.map { card ->
+                        val overridePct = state.optimisticPercents[card.id]
+                        if (overridePct != null) {
+                            if (card.supportsScalar) card.copy(percent = overridePct)
+                            else card.copy(percent = overridePct, isOn = overridePct > 0)
+                        } else {
+                            card
+                        }
+                    }
+                    val isActive = page.id == state.activePageId
+                    if (pageCards.isEmpty()) {
+                        val reconnectAt by haRepository.reconnectNextAttemptAtMillis
+                            .collectAsStateWithLifecycle()
+                        EmptyState(
+                            loading = page.favorites.isNotEmpty(),
+                            favouritesCount = page.favorites.size,
+                            connection = connection,
+                            reconnectAt = reconnectAt,
+                            onOpenFavoritesPicker = onOpenFavoritesPicker,
+                            onOpenSettings = onOpenSettings,
+                            onRetry = { haRepository.reconnectNow() },
+                        )
+                    } else {
+                        PageDeck(
+                            pageId = page.id,
+                            cards = pageCards,
+                            initialIndex = state.indexByPage[page.id] ?: 0,
+                            isActive = isActive,
+                            vm = vm,
+                            appSettings = appSettings,
+                            navRequests = pagerNavRequests,
+                            jumpRequests = jumpRequests,
+                            lightWheelModes = state.lightWheelMode,
+                        )
+                    }
+                }
             }
         }
 
@@ -474,23 +536,17 @@ fun CardStackScreen(
                 currentIndex = state.currentIndex,
                 listState = jumpListState,
                 onPick = { targetIdx ->
-                    val current = pagerState.currentPage
-                    val target = if (appSettings.ui.infiniteScroll) {
-                        // Find the nearest virtual page whose mod == targetIdx so the
-                        // pager glides the shortest distance rather than zooming back
-                        // toward the MIDDLE anchor.
-                        val curIdx = ((current % cards.size) + cards.size) % cards.size
-                        var diff = targetIdx - curIdx
-                        if (diff > cards.size / 2) diff -= cards.size
-                        if (diff < -cards.size / 2) diff += cards.size
-                        (current + diff).coerceIn(0, INFINITE_PAGER_VIRTUAL_PAGES - 1)
-                    } else {
-                        targetIdx.coerceIn(0, cards.lastIndex)
-                    }
-                    pagerScope.launch { pagerState.animateScrollToPage(target) }
+                    // Publish the target into [jumpRequests]; the active page's
+                    // PageDeck collects it and animates its VerticalPager to the
+                    // matching virtual / real page. Decoupling from a hoisted
+                    // pagerState lets every page hold its own state.
+                    pagerScope.launch { jumpRequests.emit(targetIdx) }
                     jumpPickerOpen.value = false
                 },
                 onReorder = { from, to -> vm.reorderFavorite(from, to) },
+                onRemove = { idx ->
+                    cards.getOrNull(idx)?.let { vm.removeFavorite(it.id.value) }
+                },
                 onDismiss = { jumpPickerOpen.value = false },
             )
         }
@@ -502,14 +558,15 @@ fun CardStackScreen(
         // it behind the chrome or a picker sheet.
         val manageId = tabManagementForId.value
         if (manageId != null) {
+            val targetPage = if (manageId == NEW_PAGE_SENTINEL) null
+                else appSettings.pages.firstOrNull { it.id == manageId }
+            val targetIdx = appSettings.pages.indexOfFirst { it.id == targetPage?.id }
             TabManageDialog(
                 isAdd = manageId == NEW_PAGE_SENTINEL,
-                page = if (manageId == NEW_PAGE_SENTINEL) {
-                    null
-                } else {
-                    appSettings.pages.firstOrNull { it.id == manageId }
-                },
+                page = targetPage,
                 canDelete = appSettings.pages.size > 1,
+                canMoveLeft = targetIdx > 0,
+                canMoveRight = targetIdx >= 0 && targetIdx < appSettings.pages.lastIndex,
                 onAdd = { name ->
                     vm.addPage(name)
                     tabManagementForId.value = null
@@ -522,6 +579,8 @@ fun CardStackScreen(
                     vm.deletePage(id)
                     tabManagementForId.value = null
                 },
+                onMoveLeft = { id -> vm.movePageLeft(id) },
+                onMoveRight = { id -> vm.movePageRight(id) },
                 onDismiss = { tabManagementForId.value = null },
             )
         }
@@ -530,14 +589,39 @@ fun CardStackScreen(
 }
 
 @Composable
-private fun VerticalCardPager(
+private fun PageDeck(
+    pageId: String,
     cards: List<com.github.itskenny0.r1ha.core.ha.EntityState>,
+    initialIndex: Int,
+    isActive: Boolean,
     vm: CardStackViewModel,
     appSettings: AppSettings,
     navRequests: kotlinx.coroutines.flow.SharedFlow<Int>,
-    pagerState: androidx.compose.foundation.pager.PagerState,
+    jumpRequests: kotlinx.coroutines.flow.SharedFlow<Int>,
     lightWheelModes: Map<com.github.itskenny0.r1ha.core.ha.EntityId, com.github.itskenny0.r1ha.core.ha.LightWheelMode>,
 ) {
+    // One pager state per page, keyed on pageId + infinite-scroll mode + the
+    // presence of cards. Re-keying on the card-presence boolean (rather than
+    // cards.size) means adding a fresh card doesn't rebuild the pager state and
+    // bounce the user back to the start of the deck.
+    val infiniteScroll = appSettings.ui.infiniteScroll
+    val pagerState = androidx.compose.runtime.key(pageId, infiniteScroll, cards.isNotEmpty()) {
+        androidx.compose.foundation.pager.rememberPagerState(
+            initialPage = if (infiniteScroll && cards.isNotEmpty()) {
+                val anchor = INFINITE_PAGER_VIRTUAL_PAGES / 2
+                val aligned = anchor - (anchor % cards.size)
+                aligned + initialIndex.coerceAtLeast(0).coerceAtMost(cards.size - 1)
+            } else {
+                initialIndex
+                    .coerceAtMost((cards.size - 1).coerceAtLeast(0))
+                    .coerceAtLeast(0)
+            },
+            pageCount = {
+                if (infiniteScroll && cards.isNotEmpty()) INFINITE_PAGER_VIRTUAL_PAGES else cards.size
+            },
+        )
+    }
+
     // Map a (possibly virtual) pager page to a real card index. In infinite-scroll mode
     // the pager uses a 200k-page virtual range, so we modulo back into 0..cards.size-1
     // before indexing the cards list or reporting currentIndex up to the VM.
@@ -545,10 +629,17 @@ private fun VerticalCardPager(
         if (cards.isEmpty()) 0
         else ((page % cards.size) + cards.size) % cards.size
     }
-    LaunchedEffect(pagerState, cards.size) {
+    // Report the settled card index up to the VM, scoped to this page. Active page
+    // writes through setCurrentIndex (which also updates the legacy currentIndex
+    // field); inactive pages write through setIndexForPage so background scroll is
+    // persisted without disturbing the active deck's state.
+    LaunchedEffect(pagerState, cards.size, pageId, isActive) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
-            .collect { vm.setCurrentIndex(realIndexOf(it)) }
+            .collect { page ->
+                val idx = realIndexOf(page)
+                if (isActive) vm.setCurrentIndex(idx) else vm.setIndexForPage(pageId, idx)
+            }
     }
     // Wheel-as-navigation, fired from CardStackScreen when the active card is read-only.
     // animateScrollToPage so the transition is the same gentle spring the user gets when
@@ -556,17 +647,40 @@ private fun VerticalCardPager(
     // wrap by modulo: we simply animate to currentPage ± 1, which the giant virtual
     // pageCount makes effectively boundless. (Modulo'ing inside the pager's range would
     // make the pager skip from page 199_999 back to 0 with a huge animateScroll instead
-    // of a single-page glide.) In finite mode we clamp to [0, lastIndex].
-    LaunchedEffect(pagerState, navRequests, appSettings.ui.infiniteScroll) {
+    // of a single-page glide.) In finite mode we clamp to [0, lastIndex]. Gated on
+    // isActive so a wheel event never moves the deck on a page the user can't see.
+    LaunchedEffect(pagerState, navRequests, infiniteScroll, isActive) {
+        if (!isActive) return@LaunchedEffect
         navRequests.collect { delta ->
             if (cards.isEmpty() || delta == 0) return@collect
             val current = pagerState.currentPage
-            val target = if (appSettings.ui.infiniteScroll) {
+            val target = if (infiniteScroll) {
                 (current + delta).coerceIn(0, INFINITE_PAGER_VIRTUAL_PAGES - 1)
             } else {
                 (current + delta).coerceIn(0, cards.lastIndex)
             }
             if (target != current) pagerState.animateScrollToPage(target)
+        }
+    }
+    // Jump-to-card requests — the active page collects the target index and
+    // animates to it. Mirrors the previous direct pagerState.animateScrollToPage
+    // call site but routed through a flow so the picker doesn't need a direct
+    // reference to whichever page is active.
+    LaunchedEffect(pagerState, jumpRequests, infiniteScroll, isActive, cards.size) {
+        if (!isActive) return@LaunchedEffect
+        jumpRequests.collect { targetIdx ->
+            if (cards.isEmpty()) return@collect
+            val current = pagerState.currentPage
+            val target = if (infiniteScroll) {
+                val curIdx = ((current % cards.size) + cards.size) % cards.size
+                var diff = targetIdx - curIdx
+                if (diff > cards.size / 2) diff -= cards.size
+                if (diff < -cards.size / 2) diff += cards.size
+                (current + diff).coerceIn(0, INFINITE_PAGER_VIRTUAL_PAGES - 1)
+            } else {
+                targetIdx.coerceIn(0, cards.lastIndex)
+            }
+            pagerState.animateScrollToPage(target)
         }
     }
 
@@ -914,9 +1028,16 @@ private fun TabManageDialog(
     isAdd: Boolean,
     page: com.github.itskenny0.r1ha.core.prefs.FavoritePage?,
     canDelete: Boolean,
+    /** True when the page being edited has a left neighbour — gates the MOVE LEFT
+     *  button. Ignored in add mode. */
+    canMoveLeft: Boolean,
+    /** Mirror of [canMoveLeft] for the right side. */
+    canMoveRight: Boolean,
     onAdd: (String) -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
+    onMoveLeft: (String) -> Unit,
+    onMoveRight: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val initial = if (isAdd) "NEW" else (page?.name ?: "")
@@ -984,6 +1105,36 @@ private fun TabManageDialog(
                     },
                     modifier = Modifier.weight(1f),
                 )
+            }
+            // MOVE LEFT / MOVE RIGHT — shifts the page one slot in either
+            // direction in the tab strip. Hidden buttons (canMoveLeft/Right =
+            // false) on the leftmost/rightmost page rather than disabled, so
+            // the row size adjusts and the dialog stays tidy on the R1's
+            // narrow display. The arrow glyphs avoid any text-wrapping at the
+            // labelMicro size.
+            if (!isAdd && page != null && (canMoveLeft || canMoveRight)) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (canMoveLeft) {
+                        R1Button(
+                            text = "◀  MOVE LEFT",
+                            onClick = { onMoveLeft(page.id) },
+                            modifier = Modifier.weight(1f),
+                            variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+                        )
+                    }
+                    if (canMoveRight) {
+                        R1Button(
+                            text = "MOVE RIGHT  ▶",
+                            onClick = { onMoveRight(page.id) },
+                            modifier = Modifier.weight(1f),
+                            variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+                        )
+                    }
+                }
             }
             // DELETE only shows in edit-mode AND when at least one other page would
             // remain afterward. Deleting the last page would leave the user with an
@@ -1207,6 +1358,11 @@ private fun JumpToCardSheet(
     listState: androidx.compose.foundation.lazy.LazyListState,
     onPick: (Int) -> Unit,
     onReorder: (fromIndex: Int, toIndex: Int) -> Unit,
+    /** Per-row remove affordance. Tapping the '✕' chip on a row calls back with
+     *  that row's index — the screen converts that to an entity_id and unfavourites
+     *  it. Lets the user prune their deck without round-tripping through the full
+     *  favourites picker. */
+    onRemove: (index: Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     androidx.activity.compose.BackHandler(onBack = onDismiss)
@@ -1268,6 +1424,7 @@ private fun JumpToCardSheet(
                     isActive = idx == currentIndex,
                     isDragging = isDragging,
                     onClick = { onPick(idx) },
+                    onRemove = { onRemove(idx) },
                     dragHandle = dragHandle,
                 )
             }
@@ -1289,11 +1446,15 @@ private fun JumpRow(
     isActive: Boolean,
     isDragging: Boolean,
     onClick: () -> Unit,
+    onRemove: () -> Unit,
     dragHandle: Modifier,
 ) {
     // Drag-handle modifier wraps the whole row so the user can long-press anywhere
     // on the row to grab it. r1Pressable for the tap-to-jump action sits on top —
-    // single tap fires onClick, long-press promotes to drag.
+    // single tap fires onClick, long-press promotes to drag. The '✕' chip on the
+    // right has its own r1Pressable so a tap there unfavourites the entity
+    // without also firing the row's onClick (Compose's gesture priority resolves
+    // the inner chip first).
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1334,6 +1495,24 @@ private fun JumpRow(
             }
             if (isActive) {
                 Text(text = "●", style = R1.labelMicro, color = R1.Bg)
+                Spacer(Modifier.width(8.dp))
+            }
+            // Remove '✕' chip — small surface-coloured square so the destructive
+            // action is visually distinct from the active highlight. Tinted with
+            // StatusRed so users at a glance know this is a 'delete' affordance
+            // rather than a generic close button.
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(R1.Bg.copy(alpha = if (isActive) 0.4f else 0.7f))
+                    .r1Pressable(onClick = onRemove)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = "✕",
+                    style = R1.labelMicro,
+                    color = R1.StatusRed,
+                )
             }
         }
     }

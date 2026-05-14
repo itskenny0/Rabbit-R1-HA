@@ -136,7 +136,42 @@ data class EntityState(
     /** Media-player-only: current mute state. Needed so the MUTE button can toggle
      *  (HA's `volume_mute` service requires an explicit `is_volume_muted` value). */
     val isVolumeMuted: Boolean = false,
+    /**
+     * Media-player-only: `supported_features` bitmask as advertised by the
+     * integration. The card uses this to gate transport buttons — calling
+     * `media_next_track` on a player that doesn't advertise [MediaPlayerFeature.NEXT_TRACK]
+     * makes HA reject with a 'Validation error: Entity X doesn't support service Y'
+     * message, so we'd rather not show the button at all. 0 (unknown / unset)
+     * falls back to showing every button for backward compatibility — the user
+     * can still see a useful UI even if the integration omits the bitmask.
+     */
+    val mediaSupportedFeatures: Int = 0,
 ) {
+    /**
+     * Subset of [MediaPlayerEntityFeature](https://github.com/home-assistant/core/blob/dev/homeassistant/components/media_player/const.py)
+     * — only the bits the card actually gates buttons against. Defined here as
+     * plain Int constants so the gating code stays readable (`hasFeature(NEXT_TRACK)`)
+     * without dragging in a separate enum or pulling in HA's full constant list.
+     */
+    object MediaPlayerFeature {
+        const val PAUSE = 1
+        const val SEEK = 2
+        const val VOLUME_SET = 4
+        const val VOLUME_MUTE = 8
+        const val PREVIOUS_TRACK = 16
+        const val NEXT_TRACK = 32
+        const val TURN_ON = 128
+        const val TURN_OFF = 256
+        const val PLAY_MEDIA = 512
+        const val VOLUME_STEP = 1024
+        const val STOP = 4096
+        const val PLAY = 16384
+    }
+
+    /** Convenience: does this entity advertise the given [MediaPlayerFeature] bit? */
+    fun hasMediaFeature(featureBit: Int): Boolean =
+        mediaSupportedFeatures != 0 && (mediaSupportedFeatures and featureBit) != 0
+
     companion object {
         fun normaliseLightBrightness(raw: Int): Int = ((raw.coerceIn(0, 255)) * 100.0 / 255.0).roundToInt()
         fun normaliseMediaVolume(raw: Double): Int = (raw.coerceIn(0.0, 1.0) * 100.0).roundToInt()

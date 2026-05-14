@@ -90,6 +90,11 @@ data class CardRenderModel(
      *  render its 'currently muted' visual (filled background + slashed speaker
      *  glyph) instead of being permanently stuck in one state. */
     val mediaIsMuted: Boolean = false,
+    /** Mirrors [com.github.itskenny0.r1ha.core.ha.EntityState.mediaSupportedFeatures]
+     *  — drives which transport buttons render on the card. When the integration
+     *  doesn't advertise NEXT_TRACK / PREVIOUS_TRACK we hide those buttons rather
+     *  than show them and let HA reject the call with a Validation error. */
+    val mediaSupportedFeatures: Int = 0,
     /**
      * Tick labels for the vertical tape meter (right side of the card). Top→bottom
      * order, typically five strings. Null falls back to the default `100/75/50/25/0`

@@ -67,4 +67,15 @@ internal object R1Toast {
         if (level.ordinal < minLevel.ordinal) return
         _bus.tryEmit(Event(level, tag, shortText, fullText))
     }
+
+    /**
+     * Force-emit a user-facing event regardless of [enabled] / [minLevel]. Used by
+     * [Toaster.show] so direct user feedback (service-call failures, save errors)
+     * is always surfaced even when the user hasn't opted into the diagnostic toast
+     * feed. Distinct from [push] because diagnostic chatter must stay gated by
+     * the user's settings — only intentional user-facing messages bypass.
+     */
+    fun userPush(level: Level, tag: String, shortText: String, fullText: String = shortText) {
+        _bus.tryEmit(Event(level, tag, shortText, fullText))
+    }
 }

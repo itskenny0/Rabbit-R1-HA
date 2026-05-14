@@ -154,6 +154,7 @@ object ColorfulCardsTheme : R1Theme {
                         isPlaying = model.isOn,
                         accent = accent,
                         isMuted = model.mediaIsMuted,
+                        supportedFeatures = model.mediaSupportedFeatures,
                     )
                 }
                 Spacer(Modifier.weight(1f))

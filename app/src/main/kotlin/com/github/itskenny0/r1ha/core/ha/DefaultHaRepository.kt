@@ -127,9 +127,19 @@ class DefaultHaRepository(
             val rawMsg = t.message ?: "unknown error"
             val firstLine = rawMsg.lineSequence().firstOrNull().orEmpty()
             val shortMsg = if (firstLine.length > 28) firstLine.take(25) + "…" else firstLine
-            com.github.itskenny0.r1ha.core.util.Toaster.show(
-                "${call.target.objectId}: $shortMsg",
-                long = true,
+            // Surface full context in the expandable body so the user can tap the
+            // toast to read the entire error (HA's "Validation error: Entity X
+            // doesn't support service Y" runs well past the inline preview).
+            // entity_id + service line gives a copy-paste handle for diagnosing
+            // missing features (the most common cause of validation errors on
+            // media_player integrations).
+            com.github.itskenny0.r1ha.core.util.Toaster.showExpandable(
+                shortText = "${call.target.objectId}: $shortMsg",
+                fullText = buildString {
+                    append(call.target.value).append('\n')
+                    append(call.service).append(" failed\n\n")
+                    append(rawMsg)
+                },
             )
             // Tell the ViewModel so it can roll back the optimistic override — the slider
             // bounces back to HA's last-known value instead of sitting stuck on the user's
@@ -458,6 +468,9 @@ class DefaultHaRepository(
             mediaPicture = if (id.domain == Domain.MEDIA_PLAYER) raw.attributes["entity_picture"].asString() else null,
             isVolumeMuted = id.domain == Domain.MEDIA_PLAYER &&
                 (raw.attributes["is_volume_muted"] as? JsonPrimitive)?.content == "true",
+            mediaSupportedFeatures = if (id.domain == Domain.MEDIA_PLAYER)
+                raw.attributes["supported_features"].asInt() ?: 0
+            else 0,
         )
         cache.update { it + (id to newState) }
     }
@@ -853,6 +866,9 @@ class DefaultHaRepository(
                     mediaPicture = if (id.domain == Domain.MEDIA_PLAYER) attrs["entity_picture"].asString() else null,
                     isVolumeMuted = id.domain == Domain.MEDIA_PLAYER &&
                         (attrs["is_volume_muted"] as? JsonPrimitive)?.content == "true",
+                    mediaSupportedFeatures = if (id.domain == Domain.MEDIA_PLAYER)
+                        attrs["supported_features"].asInt() ?: 0
+                    else 0,
                 )
                 }.getOrElse { t ->
                     R1Log.w("HaRepo.listAll", "construction failed for ${row.entity_id}: ${t.message}")

@@ -167,6 +167,8 @@ object PragmaticHybridTheme : R1Theme {
                         entityId = com.github.itskenny0.r1ha.core.ha.EntityId(model.entityIdText),
                         isPlaying = model.isOn,
                         accent = accent,
+                        isMuted = model.mediaIsMuted,
+                        supportedFeatures = model.mediaSupportedFeatures,
                     )
                 }
                 Spacer(Modifier.weight(1f))
@@ -632,8 +634,30 @@ internal fun MediaControlsRow(
     isPlaying: Boolean,
     accent: Color,
     isMuted: Boolean = false,
+    /** [com.github.itskenny0.r1ha.core.ha.EntityState.mediaSupportedFeatures]
+     *  bitmask. 0 means 'no info' and falls back to showing every button (older
+     *  builds + integrations that omit `supported_features` get the same UI as
+     *  before). Bits gate individual buttons so e.g. a Subsonic / Feishin client
+     *  that doesn't advertise NEXT_TRACK doesn't render a button that would
+     *  always fail with 'Validation error: Entity X doesn't support media_next_track'. */
+    supportedFeatures: Int = 0,
 ) {
     val onTransport = com.github.itskenny0.r1ha.core.theme.LocalOnMediaTransport.current
+    // Per-button visibility derived from supported_features. 0 → 'unknown', show
+    // everything so we don't regress on integrations that omit the bitmask.
+    val noInfo = supportedFeatures == 0
+    val hasPrev = noInfo ||
+        (supportedFeatures and com.github.itskenny0.r1ha.core.ha.EntityState.MediaPlayerFeature.PREVIOUS_TRACK) != 0
+    val hasNext = noInfo ||
+        (supportedFeatures and com.github.itskenny0.r1ha.core.ha.EntityState.MediaPlayerFeature.NEXT_TRACK) != 0
+    val hasPlayPause = noInfo ||
+        (supportedFeatures and (
+            com.github.itskenny0.r1ha.core.ha.EntityState.MediaPlayerFeature.PLAY or
+                com.github.itskenny0.r1ha.core.ha.EntityState.MediaPlayerFeature.PAUSE
+        )) != 0
+    val hasMute = noInfo ||
+        (supportedFeatures and com.github.itskenny0.r1ha.core.ha.EntityState.MediaPlayerFeature.VOLUME_MUTE) != 0
+
     // Glyph-only row — ⏮ / ⏯ / ⏭ / speaker. Previous version paired each glyph
     // with a 4-char text label, but on the R1's narrow card area each button's
     // slot is ~50 px wide and the labels wrapped mid-word (BAC/K, PAU/SE,
@@ -641,50 +665,60 @@ internal fun MediaControlsRow(
     // without the text. Vol± buttons were dropped earlier since the slider
     // covers volume. The mute button uses a custom canvas-drawn speaker glyph
     // that flips between 'emitting' (two waves) and 'slashed' so the user
-    // can tell at a glance whether mute is on — the previous Unicode '∅' was
-    // ambiguous AND stateless, leaving the tile looking permanently inert.
+    // can tell at a glance whether mute is on. Each transport tile is hidden
+    // when its supported_features bit is missing — calling e.g. media_next_track
+    // on a player that doesn't advertise NEXT_TRACK fails HA's validator with a
+    // 'Validation error: Entity X doesn't support service Y' and leaves the user
+    // staring at a button that does nothing.
     Row(modifier = Modifier.fillMaxWidth()) {
-        MediaButton(
-            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PREVIOUS) },
-            accent = accent,
-            modifier = Modifier.weight(1f),
-        ) {
-            Text(text = "⏮", style = R1.numeralM, color = accent)
+        if (hasPrev) {
+            MediaButton(
+                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PREVIOUS) },
+                accent = accent,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(text = "⏮", style = R1.numeralM, color = accent)
+            }
+            Spacer(Modifier.width(4.dp))
         }
-        Spacer(Modifier.width(4.dp))
-        MediaButton(
-            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PLAY_PAUSE) },
-            accent = accent,
-            emphasis = true,
-            modifier = Modifier.weight(1f),
-        ) {
-            Text(text = if (isPlaying) "⏸" else "▶", style = R1.numeralM, color = R1.Bg)
+        if (hasPlayPause) {
+            MediaButton(
+                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.PLAY_PAUSE) },
+                accent = accent,
+                emphasis = true,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(text = if (isPlaying) "⏸" else "▶", style = R1.numeralM, color = R1.Bg)
+            }
+            Spacer(Modifier.width(4.dp))
         }
-        Spacer(Modifier.width(4.dp))
-        MediaButton(
-            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.NEXT) },
-            accent = accent,
-            modifier = Modifier.weight(1f),
-        ) {
-            Text(text = "⏭", style = R1.numeralM, color = accent)
+        if (hasNext) {
+            MediaButton(
+                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.NEXT) },
+                accent = accent,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(text = "⏭", style = R1.numeralM, color = accent)
+            }
+            Spacer(Modifier.width(4.dp))
         }
-        Spacer(Modifier.width(4.dp))
-        // Mute toggle. When currently muted, render with emphasis (accent fill +
-        // slashed speaker glyph in Bg). When unmuted, surface-muted background
-        // with the speaker emitting two waves in accent. This gives users two
-        // independent cues (background fill + glyph shape) so the state is
-        // unambiguous on the R1's small display.
-        MediaButton(
-            onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.MUTE_TOGGLE) },
-            accent = accent,
-            emphasis = isMuted,
-            modifier = Modifier.weight(1f),
-        ) {
-            com.github.itskenny0.r1ha.ui.components.SpeakerGlyph(
-                isMuted = isMuted,
-                tint = if (isMuted) R1.Bg else accent,
-                size = 22.dp,
-            )
+        if (hasMute) {
+            // Mute toggle. When currently muted, render with emphasis (accent fill +
+            // slashed speaker glyph in Bg). When unmuted, surface-muted background
+            // with the speaker emitting two waves in accent. Two independent cues
+            // (background fill + glyph shape) so state is unambiguous.
+            MediaButton(
+                onClick = { onTransport?.invoke(entityId, com.github.itskenny0.r1ha.core.ha.MediaTransport.MUTE_TOGGLE) },
+                accent = accent,
+                emphasis = isMuted,
+                modifier = Modifier.weight(1f),
+            ) {
+                com.github.itskenny0.r1ha.ui.components.SpeakerGlyph(
+                    isMuted = isMuted,
+                    tint = if (isMuted) R1.Bg else accent,
+                    size = 22.dp,
+                )
+            }
         }
     }
 }

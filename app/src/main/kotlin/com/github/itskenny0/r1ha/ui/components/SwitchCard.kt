@@ -146,6 +146,7 @@ fun SwitchCard(
                 isPlaying = state.isOn,
                 accent = accent,
                 isMuted = state.isVolumeMuted,
+                supportedFeatures = state.mediaSupportedFeatures,
             )
         }
 

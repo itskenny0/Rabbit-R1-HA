@@ -19,6 +19,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -53,6 +54,29 @@ data class CardStackUiState(
      * decides between [EmptyState] and [VerticalCardPager] based on real data.
      */
     val settingsLoaded: Boolean = false,
+    /**
+     * Cards per page, keyed by page id. Built once per state emission so every
+     * horizontal-pager page can render its own deck without each composable
+     * reaching back into [SettingsRepository.settings]. The active page's slice
+     * matches [cards]; non-active pages are populated too so the user can swipe
+     * horizontally and see the full target deck instantly (no flash of an empty
+     * stack while observation 'rebinds'). Map order matches page order in
+     * settings.
+     */
+    val cardsByPage: Map<String, List<EntityState>> = emptyMap(),
+    /** Per-page deck scroll position, keyed by page id. Preserved across page
+     *  swipes so the user lands where they left off when they swipe back to a
+     *  page. */
+    val indexByPage: Map<String, Int> = emptyMap(),
+    /** Identifier of the currently-active page, mirrored from
+     *  [com.github.itskenny0.r1ha.core.prefs.AppSettings.activePageId] so wheel
+     *  routing + the screen-level pager state can sync without re-reading
+     *  settings on every wheel event. */
+    val activePageId: String = "",
+    /** Ordered list of pages with stable ids, mirrored from
+     *  [com.github.itskenny0.r1ha.core.prefs.AppSettings.pages]. Drives the
+     *  horizontal pager's pageCount and the tab strip's chip order. */
+    val pages: List<com.github.itskenny0.r1ha.core.prefs.FavoritePage> = emptyList(),
     /**
      * Per-light transient wheel-mode override. Defaults to BRIGHTNESS for any light
      * the user hasn't toggled. Not persisted — the user re-picks each session, which
@@ -280,45 +304,75 @@ class CardStackViewModel(
         // so every page's entities live-update in the background; switching pages
         // is instant and never re-subscribes. Renames flow through the same
         // sourceFlow because override changes need to re-render the active page.
+        // PagesSnapshot keeps the full pages list (with their favourites + names + ids)
+        // plus the active id and overrides — everything the per-page derivation
+        // needs at emission time. distinctUntilChanged on this snapshot still
+        // collapses no-op settings emissions cheaply because all four members
+        // structurally equal compare.
+        data class PagesSnapshot(
+            val pages: List<com.github.itskenny0.r1ha.core.prefs.FavoritePage>,
+            val activeId: String,
+            val unionFavorites: List<String>,
+            val overrides: Map<String, String>,
+        )
         val sourceFlow = settings.settings
             .map { s ->
-                val active = s.pages.firstOrNull { it.id == s.activePageId }
-                val activeFavorites = active?.favorites.orEmpty()
-                val unionFavorites = s.pages.flatMap { it.favorites }.distinct()
-                Triple(activeFavorites, unionFavorites, s.nameOverrides)
+                val pages = s.pages
+                val unionFavorites = pages.flatMap { it.favorites }.distinct()
+                PagesSnapshot(
+                    pages = pages,
+                    activeId = s.activePageId,
+                    unionFavorites = unionFavorites,
+                    overrides = s.nameOverrides,
+                )
             }
             .distinctUntilChanged()
 
         sourceFlow
-            .flatMapLatest { (activeFavs, unionFavs, overrides) ->
+            .flatMapLatest { snap ->
                 // Subscribe to the UNION of every page so switching pages doesn't
-                // re-resubscribe; observe state is fast that way. The visible cards
-                // come from activeFavs only.
-                val ids = unionFavs.mapNotNull { runCatching { EntityId(it) }.getOrNull() }.toSet()
+                // re-resubscribe; observe state is fast that way. The per-page
+                // slicing happens downstream of the entityMap.
+                val ids = snap.unionFavorites.mapNotNull { runCatching { EntityId(it) }.getOrNull() }.toSet()
                 if (ids.isEmpty()) {
-                    flowOf(Triple(activeFavs, overrides, emptyMap<EntityId, EntityState>()))
+                    flowOf(snap to emptyMap<EntityId, EntityState>())
                 } else {
-                    haRepository.observe(ids).map { Triple(activeFavs, overrides, it) }
+                    haRepository.observe(ids).map { snap to it }
                 }
             }
-            .onEach { (favouriteIds, overrides, entityMap) ->
-                // Preserve user-chosen order; drop entries that aren't yet known to HA.
-                // Apply the rename override at this layer so every UI surface (theme.Card,
-                // SwitchCard, ActionCard, SensorCard) sees the renamed name without each
-                // composable having to know about the override mechanism.
-                val ordered = favouriteIds.mapNotNull { id ->
-                    runCatching { EntityId(id) }.getOrNull()?.let { eid ->
-                        entityMap[eid]?.let { state ->
-                            overrides[state.id.value]?.let { renamed ->
-                                state.copy(friendlyName = renamed)
-                            } ?: state
-                        }
-                    }
+            .onEach { (snap, entityMap) ->
+                // Build a Map<pageId, List<EntityState>> in page order so every
+                // horizontal pager page has its deck ready before the user swipes
+                // to it. The active page's slice doubles as `cards` for legacy
+                // call sites (wheel routing, currentIndex clamping, optimistic
+                // trim) so nothing downstream needs to know about cardsByPage.
+                fun materializeRow(id: String): EntityState? {
+                    val eid = runCatching { EntityId(id) }.getOrNull() ?: return null
+                    val state = entityMap[eid] ?: return null
+                    val renamed = snap.overrides[state.id.value]
+                    return if (renamed != null) state.copy(friendlyName = renamed) else state
                 }
-                R1Log.d("CardStack.observe", "favoriteIds=${favouriteIds.size} ordered=${ordered.size}")
+                val cardsByPage = LinkedHashMap<String, List<EntityState>>()
+                for (page in snap.pages) {
+                    cardsByPage[page.id] = page.favorites.mapNotNull { materializeRow(it) }
+                }
+                val activeId = snap.pages.firstOrNull { it.id == snap.activeId }?.id
+                    ?: snap.pages.firstOrNull()?.id
+                    ?: ""
+                val ordered = cardsByPage[activeId].orEmpty()
+                val favouriteIds = snap.pages.firstOrNull { it.id == activeId }?.favorites.orEmpty()
+                R1Log.d("CardStack.observe", "pages=${snap.pages.size} activeCards=${ordered.size}")
                 val cur = _state.value
-                val clampedIndex = if (ordered.isEmpty()) 0
-                    else cur.currentIndex.coerceIn(0, ordered.size - 1)
+                // Carry forward each page's currentIndex; if the active page's
+                // saved index is stale (cards shrank), clamp.
+                val nextIndexByPage = cur.indexByPage.toMutableMap()
+                cardsByPage.forEach { (pid, list) ->
+                    val saved = nextIndexByPage[pid] ?: 0
+                    nextIndexByPage[pid] = if (list.isEmpty()) 0 else saved.coerceIn(0, list.size - 1)
+                }
+                // Drop entries for pages that no longer exist (delete).
+                nextIndexByPage.keys.retainAll(cardsByPage.keys)
+                val clampedIndex = nextIndexByPage[activeId] ?: 0
                 // Trim optimistic entries in three cases:
                 //   1) The server caught up — for SCALAR entities, that means cached percent
                 //      matches the optimistic value. For SWITCH entities, the repo never
@@ -349,6 +403,10 @@ class CardStackViewModel(
                     optimisticPercents = newOptimistic,
                     favouritesCount = favouriteIds.size,
                     settingsLoaded = true,
+                    cardsByPage = cardsByPage,
+                    indexByPage = nextIndexByPage,
+                    activePageId = activeId,
+                    pages = snap.pages,
                 )
             }
             .launchIn(viewModelScope)
@@ -501,9 +559,70 @@ class CardStackViewModel(
     }
 
     fun setCurrentIndex(index: Int) {
-        val size = _state.value.cards.size
+        val cur = _state.value
+        val size = cur.cards.size
         if (size == 0) return
-        _state.value = _state.value.copy(currentIndex = index.coerceIn(0, size - 1))
+        val clamped = index.coerceIn(0, size - 1)
+        // Mirror the active page's index into indexByPage so a horizontal swipe
+        // away + back lands on the same card the user left.
+        val newIndexByPage = cur.indexByPage.toMutableMap().apply {
+            if (cur.activePageId.isNotBlank()) put(cur.activePageId, clamped)
+        }
+        _state.value = cur.copy(currentIndex = clamped, indexByPage = newIndexByPage)
+    }
+
+    /**
+     * Variant for the horizontal-pager: a card index reported for a *non-active*
+     * page (e.g. the user wheels through a peek-visible neighbour). Updates that
+     * page's saved index without disturbing the active page's [currentIndex].
+     * No-op when [pageId] doesn't exist in the current state's cardsByPage.
+     */
+    fun setIndexForPage(pageId: String, index: Int) {
+        val cur = _state.value
+        val list = cur.cardsByPage[pageId] ?: return
+        if (list.isEmpty()) return
+        val clamped = index.coerceIn(0, list.size - 1)
+        if (cur.indexByPage[pageId] == clamped) return
+        val updated = cur.indexByPage.toMutableMap().apply { put(pageId, clamped) }
+        _state.value = if (pageId == cur.activePageId) {
+            cur.copy(currentIndex = clamped, indexByPage = updated)
+        } else {
+            cur.copy(indexByPage = updated)
+        }
+    }
+
+    /**
+     * Remove [entityId] from the active page's favourites — surfaced through the
+     * jump-to-card sheet's '✕' affordance so the user can unfavourite without
+     * digging back into the picker.
+     */
+    fun removeFavorite(entityId: String) {
+        viewModelScope.launch {
+            settings.updateActivePage { page ->
+                page.copy(favorites = page.favorites.filter { it != entityId })
+            }
+        }
+    }
+
+    /** Move the page at [pageId] one slot to the left, if possible. No-op when
+     *  the page is already leftmost. Used by the manage modal's MOVE LEFT
+     *  button — quicker than implementing drag-reorder on the tab strip itself,
+     *  and ergonomic on the R1's small touch targets. */
+    fun movePageLeft(pageId: String) {
+        viewModelScope.launch {
+            val s = settings.settings.first()
+            val idx = s.pages.indexOfFirst { it.id == pageId }
+            if (idx > 0) settings.reorderPages(idx, idx - 1)
+        }
+    }
+
+    /** Mirror of [movePageLeft] — moves [pageId] one slot to the right. */
+    fun movePageRight(pageId: String) {
+        viewModelScope.launch {
+            val s = settings.settings.first()
+            val idx = s.pages.indexOfFirst { it.id == pageId }
+            if (idx >= 0 && idx < s.pages.lastIndex) settings.reorderPages(idx, idx + 1)
+        }
     }
 
     /**
