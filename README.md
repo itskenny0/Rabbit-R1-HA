@@ -7,10 +7,14 @@ An Android app for the Rabbit R1 (running LineageOS) that turns the scroll wheel
 ## Features
 
 - **Scroll wheel control** — spin to adjust any scalar HA entity (lights, fans, covers, media players). Spring-animated slider gives a satisfying overshoot-and-settle on each turn.
-- **Card stack UI** — one full-screen card per favourite entity; swipe up/down to flip between them.
+- **Card stack UI with tabs** — one full-screen card per favourite entity; swipe up/down to flip between them, swipe left/right (or wheel-flick) to switch between rearrangeable tab groups.
+- **HA Assist (text mode)** — type a prompt and HA's conversation engine handles it; multi-turn context threaded across calls. Settings → Assist.
+- **Scenes & Scripts launcher** — tap-fire access to every `scene.*` / `script.*`, with substring search and a master *ALL LIGHTS OFF* action. Settings → Scenes & Scripts.
+- **Recent Activity feed** — HA's logbook reverse-chronologically, with 12 h / 24 h / 3 d windows and full-text search. Tap any row for a long-form detail toast. Settings → Recent Activity.
 - **Gesture-first navigation** — swipe left for Settings, right for the Favourites picker, tap the value area to toggle on/off; small chevron-back buttons on every sub-screen plus full system-back support.
 - **OAuth sign-in** — enter your HA URL once and authenticate in an in-app WebView; tokens encrypted at rest with an AndroidKeystore-wrapped AES-256/GCM key.
 - **Three themes** — *Pragmatic Hybrid* (default), *Minimal Dark*, *Colourful Cards*. Switch live in Settings with a side-by-side preview.
+- **Backup & restore** — export/import your favourites, tabs, and settings as a single JSON file from Settings.
 - **Fully configurable** — wheel step (1/2/5/10%) and acceleration, haptics, keep-screen-on, display mode, on/off pill, area labels, position dots.
 - **Built for the R1** — designed around the small portrait display and the physical scroll wheel; handles both `DPAD_UP/DOWN` and `VOLUME_UP/DOWN` keycodes so it works across ROM variants.
 
