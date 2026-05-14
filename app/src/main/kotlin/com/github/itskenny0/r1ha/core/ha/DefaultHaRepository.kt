@@ -88,7 +88,15 @@ class DefaultHaRepository(
      */
     @Volatile private var authLostRefreshAttempt: Int = 0
 
-    private val debouncer = DebouncedCaller<EntityId, ServiceCall>(scope, debounceMillis = 120) { _, call ->
+    // Key the per-call debouncer by (target, service) rather than just (target).
+    // Without the service segment, rapid taps of distinct media-transport buttons
+    // (PLAY → NEXT → VOL+) all collapsed onto the same EntityId-only key and
+    // cancelled each other — only the last submission inside the 120 ms window
+    // would actually fire. Different services on the same entity now go through
+    // separate pending slots so each one ships; identical-service calls still
+    // coalesce, which is the wanted behaviour for scalar wheel/touch streams (the
+    // last brightness value during a sustained spin is the only one HA needs).
+    private val debouncer = DebouncedCaller<Pair<EntityId, String>, ServiceCall>(scope, debounceMillis = 120) { _, call ->
         val id = ws.nextRequestId()
         val deferred = CompletableDeferred<Result<Unit>>()
         pendingCalls[id] = deferred
@@ -664,7 +672,9 @@ class DefaultHaRepository(
 
     override suspend fun call(call: ServiceCall): Result<Unit> {
         // Optimistic update was already applied by the ViewModel — the repo just forwards.
-        debouncer.submit(call.target, call)
+        // Key includes the service name so rapid taps of distinct buttons on the same
+        // entity (PLAY then NEXT then VOL+ on a media_player) don't cancel each other.
+        debouncer.submit(call.target to call.service, call)
         return Result.success(Unit)
     }
 
