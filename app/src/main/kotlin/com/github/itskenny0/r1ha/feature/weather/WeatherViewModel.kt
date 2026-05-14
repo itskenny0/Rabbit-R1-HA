@@ -29,6 +29,15 @@ class WeatherViewModel(
 ) : ViewModel() {
 
     @androidx.compose.runtime.Stable
+    data class ForecastDay(
+        val whenIso: String,
+        val condition: String,
+        val tempHigh: Double?,
+        val tempLow: Double?,
+        val precipitation: Double?,
+    )
+
+    @androidx.compose.runtime.Stable
     data class Weather(
         val entityId: String,
         val name: String,
@@ -40,6 +49,12 @@ class WeatherViewModel(
         val windUnit: String?,
         val pressure: Double?,
         val pressureUnit: String?,
+        /** Legacy `forecast` attribute — daily forecast entries. Empty
+         *  on 2024+ HA installs since the legacy attribute was removed
+         *  in favour of the weather.get_forecasts service-with-response.
+         *  When non-empty, surfaces as a horizontal strip on each
+         *  weather card. */
+        val forecast: List<ForecastDay>,
     )
 
     @androidx.compose.runtime.Stable
@@ -59,6 +74,19 @@ class WeatherViewModel(
                 onSuccess = { rows ->
                     val list = rows.map { row ->
                         val attrs = row.attributes
+                        val forecastArr = attrs["forecast"] as? kotlinx.serialization.json.JsonArray
+                        val forecast = forecastArr?.mapNotNull { el ->
+                            val obj = el as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                            val whenIso = (obj["datetime"] as? JsonPrimitive)?.content
+                                ?: return@mapNotNull null
+                            ForecastDay(
+                                whenIso = whenIso,
+                                condition = (obj["condition"] as? JsonPrimitive)?.content ?: "",
+                                tempHigh = (obj["temperature"] as? JsonPrimitive)?.content?.toDoubleOrNull(),
+                                tempLow = (obj["templow"] as? JsonPrimitive)?.content?.toDoubleOrNull(),
+                                precipitation = (obj["precipitation"] as? JsonPrimitive)?.content?.toDoubleOrNull(),
+                            )
+                        }.orEmpty().take(7)
                         Weather(
                             entityId = row.entityId,
                             name = row.friendlyName,
@@ -71,6 +99,7 @@ class WeatherViewModel(
                             windUnit = (attrs["wind_speed_unit"] as? JsonPrimitive)?.content,
                             pressure = (attrs["pressure"] as? JsonPrimitive)?.content?.toDoubleOrNull(),
                             pressureUnit = (attrs["pressure_unit"] as? JsonPrimitive)?.content,
+                            forecast = forecast,
                         )
                     }.sortedBy { it.name.lowercase() }
                     R1Log.i("Weather", "loaded ${list.size}")

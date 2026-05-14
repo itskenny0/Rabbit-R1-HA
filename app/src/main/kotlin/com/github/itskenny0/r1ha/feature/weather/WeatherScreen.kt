@@ -2,7 +2,9 @@ package com.github.itskenny0.r1ha.feature.weather
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -165,7 +167,74 @@ private fun WeatherRow(w: WeatherViewModel.Weather) {
                 color = R1.InkSoft,
             )
         }
+        // Daily forecast strip — only when HA's integration still exposes
+        // the legacy `forecast` attribute. 2024+ HA installs need
+        // weather.get_forecasts (service-with-response) which we don't
+        // dispatch yet; that's a follow-up.
+        if (w.forecast.isNotEmpty()) {
+            Spacer(Modifier.size(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                for (day in w.forecast) {
+                    ForecastTile(day, w.temperatureUnit)
+                }
+            }
+        }
     }
+}
+
+@Composable
+private fun ForecastTile(day: WeatherViewModel.ForecastDay, tempUnit: String?) {
+    Column(
+        modifier = Modifier
+            .clip(R1.ShapeS)
+            .background(R1.Bg)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = formatForecastDate(day.whenIso),
+            style = R1.labelMicro,
+            color = R1.InkMuted,
+        )
+        Text(
+            text = conditionGlyph(day.condition),
+            style = R1.body,
+            color = conditionAccent(day.condition),
+        )
+        val tempLine = buildString {
+            if (day.tempHigh != null) append("${"%.0f".format(day.tempHigh)}${tempUnit ?: "°"}")
+            if (day.tempLow != null) {
+                if (isNotEmpty()) append(" / ")
+                append("${"%.0f".format(day.tempLow)}${tempUnit ?: "°"}")
+            }
+        }
+        if (tempLine.isNotBlank()) {
+            Text(text = tempLine, style = R1.labelMicro, color = R1.Ink)
+        }
+        if (day.precipitation != null && day.precipitation > 0.0) {
+            Text(
+                text = "${"%.1f".format(day.precipitation)}mm",
+                style = R1.labelMicro,
+                color = R1.AccentCool,
+            )
+        }
+    }
+}
+
+/** Render an ISO instant as a short day-of-week + day-of-month label.
+ *  Falls back to the raw substring if parsing fails. */
+private fun formatForecastDate(iso: String): String {
+    return runCatching {
+        val instant = java.time.Instant.parse(iso)
+        val zdt = instant.atZone(java.time.ZoneId.systemDefault())
+        val day = zdt.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault())
+        "${day} ${zdt.dayOfMonth}"
+    }.getOrElse { iso.take(5) }
 }
 
 private fun formatTemp(t: Double, unit: String?): String =
