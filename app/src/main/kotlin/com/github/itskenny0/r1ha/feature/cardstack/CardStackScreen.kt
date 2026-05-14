@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -2374,15 +2375,21 @@ private fun VerticalPagePip(count: Int, current: Int, onClick: (() -> Unit)? = n
                     .background(R1.Hairline),
             )
             // Thumb — offset down by the animated fraction of available travel.
-            // Hard-clamp the multiplier to [0, 1] as a belt-and-braces guard
-            // against any spring overshoot reaching a negative Dp value —
-            // .padding() throws IllegalArgumentException on negatives.
+            // Critically: use Modifier.offset (not .padding) for the dynamic Dp.
+            // Modifier.padding throws IllegalArgumentException on negative
+            // values, and any spring overshoot or stale arithmetic that
+            // briefly visits negative territory would crash the whole
+            // composition with 'Padding must be non-negative'.
+            // Modifier.offset accepts any Dp (positive, negative, or zero)
+            // and just translates the layout — never throws. SwitchCard's
+            // ON/OFF thumb hit the same issue and adopted .offset for the
+            // same reason; same pattern applies here.
             val travel = trackHeight - thumbHeight
             val safeFrac = animatedFrac.coerceIn(0f, 1f)
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = travel * safeFrac)
+                    .offset(y = travel * safeFrac)
                     .height(thumbHeight)
                     .width(4.dp)
                     .background(R1.AccentWarm),
