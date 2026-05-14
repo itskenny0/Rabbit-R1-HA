@@ -684,6 +684,35 @@ class CardStackViewModel(
      * favourites union) so the user can scope an 'all off' to a room
      * by switching to that room's page first.
      */
+    /**
+     * Mirror of [turnOffActivePage] for the 'on' direction. Lights / fans /
+     * switches that have a meaningful 'on' state get fired with turn_on;
+     * media_players are skipped because 'on' without specifying media is
+     * mostly a no-op or surfaces 'idle'. The active page only.
+     */
+    fun turnOnActivePage() {
+        viewModelScope.launch {
+            val active = _state.value.activePageId
+            val pageCards = _state.value.cardsByPage[active].orEmpty()
+            val targets = pageCards.filter { ent ->
+                val d = ent.id.domain
+                d == Domain.LIGHT || d == Domain.SWITCH || d == Domain.FAN ||
+                    d == Domain.INPUT_BOOLEAN || d == Domain.AUTOMATION
+            }
+            R1Log.i("CardStack.allOn", "firing turn_on on ${targets.size} entities in active page")
+            for (t in targets) {
+                haRepository.call(
+                    ServiceCall(
+                        target = t.id,
+                        service = "turn_on",
+                        data = kotlinx.serialization.json.JsonObject(emptyMap()),
+                    ),
+                )
+            }
+            com.github.itskenny0.r1ha.core.util.Toaster.show("Turned on ${targets.size} entities")
+        }
+    }
+
     fun turnOffActivePage() {
         viewModelScope.launch {
             val active = _state.value.activePageId

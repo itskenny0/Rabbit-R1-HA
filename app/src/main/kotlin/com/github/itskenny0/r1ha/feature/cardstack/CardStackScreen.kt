@@ -734,6 +734,10 @@ fun CardStackScreen(
                 activePageName = appSettings.pages.firstOrNull { it.id == appSettings.activePageId }?.name
                     ?: "this page",
                 cardCount = state.cards.size,
+                onAllOn = {
+                    vm.turnOnActivePage()
+                    quickActionsOpen.value = false
+                },
                 onAllOff = {
                     vm.turnOffActivePage()
                     quickActionsOpen.value = false
@@ -1781,6 +1785,7 @@ private fun CardContextMenu(
 private fun QuickActionsSheet(
     activePageName: String,
     cardCount: Int,
+    onAllOn: () -> Unit,
     onAllOff: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1820,6 +1825,19 @@ private fun QuickActionsSheet(
                 color = R1.InkSoft,
             )
             Spacer(Modifier.height(14.dp))
+            // 'Turn all on' — one-tap fire. Lights/switches/fans coming on
+            // accidentally is recoverable (re-tap the card or the all-off
+            // route), so the safety bar can be lower than for turn-off.
+            R1Button(
+                text = "TURN ALL ON",
+                onClick = onAllOn,
+                modifier = Modifier.fillMaxWidth(),
+                accent = R1.AccentGreen,
+            )
+            Spacer(Modifier.height(8.dp))
+            // 'Turn all off' — two-stage confirm. Off is the more disruptive
+            // direction (lights you wanted on, media you wanted playing) so
+            // the second-tap guard prevents muscle-memory accidents.
             R1Button(
                 text = if (armed.value) "CONFIRM · TURN OFF $cardCount" else "TURN ALL OFF",
                 onClick = { if (armed.value) onAllOff() else armed.value = true },
