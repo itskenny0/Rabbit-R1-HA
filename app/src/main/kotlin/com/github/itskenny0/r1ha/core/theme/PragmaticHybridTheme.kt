@@ -103,11 +103,22 @@ object PragmaticHybridTheme : R1Theme {
                     color = R1.Ink,
                     maxLines = 2,
                 )
-                // Auto-ticking 'last changed' label temporarily disabled —
-                // produceState with an infinite while/delay loop per card
-                // is a recent addition and a binary-search suspect for the
-                // scroll-up crash. Will restore once the LAST CRASH dev
-                // menu affordance gives us a real trace.
+                // Auto-ticking 'last changed' label — only renders when the
+                // entity has a known lastChangedAt (the cache has seen it).
+                // Sits directly under the friendly name as a small dim line
+                // so sensor users can tell at a glance whether their reading
+                // is fresh. rememberRelativeTime wraps the produceState in
+                // runCatching so any rare arithmetic edge case renders as
+                // an empty string rather than crashing the composable tree.
+                val rel = com.github.itskenny0.r1ha.ui.components.rememberRelativeTime(model.lastChangedAt)
+                if (rel.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = rel,
+                        style = R1.labelMicro,
+                        color = R1.InkMuted,
+                    )
+                }
                 Spacer(Modifier.height(20.dp))
                 // Hide the giant percent readout on media_player cards that are
                 // currently playing — the now-playing block + the right-side meter
