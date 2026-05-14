@@ -214,10 +214,15 @@ fun CardStackScreen(
                 // vm.onWheel for the actual toggle.
                 !active.supportsScalar && !appSettings.behavior.wheelTogglesSwitches ->
                     wheelHintAt.longValue = now
-                // Select entities — wheel cycles through the option list with the same
-                // accelerated step so a fast spin can hop several options at once.
+                // Select entities — wheel is intentionally a no-op. Cycling through
+                // options on every detent meant a quick spin would skip past the
+                // desired option and (because the wheel double-as-scroll-driver
+                // anywhere else) accidentally change HVAC mode / source / preset
+                // when the user was just trying to navigate. The picker overlay
+                // (tap to open) is the deliberate selection path; the wheel just
+                // shows the hint to confirm it's not broken.
                 active.id.domain.isSelect ->
-                    vm.cycleSelectOption(active.id, navDelta)
+                    wheelHintAt.longValue = now
                 else -> vm.onWheel(event)
             }
             }.onFailure { t ->
@@ -584,6 +589,11 @@ fun CardStackScreen(
                 onTapCounter = { jumpPickerOpen.value = true },
                 onLongPressHamburger = { quickActionsOpen.value = true },
                 solidBackdrop = appSettings.ui.hideCardTailAbove,
+                // Battery indicator surfaces only when the system status bar is hidden
+                // AND the user explicitly opted in — otherwise the system bar already
+                // shows battery and we'd be redundant.
+                showBatteryIndicator = appSettings.behavior.hideStatusBar &&
+                    appSettings.behavior.showBatteryWhenStatusBarHidden,
             )
             // Tab strip — chip per page. Tap to switch active. Long-press opens a
             // management overlay (add / rename / delete). The '+' chip on the
@@ -958,7 +968,12 @@ private fun PageDeck(
             // No peek — off-screen cards are hidden entirely until the user starts dragging.
             // During the drag, each page's graphicsLayer (below) gives the deck an overlap
             // with a big drop shadow.
-            contentPadding = PaddingValues(top = 72.dp, bottom = 24.dp),
+            //
+            // Top padding sized for ChromeRow (~60 dp incl. statusBars) + TabStrip (~36 dp).
+            // Pre-tabs this was 72 dp; the strip below ChromeRow eats into it, so the top
+            // edge of the card touched / overlapped the tab chips. Bumped to 100 dp so the
+            // card sits clearly under the tab strip with a few pixels of breathing room.
+            contentPadding = PaddingValues(top = 100.dp, bottom = 24.dp),
             pageSize = PageSize.Fill,
             pageSpacing = 0.dp,
             modifier = Modifier.fillMaxSize(),
@@ -2040,6 +2055,11 @@ private fun ChromeRow(
      *  don't care about the gesture don't need to thread it through. */
     onLongPressHamburger: () -> Unit = {},
     solidBackdrop: Boolean = true,
+    /** Render a tiny BATTERY% pill in the right cluster — used only when
+     *  the system status bar is hidden AND the user opted into the
+     *  indicator via Settings → Behaviour. Defaults to false so previews
+     *  + the typical "status bar visible" path stay un-cluttered. */
+    showBatteryIndicator: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -2104,6 +2124,14 @@ private fun ChromeRow(
         // in a Row so the parent SpaceBetween keeps the pip centred between hamburger
         // and this cluster (rather than treating each element independently).
         Row(verticalAlignment = Alignment.CenterVertically) {
+
+        // Battery indicator pill — only present when the user has hidden the system
+        // status bar AND opted into the pill. Sits before the edit pencil so the
+        // habitual pencil-tap target doesn't shift when the indicator toggles.
+        if (showBatteryIndicator) {
+            com.github.itskenny0.r1ha.ui.components.BatteryIndicator()
+            Spacer(Modifier.width(6.dp))
+        }
 
         // Edit pencil — opens the customize dialog for the active card. This was the
         // entry point users were missing from the card stack (previously only in the

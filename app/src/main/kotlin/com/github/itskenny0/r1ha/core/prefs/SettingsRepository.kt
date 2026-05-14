@@ -131,6 +131,7 @@ class SettingsRepository private constructor(
         val behaviorKeepOn = booleanPreferencesKey("behavior.keep_on")
         val behaviorTapToggle = booleanPreferencesKey("behavior.tap_toggle")
         val behaviorHideStatus = booleanPreferencesKey("behavior.hide_status_bar")
+        val behaviorShowBatteryWhenHidden = booleanPreferencesKey("behavior.show_battery_when_status_bar_hidden")
         val behaviorWheelTogglesSwitches = booleanPreferencesKey("behavior.wheel_toggles_switches")
         val behaviorToastLogLevel = stringPreferencesKey("behavior.toast_log_level")
         val advancedJson = stringPreferencesKey("advanced.json")
@@ -218,6 +219,7 @@ class SettingsRepository private constructor(
                     keepScreenOn = p[K.behaviorKeepOn] ?: true,
                     tapToToggle = p[K.behaviorTapToggle] ?: false,
                     hideStatusBar = p[K.behaviorHideStatus] ?: false,
+                    showBatteryWhenStatusBarHidden = p[K.behaviorShowBatteryWhenHidden] ?: false,
                     wheelTogglesSwitches = p[K.behaviorWheelTogglesSwitches] ?: true,
                     toastLogLevel = p[K.behaviorToastLogLevel]
                         ?.let { runCatching { ToastLogLevel.valueOf(it) }.getOrNull() }
@@ -307,6 +309,7 @@ class SettingsRepository private constructor(
                 p[K.behaviorKeepOn] = next.behavior.keepScreenOn
                 p[K.behaviorTapToggle] = next.behavior.tapToToggle
                 p[K.behaviorHideStatus] = next.behavior.hideStatusBar
+                p[K.behaviorShowBatteryWhenHidden] = next.behavior.showBatteryWhenStatusBarHidden
                 p[K.behaviorWheelTogglesSwitches] = next.behavior.wheelTogglesSwitches
                 p[K.behaviorToastLogLevel] = next.behavior.toastLogLevel.name
                 p[K.uiTextHistoryLen] = next.ui.textHistoryLength

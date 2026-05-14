@@ -95,6 +95,18 @@ data class Behavior(
      */
     val hideStatusBar: Boolean = false,
     /**
+     * When [hideStatusBar] is on the user loses sight of the Android system battery
+     * percentage — fine for most users but a real loss on the R1 where a low battery
+     * means a hard shutdown mid-control. When this flag is also on, the chrome row
+     * renders a tiny "85%" pill on the right side, polled from the BatteryManager
+     * sticky broadcast every 30 s. Off by default so users who hide the status bar
+     * for the pure-card aesthetic don't get unwanted clutter back.
+     *
+     * No effect when [hideStatusBar] is off — in that case the system bar already
+     * shows the battery so duplicating it would be busy.
+     */
+    val showBatteryWhenStatusBarHidden: Boolean = false,
+    /**
      * When on (the default), scrolling the wheel on a non-scalar card (lock,
      * cover-without-position, vacuum, plain switch) flips it on/off — wheel-up =
      * on, wheel-down = off. Earlier versions flipped this to off after one user

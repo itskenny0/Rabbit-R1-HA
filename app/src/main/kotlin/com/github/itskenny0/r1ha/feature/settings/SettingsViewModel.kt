@@ -56,6 +56,9 @@ class SettingsViewModel(
     fun setKeepScreenOn(enabled: Boolean) = update { it.copy(behavior = it.behavior.copy(keepScreenOn = enabled)) }
     fun setTapToToggle(enabled: Boolean) = update { it.copy(behavior = it.behavior.copy(tapToToggle = enabled)) }
     fun setHideStatusBar(enabled: Boolean) = update { it.copy(behavior = it.behavior.copy(hideStatusBar = enabled)) }
+    fun setShowBatteryWhenStatusBarHidden(enabled: Boolean) = update {
+        it.copy(behavior = it.behavior.copy(showBatteryWhenStatusBarHidden = enabled))
+    }
     fun setWheelTogglesSwitches(enabled: Boolean) =
         update { it.copy(behavior = it.behavior.copy(wheelTogglesSwitches = enabled)) }
 

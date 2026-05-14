@@ -390,6 +390,21 @@ fun SettingsScreen(
                     onCheckedChange = { vm.setHideStatusBar(it) },
                 )
             }
+            // Battery indicator sub-toggle — only meaningful when the status bar
+            // is hidden (otherwise the system bar already shows battery). Indent
+            // visually via a leading symbol so it reads as nested without needing
+            // a fancy sub-section component.
+            if (s.behavior.hideStatusBar) {
+                item {
+                    SwitchRow(
+                        label = "↳ Show battery indicator",
+                        subtitle = "Tiny percent pill on the right of the chrome row " +
+                            "(polled every 30 s) — useful so a low R1 battery doesn't catch you off-guard.",
+                        checked = s.behavior.showBatteryWhenStatusBarHidden,
+                        onCheckedChange = { vm.setShowBatteryWhenStatusBarHidden(it) },
+                    )
+                }
+            }
             item {
                 SwitchRow(
                     label = "Wheel toggles switches",
