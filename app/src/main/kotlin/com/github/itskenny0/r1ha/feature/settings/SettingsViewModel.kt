@@ -92,6 +92,33 @@ class SettingsViewModel(
         }
     }
 
+    /**
+     * Reset every user-tunable setting to its default. Preserves the user's
+     * account (server URL + tokens), favourites lists, and pages so they don't
+     * have to re-onboard. Surfaced as a two-stage confirm action in the
+     * Settings screen — first tap arms, second tap commits.
+     *
+     * Implemented as a single [SettingsRepository.update] so the reset is
+     * atomic; intermediate observers don't see half-reset state.
+     */
+    fun resetToDefaults() {
+        viewModelScope.launch {
+            settings.update { s ->
+                AppSettings(
+                    server = s.server,
+                    favorites = s.favorites,
+                    pages = s.pages,
+                    activePageId = s.activePageId,
+                    // Drop name overrides, entity overrides, custom wheel /
+                    // ui / behavior / advanced settings, theme back to
+                    // PragmaticHybridTheme (the post-onboarding default).
+                )
+            }
+            Toaster.show("Settings reset to defaults")
+            R1Log.i("Settings.reset", "wiped overrides + advanced settings; preserved server + favourites + pages")
+        }
+    }
+
     // ── Backup & restore ────────────────────────────────────────────────────
 
     /**

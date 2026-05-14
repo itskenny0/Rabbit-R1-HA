@@ -149,6 +149,15 @@ fun CardStackScreen(
     val pagerScope = androidx.compose.runtime.rememberCoroutineScope()
     LaunchedEffect(Unit) {
         wheelInput.events.collect { event ->
+            // Defensive: never let a wheel event crash the collector — a single
+            // bad event in the wheel-handler pipeline would tear down the
+            // LaunchedEffect for the rest of the session and the user would
+            // have to relaunch to recover. The runCatching wrap logs at ERROR
+            // level so the dev-menu log viewer surfaces the cause; downstream
+            // (the toast feed at ERROR is always on) flashes a red toast so the
+            // user knows something went wrong without losing wheel input
+            // entirely.
+            runCatching {
             val active = vm.state.value.activeState
             val dir = event.direction
             // Wheel never navigates the deck — that's swipe-and-tap-the-pip only. So
@@ -203,6 +212,11 @@ fun CardStackScreen(
                 active.id.domain.isSelect ->
                     vm.cycleSelectOption(active.id, navDelta)
                 else -> vm.onWheel(event)
+            }
+            }.onFailure { t ->
+                com.github.itskenny0.r1ha.core.util.R1Log.e(
+                    "CardStack.wheel", "handler threw on event=$event", t,
+                )
             }
         }
     }

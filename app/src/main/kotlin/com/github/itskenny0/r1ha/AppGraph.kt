@@ -83,7 +83,14 @@ class AppGraph(context: Context) {
             settings = settings,
             tokens = tokens,
             refresher = tokenRefresher,
-            persister = entityCachePersister,
+            // entityCachePersister temporarily disabled — see r1ha-20260514-1627
+            // crash report. Investigation suggests the rehydrated cache may
+            // surface stale EntityState objects with null `raw` and empty
+            // attributesJson into the wheel / card-render path that previously
+            // assumed populated fields. Holding the feature behind a
+            // refactor that explicitly marks rehydrated entities as
+            // 'pending fresh state' so downstream code can distinguish them.
+            persister = null,
         )
     }
 

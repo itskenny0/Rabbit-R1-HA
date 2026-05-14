@@ -437,6 +437,51 @@ fun SettingsScreen(
                 }
             }
 
+            // RESET TO DEFAULTS — wipes every user-tunable setting back to its
+            // post-onboarding state. Preserves the server account (URL +
+            // tokens), favourites, and pages so the user doesn't have to
+            // re-onboard. Two-stage confirm: first tap arms the button
+            // (label flips + warning text appears), second tap commits.
+            // Auto-disarms after 3 s so a stray arm doesn't sit hot.
+            item {
+                val armed = androidx.compose.runtime.remember {
+                    androidx.compose.runtime.mutableStateOf(false)
+                }
+                androidx.compose.runtime.LaunchedEffect(armed.value) {
+                    if (armed.value) {
+                        kotlinx.coroutines.delay(3_000)
+                        armed.value = false
+                    }
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp, vertical = 6.dp),
+                ) {
+                    com.github.itskenny0.r1ha.ui.components.R1Button(
+                        text = if (armed.value) "CONFIRM RESET · TAP AGAIN" else "RESET TO DEFAULTS",
+                        onClick = {
+                            if (armed.value) {
+                                vm.resetToDefaults()
+                                armed.value = false
+                            } else {
+                                armed.value = true
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        accent = R1.StatusAmber,
+                    )
+                    if (armed.value) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Drops every override, theme, wheel + UI + behaviour preference. Keeps your account, favourites, and pages.",
+                            style = R1.labelMicro,
+                            color = R1.InkMuted,
+                        )
+                    }
+                }
+            }
+
             item { SectionDivider() }
 
             // ── Appearance ─────────────────────────────────────────────────────────
