@@ -8,13 +8,14 @@ An Android app for the Rabbit R1 (running LineageOS) that turns the scroll wheel
 
 ### Awareness — *the at-a-glance surfaces*
 
-- **TODAY dashboard** — single screen combining current outdoor weather (with condition glyph + temperature), sun position (above/below horizon, next rise/set), who's home, the next calendar event, camera count, and a preview of any HA persistent alerts. Pull-to-refresh; auto-refreshes every 60 s. Reachable from Settings → Dashboard or from Quick Actions (long-press hamburger). Can be set as the launch screen for kiosk-style installs via *Settings → Behaviour → Start on Dashboard*.
+- **TODAY dashboard** — single screen combining current outdoor weather (with condition glyph + temperature), sun position (above/below horizon, next rise/set), currently-playing media with **prev/play/next transport**, who's home, the next calendar event, camera count, and a preview of any HA persistent alerts. Pull-to-refresh; auto-refreshes every 60 s. Reachable from Settings → Dashboard or from Quick Actions (long-press hamburger). Can be set as the launch screen for kiosk-style installs via *Settings → Behaviour → Start on Dashboard*.
 - **Cameras** — live polling snapshots from every `camera.*` entity. LIST view shows the directory + state chip; GRID view shows 2-column polling tiles with 8 s cadence. Tap any camera for a fullscreen overlay at 4 s polling cadence.
 - **Weather** — every `weather.*` entity with condition glyph (☀ ⛅ ☁ ☂ ❄ ⚡ …), temperature, humidity, wind, pressure, and a 7-day daily forecast strip when HA exposes the legacy `forecast` attribute.
 - **Who's home** — `person.*` + `device_tracker.*` in one directory, home / away coloured per state, with GPS-accuracy chip and source-type chip on device_trackers.
 - **Calendars** — `calendar.*` entities with NOW pill for currently-happening events. Tap a row to drill into the next 14 days of events via HA's `/api/calendars/<id>` endpoint.
 - **Recent Activity** — HA's logbook reverse-chronologically, 12 h / 24 h / 3 d windows, full-text search. Tap a row for detail toast; long-press to open that entity's `/history` in HA's web UI.
 - **Notifications** — every `persistent_notification.*` entity with title, message, timestamp, and DISMISS chip. Auto-refreshes every 30 s while open.
+- **Areas** — HA's area registry with entity count per area, expandable rows showing the full entity list. Powered by a server-side Jinja template against `/api/template`.
 
 ### Control — *the things you act on*
 
@@ -28,6 +29,7 @@ An Android app for the Rabbit R1 (running LineageOS) that turns the scroll wheel
 
 - **Templates evaluator** — POST a Jinja2 template to HA's `/api/template` and render against live state. Side-by-side example chips (Sun elevation, On lights count, Unavailable, Areas) for one-tap discovery. RECENT history recalls past renders; tap COPY to write the result to the clipboard.
 - **Service Caller** — fire any HA service (`automation.reload`, `homeassistant.check_config`, `persistent_notification.create`, …) without leaving the device. JSON data payload editor with PASTE chip, RECENT history, result panel with copy-to-clipboard.
+- **Services Browser** — discoverable directory of every service HA exposes via `/api/services`, grouped by domain, with substring search and tap-to-copy to populate the Service Caller.
 - **System Health** — HA's `/api/config` (version, location, timezone, components, internal/external URLs) plus the last ~32 KB of `/api/error_log`. COPY chip writes the full log to the clipboard for bug reports.
 - **Long-lived access token entry** — alternative to OAuth for kiosk-style R1s. Paste an HA long-lived access token; stored encrypted at rest with the same AndroidKeystore-wrapped AES-256/GCM key as OAuth tokens.
 - **Gesture-first navigation** — swipe left for Settings, right for the Favourites picker, tap the value area to toggle on/off; small chevron-back buttons on every sub-screen plus full system-back support.
