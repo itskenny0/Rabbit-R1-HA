@@ -51,6 +51,7 @@ fun SettingsScreen(
     onOpenLogbook: () -> Unit,
     onOpenTemplate: () -> Unit,
     onOpenServiceCaller: () -> Unit,
+    onOpenNotifications: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -556,6 +557,13 @@ fun SettingsScreen(
             // notify, etc.) that don't fit the per-entity WS path.
             item {
                 NavRow(label = "Service Caller", value = "Fire any service", onClick = onOpenServiceCaller)
+            }
+
+            // HA Notifications — persistent_notification.* entities,
+            // typically "an integration broke", "firmware available",
+            // automation-side `persistent_notification.create` messages.
+            item {
+                NavRow(label = "Notifications", value = "HA persistent alerts", onClick = onOpenNotifications)
             }
 
             item { SectionDivider() }

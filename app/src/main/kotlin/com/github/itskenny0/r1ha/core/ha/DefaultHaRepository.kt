@@ -1241,6 +1241,89 @@ class DefaultHaRepository(
         coerceInputValues = true
     }
 
+    override suspend fun listPersistentNotifications(): Result<List<PersistentNotification>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val rows = fetchRawRowsForDomain("persistent_notification")
+                rows.mapNotNull { row ->
+                    val notificationId = row.entityId.substringAfter('.', "")
+                        .takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+                    val title = (row.attributes["title"] as? JsonPrimitive)?.content
+                    // HA omits `message` for some auto-generated notifications;
+                    // fall back to the raw state which holds the message body.
+                    val message = (row.attributes["message"] as? JsonPrimitive)?.content
+                        ?: row.state
+                    val createdRaw = (row.attributes["created_at"] as? JsonPrimitive)?.content
+                    val createdAt = createdRaw?.let { runCatching { Instant.parse(it) }.getOrNull() }
+                    PersistentNotification(
+                        notificationId = notificationId,
+                        title = title,
+                        message = message,
+                        createdAt = createdAt,
+                    )
+                }.sortedByDescending { it.createdAt ?: Instant.EPOCH }
+            }.onFailure { t ->
+                R1Log.w("HaRepo.notifs", "list failed: ${t.message}")
+            }
+        }
+
+    override suspend fun dismissPersistentNotification(id: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val payload = kotlinx.serialization.json.buildJsonObject {
+                    put("notification_id", JsonPrimitive(id))
+                }
+                callRawService("persistent_notification", "dismiss", payload).getOrThrow()
+                Unit
+            }.onFailure { t ->
+                R1Log.w("HaRepo.notifs", "dismiss $id failed: ${t.message}")
+            }
+        }
+
+    override suspend fun listRawEntitiesByDomain(domainPrefix: String): Result<List<RawEntityRow>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                fetchRawRowsForDomain(domainPrefix)
+            }.onFailure { t ->
+                R1Log.w("HaRepo.raw", "$domainPrefix fetch failed: ${t.message}")
+            }
+        }
+
+    /** Shared raw-row fetcher used by the not-in-Domain-enum surfaces
+     *  ([listPersistentNotifications], [listRawEntitiesByDomain] for
+     *  cameras / persons / weather / calendars). Calls `/api/states`
+     *  with the 401-refresh-retry pattern and filters rows whose
+     *  entity_id starts with `<domainPrefix>.`. Returns a stable
+     *  [RawEntityRow] shape regardless of the HA-side domain — callers
+     *  pick the attributes they care about. */
+    private suspend fun fetchRawRowsForDomain(domainPrefix: String): List<RawEntityRow> {
+        val s = settings.settings.first()
+        val server = s.server ?: error("Server URL not configured.")
+        refresher?.ensureFresh()
+        val body = fetchStatesBody(server.url) ?: run {
+            if (refresher?.forceRefresh() == true) {
+                R1Log.i("HaRepo.raw", "401 → refreshed; retrying once")
+                fetchStatesBody(server.url)
+                    ?: error("Home Assistant returned HTTP 401 for /api/states even after refresh.")
+            } else {
+                error("Home Assistant returned HTTP 401 for /api/states — sign out & reconnect.")
+            }
+        }
+        val rowsJson = listStatesJson.decodeFromString<List<kotlinx.serialization.json.JsonElement>>(body)
+        val prefixDot = "$domainPrefix."
+        return rowsJson.mapNotNull { el ->
+            val obj = el as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+            val eid = (obj["entity_id"] as? JsonPrimitive)?.content ?: return@mapNotNull null
+            if (!eid.startsWith(prefixDot)) return@mapNotNull null
+            val state = (obj["state"] as? JsonPrimitive)?.content ?: ""
+            val attrs = (obj["attributes"] as? kotlinx.serialization.json.JsonObject)
+                ?: kotlinx.serialization.json.JsonObject(emptyMap())
+            val friendly = (attrs["friendly_name"] as? JsonPrimitive)?.content ?: eid
+            RawEntityRow(entityId = eid, friendlyName = friendly, state = state, attributes = attrs)
+        }
+    }
+
     override suspend fun callRawService(
         domain: String,
         service: String,

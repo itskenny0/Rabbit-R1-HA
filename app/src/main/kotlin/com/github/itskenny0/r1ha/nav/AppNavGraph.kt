@@ -87,6 +87,9 @@ fun AppNavGraph(
                 onOpenServiceCaller = {
                     navController.navigate(Routes.SERVICE_CALLER) { launchSingleTop = true }
                 },
+                onOpenNotifications = {
+                    navController.navigate(Routes.NOTIFICATIONS) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
@@ -153,6 +156,14 @@ fun AppNavGraph(
         composable(Routes.SERVICE_CALLER) {
             com.github.itskenny0.r1ha.feature.service.ServiceCallerScreen(
                 haRepository = haRepository,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.NOTIFICATIONS) {
+            com.github.itskenny0.r1ha.feature.notifications.NotificationsScreen(
+                haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }

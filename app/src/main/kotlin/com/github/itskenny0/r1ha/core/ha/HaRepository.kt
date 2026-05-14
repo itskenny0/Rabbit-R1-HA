@@ -92,6 +92,32 @@ interface HaRepository {
         service: String,
         data: kotlinx.serialization.json.JsonObject,
     ): Result<String>
+
+    /**
+     * List current HA persistent notifications. Goes through raw
+     * `/api/states` rather than the [listAllEntities] decoder because
+     * the `persistent_notification.*` domain isn't in our [Domain] enum
+     * (and putting it there would cascade through exhaustive when-
+     * branches). Filters server-side on the JSON.
+     */
+    suspend fun listPersistentNotifications(): Result<List<PersistentNotification>>
+
+    /**
+     * Dismiss a single persistent notification — fires
+     * `persistent_notification.dismiss` with `{notification_id: ...}`.
+     * The [id] is the bit after `persistent_notification.` (not the
+     * full entity_id).
+     */
+    suspend fun dismissPersistentNotification(id: String): Result<Unit>
+
+    /**
+     * Lightweight raw entity row for surfaces that need entities outside
+     * our supported [Domain] enum — cameras, persons, weather, calendars,
+     * etc. Returns one entry per HA-reported entity, with the raw state
+     * string and the full attributes JsonObject so the caller can dig into
+     * domain-specific fields without bloating [EntityState]. Filters
+     * client-side by [domainPrefix] (e.g. "camera"). */
+    suspend fun listRawEntitiesByDomain(domainPrefix: String): Result<List<RawEntityRow>>
     suspend fun start()
     suspend fun stop()
 
