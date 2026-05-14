@@ -393,11 +393,21 @@ fun CardStackScreen(
                 // Sync activePageId → horizontal pager: when the user taps a tab
                 // chip or a page is added programmatically, animate the pager so
                 // the chrome and the deck stay in lockstep.
+                //
+                // Compare against [targetPage] (where the pager is HEADING) not
+                // [currentPage] (the dominant visible page). If the pager is
+                // already animating toward the new active page (e.g., the
+                // user is mid-swipe and snapshotFlow has pushed the new id
+                // back to the VM), targetPage already equals idx and we
+                // skip the redundant animate. This was the source of an
+                // observable tab-flicker loop — without the targetPage
+                // check, calling animateScrollToPage mid-fling could re-aim
+                // the pager between two pages back and forth.
                 androidx.compose.runtime.LaunchedEffect(
                     horizontalPagerState, state.activePageId, pageIds,
                 ) {
                     val idx = state.pages.indexOfFirst { it.id == state.activePageId }
-                    if (idx >= 0 && idx != horizontalPagerState.currentPage) {
+                    if (idx >= 0 && idx != horizontalPagerState.targetPage) {
                         horizontalPagerState.animateScrollToPage(idx)
                     }
                 }
@@ -2226,12 +2236,20 @@ private fun JumpRow(
 private fun VerticalPagePip(count: Int, current: Int, onClick: (() -> Unit)? = null) {
     val trackHeight = 22.dp
     val thumbHeight = 6.dp
-    // Pip thumb animation temporarily reverted to static value — recent
-    // animateFloatAsState addition that runs during every scroll-triggered
-    // currentIndex change. Reverting as part of the binary-search for the
-    // scroll-up crash; will restore once LAST CRASH narrows down the
-    // culprit. Static value still tracks the current page; just no spring.
-    val animatedFrac = if (count <= 1) 0f else current.toFloat() / (count - 1).toFloat()
+    val targetFrac = if (count <= 1) 0f else current.toFloat() / (count - 1).toFloat()
+    // Smooth the thumb between positions so a wheel-driven nav (or a jump-to-
+    // card sheet pick) reads as a glide instead of a teleport. Spring tuning
+    // matches the card pager's own animateScrollToPage — they end at the same
+    // moment, so the thumb and the deck travel together. Restored after the
+    // PagerState stale-closure crash fix.
+    val animatedFrac by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = targetFrac,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+        ),
+        label = "r1-pip-thumb",
+    )
     Row(
         modifier = Modifier
             .clip(R1.ShapeRound)

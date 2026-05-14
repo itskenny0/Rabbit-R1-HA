@@ -440,9 +440,15 @@ class SettingsRepository private constructor(
     }
 
     /** Set [pageId] as the active tab. Persisted so a relaunch lands on the same
-     *  page; clamped to a valid page in [update]. */
+     *  page; clamped to a valid page in [update]. No-op when [pageId] already
+     *  equals the current active id so we don't re-emit a fresh AppSettings
+     *  for a redundant write — the previous behaviour caused a feedback loop
+     *  on the horizontal pager when an external observer (PageDeck's
+     *  snapshotFlow) pushed the already-current page id back to the VM. */
     suspend fun setActivePage(pageId: String) {
-        update { it.copy(activePageId = pageId) }
+        update { s ->
+            if (s.activePageId == pageId) s else s.copy(activePageId = pageId)
+        }
     }
 
     /**
