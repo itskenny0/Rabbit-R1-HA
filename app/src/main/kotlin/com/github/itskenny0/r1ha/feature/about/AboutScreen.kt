@@ -82,6 +82,33 @@ fun AboutScreen(
                 )
             }
             item { UpdaterRow() }
+            // File-a-bug link — drops the user straight into the GitHub issue
+            // tracker pre-filled with the app version. Lowers the friction for
+            // crash reports + UX feedback; without it, users have to type the
+            // URL into a desktop browser.
+            item {
+                val bugUrl = "${BuildConfig.SOURCE_URL}/issues/new?body=" +
+                    java.net.URLEncoder.encode(
+                        "App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n" +
+                            "Build: ${BuildConfig.GIT_SHA}\n" +
+                            "Android: API ${Build.VERSION.SDK_INT}\n" +
+                            "Device: ${Build.MANUFACTURER} ${Build.MODEL}\n\n" +
+                            "(describe what happened — if it's a crash, paste the LAST CRASH from the dev menu here)",
+                        "UTF-8",
+                    )
+                LinkRow(
+                    label = "File a bug",
+                    url = bugUrl,
+                    onOpen = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(bugUrl))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    },
+                )
+            }
 
             item { SectionDivider() }
 
