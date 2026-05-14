@@ -32,6 +32,11 @@ class TemplateViewModel(
         val rendered: String = "",
         val error: String? = null,
         val inFlight: Boolean = false,
+        /** Last 5 successfully-rendered templates, newest first. In-memory
+         *  ViewModel state — clears on app restart by design (so a stale
+         *  syntactically-incorrect template from yesterday doesn't haunt
+         *  today's session). */
+        val recent: List<String> = emptyList(),
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -49,10 +54,14 @@ class TemplateViewModel(
             haRepository.renderTemplate(template).fold(
                 onSuccess = { rendered ->
                     R1Log.i("Template", "rendered len=${rendered.length}")
+                    // Push to recent (dedupe + cap at 5).
+                    val newRecent = (listOf(template) + _ui.value.recent.filterNot { it == template })
+                        .take(5)
                     _ui.value = _ui.value.copy(
                         rendered = rendered,
                         error = null,
                         inFlight = false,
+                        recent = newRecent,
                     )
                 },
                 onFailure = { t ->

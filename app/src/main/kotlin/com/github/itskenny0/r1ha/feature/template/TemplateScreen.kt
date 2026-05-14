@@ -120,8 +120,39 @@ fun TemplateScreen(
                     color = R1.InkMuted,
                 )
             }
+            // Recent templates — newest first; tap to recall + re-render.
+            if (ui.recent.isNotEmpty()) {
+                Spacer(Modifier.padding(top = 16.dp))
+                Text(text = "RECENT", style = R1.labelMicro, color = R1.InkSoft)
+                Spacer(Modifier.padding(top = 4.dp))
+                for (t in ui.recent) {
+                    RecentTemplateRow(t, onPick = { vm.setTemplate(t); vm.render() })
+                    Spacer(Modifier.padding(top = 4.dp))
+                }
+            }
             Spacer(Modifier.padding(top = 24.dp))
         }
+    }
+}
+
+@Composable
+private fun RecentTemplateRow(template: String, onPick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .r1Pressable(onClick = onPick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        // Two-line preview is enough — most templates are short, and the
+        // user can tap to reload the full text into the editor.
+        Text(
+            text = template,
+            style = R1.body,
+            color = R1.Ink,
+            maxLines = 2,
+        )
     }
 }
 
