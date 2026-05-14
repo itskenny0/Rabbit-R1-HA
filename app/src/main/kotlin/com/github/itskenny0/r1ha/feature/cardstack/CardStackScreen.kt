@@ -1200,11 +1200,35 @@ private fun TabStrip(
                     }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
-                Text(
-                    text = page.name,
-                    style = R1.labelMicro,
-                    color = if (active) R1.Bg else R1.InkSoft,
-                )
+                // Page name + entity-count badge. The "· N" suffix appears only
+                // when the page has favourites — empty pages would otherwise
+                // get a misleading "· 0" that crowds the chip without conveying
+                // anything useful. Same labelMicro style for both segments so
+                // they read as one unit; the count is dimmed slightly so it
+                // doesn't compete with the page name for attention.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = page.name,
+                        style = R1.labelMicro,
+                        color = if (active) R1.Bg else R1.InkSoft,
+                    )
+                    if (page.favorites.isNotEmpty()) {
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            text = "·",
+                            style = R1.labelMicro,
+                            color = if (active) R1.Bg.copy(alpha = 0.55f)
+                                else R1.InkMuted,
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            text = page.favorites.size.toString(),
+                            style = R1.labelMicro,
+                            color = if (active) R1.Bg.copy(alpha = 0.85f)
+                                else R1.InkMuted,
+                        )
+                    }
+                }
             }
         }
         // '+' chip — always last. Tap → open the manage modal in 'add' mode.
@@ -1352,17 +1376,41 @@ private fun TabManageDialog(
             // DELETE only shows in edit-mode AND when at least one other page would
             // remain afterward. Deleting the last page would leave the user with an
             // empty deck and no way to switch back to a page, so we hide the option
-            // entirely rather than relying on a runtime block. Tinted with StatusRed
-            // as the accent so the destructive action reads as destructive at a
-            // glance — the rest of the dialog stays on the warm accent.
+            // entirely rather than relying on a runtime block.
+            //
+            // Two-stage confirm: first tap arms the button (label flips to
+            // 'CONFIRM DELETE · TAP AGAIN'), second tap commits. Auto-disarms
+            // after 3 seconds via a LaunchedEffect so a stray arm doesn't sit
+            // hot indefinitely. Mirrors how desktop OSes guard accidental
+            // destructive actions — a one-tap delete on a populated page was
+            // too easy to fire from muscle memory.
             if (!isAdd && page != null && canDelete) {
                 Spacer(Modifier.height(8.dp))
+                val armed = androidx.compose.runtime.remember {
+                    androidx.compose.runtime.mutableStateOf(false)
+                }
+                androidx.compose.runtime.LaunchedEffect(armed.value) {
+                    if (armed.value) {
+                        kotlinx.coroutines.delay(3_000)
+                        armed.value = false
+                    }
+                }
                 R1Button(
-                    text = "DELETE",
-                    onClick = { onDelete(page.id) },
+                    text = if (armed.value) "CONFIRM DELETE · TAP AGAIN" else "DELETE",
+                    onClick = {
+                        if (armed.value) onDelete(page.id) else armed.value = true
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     accent = R1.StatusRed,
                 )
+                if (armed.value) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Will remove the page and its ${page.favorites.size} favourite${if (page.favorites.size == 1) "" else "s"} from this view (HA entities aren't deleted).",
+                        style = R1.labelMicro,
+                        color = R1.InkMuted,
+                    )
+                }
             }
         }
     }
