@@ -24,7 +24,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import com.github.itskenny0.r1ha.core.util.Toaster
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.theme.R1
@@ -160,8 +163,27 @@ private fun ExampleChips(onPick: (String) -> Unit) {
 
 @Composable
 private fun ResultPanel(heading: String, body: String, accent: androidx.compose.ui.graphics.Color) {
+    val clipboard = LocalClipboardManager.current
     Column {
-        Text(text = heading, style = R1.labelMicro, color = accent)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = heading, style = R1.labelMicro, color = accent)
+            Spacer(Modifier.width(8.dp))
+            // Tap-to-copy chip — convenient for piping a rendered value
+            // into HA's automation YAML or a Discord/issue post.
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(R1.SurfaceMuted)
+                    .border(1.dp, R1.Hairline, R1.ShapeS)
+                    .r1Pressable(onClick = {
+                        clipboard.setText(AnnotatedString(body))
+                        Toaster.show("Copied")
+                    })
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(text = "COPY", style = R1.labelMicro, color = R1.InkSoft)
+            }
+        }
         Spacer(Modifier.padding(top = 4.dp))
         Box(
             modifier = Modifier
@@ -171,9 +193,6 @@ private fun ResultPanel(heading: String, body: String, accent: androidx.compose.
                 .border(1.dp, R1.Hairline, R1.ShapeS)
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         ) {
-            // SelectionContainer would be nicer (copy-to-clipboard) but
-            // monospace + readable body is the priority. Tap-to-toast
-            // could be a follow-up.
             Text(text = body, style = R1.body, color = R1.Ink)
         }
     }
