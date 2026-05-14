@@ -139,6 +139,12 @@ fun CardStackScreen(
     val tabManagementForId = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<String?>(null)
     }
+    /** Quick-actions sheet visibility — opened by a long-press on the chrome
+     *  hamburger. Holds 'all off on this page' as the only action today;
+     *  designed to grow into a generic per-page quick-actions surface. */
+    val quickActionsOpen = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
     // Jump-to-card overlay visibility — tapped open from the chrome counter to let
     // the user pick a target card by name rather than scrolling through the deck.
     // Declared here (rather than at the chrome-render site) so the wheel-events
@@ -456,6 +462,7 @@ fun CardStackScreen(
                     state.activeState?.let { customizingId.value = it.id.value }
                 },
                 onTapCounter = { jumpPickerOpen.value = true },
+                onLongPressHamburger = { quickActionsOpen.value = true },
                 solidBackdrop = appSettings.ui.hideCardTailAbove,
             )
             // Tab strip — chip per page. Tap to switch active. Long-press opens a
@@ -660,6 +667,23 @@ fun CardStackScreen(
                 onMoveRight = { id -> vm.movePageRight(id) },
                 onSetAccent = { id, argb -> vm.setPageAccent(id, argb) },
                 onDismiss = { tabManagementForId.value = null },
+            )
+        }
+
+        // Quick-actions sheet — currently only 'all off' on the active page.
+        // Long-press the chrome's hamburger to open. Two-stage confirm via
+        // armed/commit pattern (same as page delete) since this fires N
+        // service calls and the user can't undo with one tap.
+        if (quickActionsOpen.value) {
+            QuickActionsSheet(
+                activePageName = appSettings.pages.firstOrNull { it.id == appSettings.activePageId }?.name
+                    ?: "this page",
+                cardCount = state.cards.size,
+                onAllOff = {
+                    vm.turnOffActivePage()
+                    quickActionsOpen.value = false
+                },
+                onDismiss = { quickActionsOpen.value = false },
             )
         }
     }
@@ -1626,6 +1650,80 @@ private fun CardContextMenu(
 }
 
 /**
+ * Quick-actions sheet — opened by long-pressing the chrome hamburger.
+ * Currently exposes a single 'turn off everything on this page' action with
+ * a two-stage confirm. Designed to grow over time: future actions could
+ * include 'all-on for night mode', 'lock all', 'pause all media'.
+ */
+@Composable
+private fun QuickActionsSheet(
+    activePageName: String,
+    cardCount: Int,
+    onAllOff: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.activity.compose.BackHandler(onBack = onDismiss)
+    val armed = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    androidx.compose.runtime.LaunchedEffect(armed.value) {
+        if (armed.value) {
+            kotlinx.coroutines.delay(3_000)
+            armed.value = false
+        }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(R1.Bg.copy(alpha = 0.92f))
+            .r1Pressable(onClick = onDismiss, hapticOnClick = false)
+            .systemBarsPadding(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp)
+                .clip(R1.ShapeS)
+                .background(R1.Surface)
+                .border(1.dp, R1.Hairline, R1.ShapeS)
+                .r1Pressable(onClick = {}, hapticOnClick = false)
+                .padding(16.dp),
+        ) {
+            Text(text = "QUICK ACTIONS", style = R1.sectionHeader, color = R1.AccentWarm)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = activePageName.uppercase(),
+                style = R1.body,
+                color = R1.InkSoft,
+            )
+            Spacer(Modifier.height(14.dp))
+            R1Button(
+                text = if (armed.value) "CONFIRM · TURN OFF $cardCount" else "TURN ALL OFF",
+                onClick = { if (armed.value) onAllOff() else armed.value = true },
+                modifier = Modifier.fillMaxWidth(),
+                accent = R1.StatusAmber,
+            )
+            if (armed.value) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Fires turn_off on every controllable entity on this page (lights, switches, fans, media_players, covers).",
+                    style = R1.labelMicro,
+                    color = R1.InkMuted,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            R1Button(
+                text = "CANCEL",
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
+            )
+        }
+    }
+}
+
+/**
  * Top chrome — hamburger left, vertical position pip + counter centre, settings gear right
  * with a small connection-state dot overlay. Sits *above* the pager so the peek strip
  * doesn't bleed visually into the icons.
@@ -1643,6 +1741,10 @@ private fun ChromeRow(
      *  previews; defaults to a no-op so the pip becomes inert when there's no
      *  picker to open. */
     onTapCounter: () -> Unit = {},
+    /** Long-press on the hamburger opens the quick-actions sheet (currently
+     *  just 'all off'). Defaulted to a no-op so existing previews that
+     *  don't care about the gesture don't need to thread it through. */
+    onLongPressHamburger: () -> Unit = {},
     solidBackdrop: Boolean = true,
 ) {
     Row(
@@ -1671,11 +1773,17 @@ private fun ChromeRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Top-left: favourites hamburger (custom 3-stroke glyph, not Material's filled icon).
+        // Tap: open the favourites picker. Long-press: open the quick-actions
+        // sheet (currently just 'all off' on the active page). r1RowPressable
+        // gives both gestures on the same tile.
         Box(
             modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .r1Pressable(onOpenFavoritesPicker),
+                .r1RowPressable(
+                    onTap = onOpenFavoritesPicker,
+                    onLongPress = onLongPressHamburger,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             HamburgerGlyph(size = 18.dp)

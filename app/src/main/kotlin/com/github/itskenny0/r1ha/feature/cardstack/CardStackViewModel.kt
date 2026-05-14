@@ -666,6 +666,44 @@ class CardStackViewModel(
         }
     }
 
+    /**
+     * Fire `turn_off` on every controllable entity in the active page —
+     * lights, switches, fans, media_players, covers. Sensors / actions
+     * skip (no off state to set). Surfaces a confirmation toast with the
+     * count of entities targeted. Used by the chrome's long-press
+     * 'quick actions' sheet for the 'going to bed' moment.
+     *
+     * Per-domain service:
+     *   light / switch / fan / media_player / cover → turn_off
+     *
+     * Implementation note: we walk the ACTIVE page only (not the full
+     * favourites union) so the user can scope an 'all off' to a room
+     * by switching to that room's page first.
+     */
+    fun turnOffActivePage() {
+        viewModelScope.launch {
+            val active = _state.value.activePageId
+            val pageCards = _state.value.cardsByPage[active].orEmpty()
+            val targets = pageCards.filter { ent ->
+                val d = ent.id.domain
+                d == Domain.LIGHT || d == Domain.SWITCH || d == Domain.FAN ||
+                    d == Domain.MEDIA_PLAYER || d == Domain.COVER ||
+                    d == Domain.INPUT_BOOLEAN || d == Domain.AUTOMATION
+            }
+            R1Log.i("CardStack.allOff", "firing turn_off on ${targets.size} entities in active page")
+            for (t in targets) {
+                haRepository.call(
+                    ServiceCall(
+                        target = t.id,
+                        service = "turn_off",
+                        data = kotlinx.serialization.json.JsonObject(emptyMap()),
+                    ),
+                )
+            }
+            com.github.itskenny0.r1ha.core.util.Toaster.show("Turned off ${targets.size} entities")
+        }
+    }
+
     /** Direct page reorder used by the tab strip's drag-reorder gesture.
      *  Indices are interpreted in the current settings' page order; the
      *  underlying [SettingsRepository.reorderPages] clamps + no-ops on
