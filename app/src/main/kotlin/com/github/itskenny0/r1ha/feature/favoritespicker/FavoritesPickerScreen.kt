@@ -95,21 +95,34 @@ fun FavoritesPickerScreen(
                 )
             }
 
-            when {
-                ui.loading -> CenteredLoading()
-                ui.error != null -> ErrorState(message = ui.error ?: "Error")
-                ui.rows.isEmpty() -> FilteredEmptyState(filter = ui.filter, query = ui.query)
-                else -> ChannelList(
-                    rows = ui.rows,
-                    listState = listState,
-                    isReorderable = ui.filter == PickerFilter.FAVS,
-                    onToggle = { vm.toggle(it) },
-                    onMoveUp = { vm.moveUp(it) },
-                    onMoveDown = { vm.moveDown(it) },
-                    onReorderTo = { entityId, idx -> vm.moveTo(entityId, idx) },
-                    onEdit = { vm.startEditing(it) },
-                    onPreview = { previewing.value = it },
-                )
+            // Pull-to-refresh wrap so the user can re-fetch HA's entity list
+            // without backing out. Material3 PullToRefreshBox handles the
+            // gesture + indicator; we expose ui.loading as the 'refreshing'
+            // state so the spinner stays visible while the VM is doing its
+            // thing. Refresh fires through vm.refresh() which is idempotent
+            // and de-bounced inside the VM, so an over-enthusiastic user
+            // can't spam-fetch.
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = ui.loading,
+                onRefresh = { vm.refresh() },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                when {
+                    ui.loading -> CenteredLoading()
+                    ui.error != null -> ErrorState(message = ui.error ?: "Error")
+                    ui.rows.isEmpty() -> FilteredEmptyState(filter = ui.filter, query = ui.query)
+                    else -> ChannelList(
+                        rows = ui.rows,
+                        listState = listState,
+                        isReorderable = ui.filter == PickerFilter.FAVS,
+                        onToggle = { vm.toggle(it) },
+                        onMoveUp = { vm.moveUp(it) },
+                        onMoveDown = { vm.moveDown(it) },
+                        onReorderTo = { entityId, idx -> vm.moveTo(entityId, idx) },
+                        onEdit = { vm.startEditing(it) },
+                        onPreview = { previewing.value = it },
+                    )
+                }
             }
         }
 

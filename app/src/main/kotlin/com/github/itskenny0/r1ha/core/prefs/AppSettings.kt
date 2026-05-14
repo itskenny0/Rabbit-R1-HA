@@ -205,6 +205,11 @@ data class FavoritePage(
     val id: String,
     val name: String,
     val favorites: List<String> = emptyList(),
+    /** Optional per-page accent colour as an ARGB int. Null = inherit the
+     *  global warm accent. Painted onto the active tab chip and (future) any
+     *  page-scoped chrome. Defaulted nullable + additive so older settings
+     *  blobs deserialize without migration. */
+    val accentArgb: Int? = null,
 )
 
 /**

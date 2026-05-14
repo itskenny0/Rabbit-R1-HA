@@ -148,6 +148,28 @@ class MainActivity : ComponentActivity() {
         handleOAuthCallback(intent)
     }
 
+    /**
+     * Coming back to the foreground after the app was backgrounded — kick a
+     * reconnect if we're not currently connected. Backgrounded apps on R1
+     * (and Android in general) frequently have their WS torn down by the
+     * OS power saver; without an explicit nudge here the user would tap
+     * back in, see stale data, and wonder why nothing updates until our
+     * backoff timer fires. Cheap to call when already connected: the repo
+     * short-circuits on the existing connection.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (!::graph.isInitialized) return
+        val conn = graph.haRepository.connection.value
+        val needsKick = conn !is com.github.itskenny0.r1ha.core.ha.ConnectionState.Connected &&
+            conn !is com.github.itskenny0.r1ha.core.ha.ConnectionState.Connecting &&
+            conn !is com.github.itskenny0.r1ha.core.ha.ConnectionState.Authenticating
+        if (needsKick) {
+            R1Log.i("MainActivity.onResume", "kicking reconnect; conn=$conn")
+            graph.haRepository.reconnectNow()
+        }
+    }
+
     private fun handleOAuthCallback(intent: Intent?) {
         val data = intent?.data ?: return
         if (data.scheme != "r1ha" || data.host != "auth-callback") return

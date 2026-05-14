@@ -644,6 +644,7 @@ fun CardStackScreen(
                 },
                 onMoveLeft = { id -> vm.movePageLeft(id) },
                 onMoveRight = { id -> vm.movePageRight(id) },
+                onSetAccent = { id, argb -> vm.setPageAccent(id, argb) },
                 onDismiss = { tabManagementForId.value = null },
             )
         }
@@ -781,8 +782,20 @@ private fun PageDeck(
                 // r1RowPressable would replace the cheaper r1Pressable for no gain).
                 // Infinite-scroll uses a virtual page index well past cards.size, so we
                 // modulo back into the real card index before any lookup.
-                val cardIdx = realIndexOf(page)
-                val card = cards[cardIdx]
+                //
+                // Guard against the cards list shrinking under us mid-frame. The
+                // pager's content lambda can be invoked with a stale `page` index
+                // when state transitions (entity removed via the '…' menu, or the
+                // persister-loaded cache is overwritten by a smaller fresh state
+                // push) shrink cards.size between composition cycles. Without the
+                // guard, `cards[cardIdx]` was throwing IOOB on swipes that
+                // coincided with the state transition — surfaced by the user as
+                // 'scrolling up on cards crashes, especially the top card' when
+                // the persister had loaded N cards and HA echoed back N-1.
+                if (cards.isEmpty()) return@Box
+                val realSize = cards.size
+                val cardIdx = realIndexOf(page).coerceIn(0, realSize - 1)
+                val card = cards.getOrNull(cardIdx) ?: return@Box
                 val longPressTarget = appSettings.entityOverrides[card.id.value]?.longPressTarget
                 val pageLightMode = lightWheelModes[card.id]
                 EntityCard(
@@ -1147,7 +1160,14 @@ private fun TabStrip(
                         }
                     }
                     .clip(R1.ShapeS)
-                    .background(if (active) R1.AccentWarm else R1.SurfaceMuted)
+                    .background(
+                        if (active) {
+                            // Per-page accent override; falls back to the warm
+                            // default for pages that haven't been customised.
+                            page.accentArgb?.let { androidx.compose.ui.graphics.Color(it) }
+                                ?: R1.AccentWarm
+                        } else R1.SurfaceMuted,
+                    )
                     .r1Pressable(onClick = { onTapPage(page.id) })
                     .pointerInput(page.id) {
                         detectDragGesturesAfterLongPress(
@@ -1275,6 +1295,7 @@ private fun TabManageDialog(
     onDelete: (String) -> Unit,
     onMoveLeft: (String) -> Unit,
     onMoveRight: (String) -> Unit,
+    onSetAccent: (pageId: String, accentArgb: Int?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val initial = if (isAdd) "NEW" else (page?.name ?: "")
@@ -1384,6 +1405,60 @@ private fun TabManageDialog(
                             modifier = Modifier.weight(1f),
                             variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
                         )
+                    }
+                }
+            }
+            // Accent colour row — only meaningful in edit mode where there's an
+            // existing page to recolour. Six presets matched against the R1
+            // palette (warm / cool / amber / red / green / muted) plus a
+            // 'default' swatch that clears the override. The active selection
+            // gets a hairline border so it's obvious which preset is current;
+            // others render as flat swatches.
+            if (!isAdd && page != null) {
+                Spacer(Modifier.height(14.dp))
+                Text(text = "ACCENT", style = R1.labelMicro, color = R1.InkSoft)
+                Spacer(Modifier.height(6.dp))
+                val accentPresets = listOf<Pair<String, Int?>>(
+                    "DEFAULT" to null,
+                    "WARM" to R1.AccentWarm.value.toInt(),
+                    "COOL" to R1.AccentCool.value.toInt(),
+                    "AMBER" to R1.StatusAmber.value.toInt(),
+                    "RED" to R1.StatusRed.value.toInt(),
+                    "GREEN" to R1.AccentGreen.value.toInt(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    for ((label, argb) in accentPresets) {
+                        val swatchColor = argb?.let { androidx.compose.ui.graphics.Color(it) }
+                            ?: R1.SurfaceMuted
+                        val selected = page.accentArgb == argb
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(28.dp)
+                                .clip(R1.ShapeS)
+                                .background(swatchColor)
+                                .then(
+                                    if (selected) Modifier.border(1.5.dp, R1.Ink, R1.ShapeS)
+                                    else Modifier.border(1.dp, R1.Hairline, R1.ShapeS),
+                                )
+                                .r1Pressable(onClick = { onSetAccent(page.id, argb) }),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            // 'DEFAULT' tile gets a tiny label since the muted
+                            // colour alone isn't distinguishable from an unset
+                            // / disabled state. Coloured tiles speak for
+                            // themselves.
+                            if (argb == null) {
+                                Text(
+                                    text = "—",
+                                    style = R1.labelMicro,
+                                    color = R1.InkMuted,
+                                )
+                            }
+                        }
                     }
                 }
             }
