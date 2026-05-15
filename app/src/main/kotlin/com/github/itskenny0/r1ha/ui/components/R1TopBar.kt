@@ -27,7 +27,15 @@ import com.github.itskenny0.r1ha.core.theme.R1
  * want all-caps).
  */
 @Composable
-fun R1TopBar(title: String, onBack: () -> Unit) {
+fun R1TopBar(
+    title: String,
+    onBack: () -> Unit,
+    /** Optional trailing-edge slot — usually a small chip such as
+     *  REFRESH or DISMISS ALL. Pushed to the right edge of the bar with
+     *  the title taking the remaining width. Null = legacy layout
+     *  (title aligns flush against the chevron, no trailing chip). */
+    action: (@Composable () -> Unit)? = null,
+) {
     Column {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -37,7 +45,19 @@ fun R1TopBar(title: String, onBack: () -> Unit) {
         ) {
             ChevronBack(onClick = onBack)
             Spacer(Modifier.width(4.dp))
-            Text(title, style = R1.screenTitle, color = R1.Ink)
+            if (action != null) {
+                // Title takes weight so the action chip can sit flush
+                // against the right gutter without the title shifting.
+                Text(
+                    title,
+                    style = R1.screenTitle,
+                    color = R1.Ink,
+                    modifier = Modifier.weight(1f),
+                )
+                action()
+            } else {
+                Text(title, style = R1.screenTitle, color = R1.Ink)
+            }
         }
         Box(
             modifier = Modifier

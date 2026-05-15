@@ -57,7 +57,31 @@ fun SystemHealthScreen(
             .background(R1.Bg)
             .systemBarsPadding(),
     ) {
-        R1TopBar(title = "SYSTEM HEALTH", onBack = onBack)
+        R1TopBar(
+            title = "SYSTEM HEALTH",
+            onBack = onBack,
+            action = {
+                // REFRESH chip — pulls a fresh /api/config + /api/error_log.
+                // Without this the user had to back-and-re-enter the screen
+                // to update the diagnostic, which on a fast-moving HA
+                // install (say, while debugging an integration loop) made
+                // the panel less useful than it could be.
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.SurfaceMuted)
+                        .border(1.dp, R1.Hairline, R1.ShapeS)
+                        .r1Pressable(onClick = { vm.refresh() })
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = if (ui.loading) "…" else "REFRESH",
+                        style = R1.labelMicro,
+                        color = R1.InkSoft,
+                    )
+                }
+            },
+        )
         if (ui.loading && ui.config == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(
