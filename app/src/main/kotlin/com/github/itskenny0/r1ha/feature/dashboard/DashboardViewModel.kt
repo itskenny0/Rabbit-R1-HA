@@ -46,6 +46,10 @@ class DashboardViewModel(
         val awayCount: Int,
         /** Each entry is "name → state". Limited to 6 for layout. */
         val rows: List<Pair<String, String>>,
+        /** Total person count — when > rows.size, the dashboard
+         *  appends an 'and N more' affordance instead of silently
+         *  truncating. */
+        val total: Int,
     )
 
     @androidx.compose.runtime.Stable
@@ -186,6 +190,7 @@ class DashboardViewModel(
                             rows = rows.sortedBy { it.friendlyName.lowercase() }
                                 .take(6)
                                 .map { it.friendlyName to it.state },
+                            total = rows.size,
                         )
                     }
                 // Next event: pick the earliest start_time across all
