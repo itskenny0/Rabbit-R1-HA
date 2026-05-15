@@ -19,8 +19,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -77,6 +80,53 @@ fun NotificationsScreen(
             .systemBarsPadding(),
     ) {
         R1TopBar(title = "NOTIFICATIONS", onBack = onBack)
+        // Bulk DISMISS ALL — only rendered when there's at least one
+        // notification to dismiss. Two-stage confirm via the armed/commit
+        // pattern (single tap arms, second tap within 3 s fires) so a
+        // muscle-memory tap doesn't accidentally clear everything.
+        if (ui.notifications.isNotEmpty()) {
+            val armed = remember { mutableStateOf(false) }
+            LaunchedEffect(armed.value) {
+                if (armed.value) {
+                    kotlinx.coroutines.delay(3_000L)
+                    armed.value = false
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${ui.notifications.size} active",
+                    style = R1.labelMicro,
+                    color = R1.InkSoft,
+                    modifier = Modifier.weight(1f),
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.StatusRed.copy(alpha = if (armed.value) 0.32f else 0.18f))
+                        .border(1.dp, R1.Hairline, R1.ShapeS)
+                        .r1Pressable(onClick = {
+                            if (armed.value) {
+                                vm.dismissAll()
+                                armed.value = false
+                            } else {
+                                armed.value = true
+                            }
+                        })
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = if (armed.value) "TAP AGAIN" else "DISMISS ALL",
+                        style = R1.labelMicro,
+                        color = R1.StatusRed,
+                    )
+                }
+            }
+        }
         when {
             ui.loading -> Box(
                 modifier = Modifier.fillMaxSize(),

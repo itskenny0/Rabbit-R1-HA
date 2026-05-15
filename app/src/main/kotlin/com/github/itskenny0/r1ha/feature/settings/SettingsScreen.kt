@@ -37,6 +37,7 @@ import com.github.itskenny0.r1ha.ui.components.R1Switch
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import com.github.itskenny0.r1ha.ui.components.r1RowPressable
 
 @Composable
 fun SettingsScreen(
@@ -1032,9 +1033,10 @@ private fun SwitchRow(
  * (refresh cadence, polling intervals) need granular tuning without
  * a slider's tap-imprecision penalty on the R1's small screen.
  *
- * Clamped at [min] / [max]; the [step] controls how much each tap
- * moves the value. Pills disable themselves when the value is at the
- * matching boundary so the user doesn't waste taps.
+ * Tap a pill = ±step. Long-press a pill = ±step×10 (fast-step for
+ * wide ranges like power thresholds 50…10 000 W). Pills disable
+ * themselves when the value is at the matching boundary so the user
+ * doesn't waste taps.
  */
 @Composable
 private fun NumberStepperRow(
@@ -1070,9 +1072,14 @@ private fun NumberStepperRow(
                     .size(28.dp)
                     .clip(R1.ShapeS)
                     .background(if (canDec) R1.SurfaceMuted else R1.Bg)
-                    .r1Pressable(onClick = {
-                        if (canDec) onChange((value - step).coerceAtLeast(min))
-                    }),
+                    .r1RowPressable(
+                        onTap = {
+                            if (canDec) onChange((value - step).coerceAtLeast(min))
+                        },
+                        onLongPress = {
+                            if (canDec) onChange((value - step * 10).coerceAtLeast(min))
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(text = "−", style = R1.body, color = if (canDec) R1.Ink else R1.InkMuted)
@@ -1091,9 +1098,14 @@ private fun NumberStepperRow(
                     .size(28.dp)
                     .clip(R1.ShapeS)
                     .background(if (canInc) R1.SurfaceMuted else R1.Bg)
-                    .r1Pressable(onClick = {
-                        if (canInc) onChange((value + step).coerceAtMost(max))
-                    }),
+                    .r1RowPressable(
+                        onTap = {
+                            if (canInc) onChange((value + step).coerceAtMost(max))
+                        },
+                        onLongPress = {
+                            if (canInc) onChange((value + step * 10).coerceAtMost(max))
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(text = "+", style = R1.body, color = if (canInc) R1.Ink else R1.InkMuted)

@@ -63,6 +63,43 @@ class NotificationsViewModel(
         }
     }
 
+    /** Bulk dismiss every loaded notification. Fires one
+     *  persistent_notification.dismiss per row in parallel; each one
+     *  shows up in `pendingDismiss` while in flight so the UI greys
+     *  the row + button consistently with the single-dismiss path. */
+    fun dismissAll() {
+        val all = _ui.value.notifications.map { it.notificationId }
+        if (all.isEmpty()) return
+        _ui.value = _ui.value.copy(pendingDismiss = _ui.value.pendingDismiss + all.toSet())
+        viewModelScope.launch {
+            // Fire all in parallel. Optimistic UI removal happens per
+            // success; failures restore the row + surface a toast.
+            kotlinx.coroutines.coroutineScope {
+                for (id in all) {
+                    launch {
+                        haRepository.dismissPersistentNotification(id).fold(
+                            onSuccess = {
+                                _ui.value = _ui.value.copy(
+                                    notifications = _ui.value.notifications.filterNot {
+                                        it.notificationId == id
+                                    },
+                                    pendingDismiss = _ui.value.pendingDismiss - id,
+                                )
+                            },
+                            onFailure = { t ->
+                                R1Log.w("Notifications", "dismiss $id failed: ${t.message}")
+                                _ui.value = _ui.value.copy(
+                                    pendingDismiss = _ui.value.pendingDismiss - id,
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+            Toaster.show("Dismissed ${all.size} notification${if (all.size == 1) "" else "s"}")
+        }
+    }
+
     fun dismiss(notification: PersistentNotification) {
         if (notification.notificationId in _ui.value.pendingDismiss) return
         _ui.value = _ui.value.copy(
