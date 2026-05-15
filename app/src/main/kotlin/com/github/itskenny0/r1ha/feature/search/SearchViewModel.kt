@@ -37,6 +37,21 @@ class SearchViewModel(
     private val haRepository: HaRepository,
 ) : ViewModel() {
 
+    /** Coarse-grained domain bucket for the filter chips. Maps the
+     *  Domain enum into the four user-facing groupings the chips
+     *  expose; "ALL" disables the kind filter entirely. */
+    enum class Bucket { ALL, CONTROLS, SENSORS, ACTIONS, OTHER }
+
+    private fun bucketOf(d: Domain): Bucket = when (d) {
+        Domain.LIGHT, Domain.SWITCH, Domain.FAN, Domain.COVER, Domain.MEDIA_PLAYER,
+        Domain.LOCK, Domain.INPUT_BOOLEAN, Domain.HUMIDIFIER, Domain.CLIMATE,
+        Domain.WATER_HEATER, Domain.VACUUM, Domain.VALVE, Domain.NUMBER,
+        Domain.INPUT_NUMBER, Domain.SELECT, Domain.INPUT_SELECT -> Bucket.CONTROLS
+        Domain.SENSOR, Domain.BINARY_SENSOR -> Bucket.SENSORS
+        Domain.SCENE, Domain.SCRIPT, Domain.BUTTON, Domain.INPUT_BUTTON,
+        Domain.AUTOMATION -> Bucket.ACTIONS
+    }
+
     @androidx.compose.runtime.Stable
     data class UiState(
         val loading: Boolean = true,
@@ -44,30 +59,38 @@ class SearchViewModel(
          *  memory so keystrokes don't hit the network. */
         val all: List<EntityState> = emptyList(),
         val query: String = "",
+        val bucket: Bucket = Bucket.ALL,
         val error: String? = null,
-    ) {
-        /** Filtered subset matching [query]. Empty query returns
-         *  empty list (avoid rendering the entire entity registry by
-         *  default — would be slow on big installs). */
-        val results: List<EntityState> get() {
-            if (query.isBlank()) return emptyList()
-            val q = query.trim().lowercase()
-            return all.filter { e ->
-                e.friendlyName.lowercase().contains(q) ||
-                    e.id.value.lowercase().contains(q) ||
-                    (e.area?.lowercase()?.contains(q) ?: false)
+    )
+
+    /** Filtered subset matching [query] AND the active [bucket]. Empty
+     *  query with ALL bucket returns empty list (avoid rendering the
+     *  entire entity registry on entry); query OR bucket non-empty
+     *  produces matches.*/
+    val results: List<EntityState>
+        get() {
+            val s = _ui.value
+            val q = s.query.trim().lowercase()
+            if (q.isBlank() && s.bucket == Bucket.ALL) return emptyList()
+            return s.all.filter { e ->
+                val matchesQuery = if (q.isBlank()) true else (
+                    e.friendlyName.lowercase().contains(q) ||
+                        e.id.value.lowercase().contains(q) ||
+                        (e.area?.lowercase()?.contains(q) ?: false)
+                    )
+                val matchesBucket = s.bucket == Bucket.ALL || bucketOf(e.id.domain) == s.bucket
+                matchesQuery && matchesBucket
             }
-                // Sort by relevance: exact-prefix matches first, then
-                // contains-anywhere. Stable secondary sort by name.
                 .sortedWith(
                     compareByDescending<EntityState> {
-                        it.friendlyName.lowercase().startsWith(q) ||
-                            it.id.value.lowercase().substringAfter('.').startsWith(q)
+                        q.isNotBlank() && (
+                            it.friendlyName.lowercase().startsWith(q) ||
+                                it.id.value.lowercase().substringAfter('.').startsWith(q)
+                            )
                     }.thenBy { it.friendlyName.lowercase() },
                 )
-                .take(50) // cap to keep the list scannable
+                .take(80)
         }
-    }
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui
@@ -92,6 +115,11 @@ class SearchViewModel(
     fun setQuery(q: String) {
         if (_ui.value.query == q) return
         _ui.value = _ui.value.copy(query = q)
+    }
+
+    fun setBucket(b: Bucket) {
+        if (_ui.value.bucket == b) return
+        _ui.value = _ui.value.copy(bucket = b)
     }
 
     /**

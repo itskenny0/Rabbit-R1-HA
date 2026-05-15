@@ -77,6 +77,10 @@ fun SearchScreen(
             .imePadding(),
     ) {
         R1TopBar(title = "QUICK SEARCH", onBack = onBack)
+        // Domain-bucket filter chips — ALL / CONTROLS / SENSORS / ACTIONS.
+        // Tap to narrow without typing. ALL needs a query; the others
+        // surface entities even with an empty search field.
+        BucketChips(current = ui.bucket, onSelect = { vm.setBucket(it) })
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -114,7 +118,8 @@ fun SearchScreen(
                     color = R1.AccentWarm,
                 )
             }
-            ui.query.isBlank() -> Box(
+            vm.results.isEmpty() && ui.query.isBlank() &&
+                ui.bucket == SearchViewModel.Bucket.ALL -> Box(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -126,18 +131,19 @@ fun SearchScreen(
                     )
                     Spacer(Modifier.size(6.dp))
                     Text(
-                        text = "Type a name, entity_id, or area to find. Tap a result to fire (scenes / scripts / buttons) or toggle (lights / switches / fans).",
+                        text = "Type a name, entity_id, or area to find — or tap a chip above to narrow by kind. Tap a result to fire (scenes / scripts / buttons) or toggle (lights / switches / fans).",
                         style = R1.labelMicro,
                         color = R1.InkSoft,
                     )
                 }
             }
-            ui.results.isEmpty() -> Box(
+            vm.results.isEmpty() -> Box(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "No matches for '${ui.query}'.",
+                    text = if (ui.query.isNotBlank()) "No matches for '${ui.query}'."
+                    else "No ${ui.bucket.name.lowercase()} entities.",
                     style = R1.body,
                     color = R1.InkMuted,
                 )
@@ -150,9 +156,45 @@ fun SearchScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                items(items = ui.results, key = { it.id.value }) { entity ->
+                items(items = vm.results, key = { it.id.value }) { entity ->
                     SearchResultRow(entity, onTap = { vm.activate(entity) })
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BucketChips(
+    current: SearchViewModel.Bucket,
+    onSelect: (SearchViewModel.Bucket) -> Unit,
+) {
+    val items = listOf(
+        SearchViewModel.Bucket.ALL to "ALL",
+        SearchViewModel.Bucket.CONTROLS to "CONTROLS",
+        SearchViewModel.Bucket.SENSORS to "SENSORS",
+        SearchViewModel.Bucket.ACTIONS to "ACTIONS",
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        for ((bucket, label) in items) {
+            val active = bucket == current
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(if (active) R1.AccentWarm else R1.SurfaceMuted)
+                    .r1Pressable(onClick = { onSelect(bucket) })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = R1.labelMicro,
+                    color = if (active) R1.Bg else R1.InkSoft,
+                )
             }
         }
     }
