@@ -323,16 +323,41 @@ private fun SunCard(s: DashboardViewModel.SunSummary) {
                 )
             }
         }
-        // Next rise / set — show whichever is upcoming (already past for
-        // the other half of the day cycle, no point repeating).
+        // Next rise / set — relative time + HH:mm absolute. The
+        // relative is the at-a-glance answer ('in 4h'); the absolute
+        // helps with concrete planning ('alarm before sunrise').
+        val locale = java.util.Locale.getDefault()
+        val timeFmt = java.time.format.DateTimeFormatter.ofLocalizedTime(
+            java.time.format.FormatStyle.SHORT,
+        ).withLocale(locale)
         Row {
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = "NEXT RISE", style = R1.labelMicro, color = R1.InkMuted)
-                RelativeTimeLabel(at = s.nextRising, color = R1.AccentWarm, style = R1.labelMicro)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RelativeTimeLabel(at = s.nextRising, color = R1.AccentWarm, style = R1.labelMicro)
+                    s.nextRising?.let {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = it.atZone(java.time.ZoneId.systemDefault()).format(timeFmt),
+                            style = R1.labelMicro,
+                            color = R1.InkSoft,
+                        )
+                    }
+                }
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = "NEXT SET", style = R1.labelMicro, color = R1.InkMuted)
-                RelativeTimeLabel(at = s.nextSetting, color = R1.AccentCool, style = R1.labelMicro)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RelativeTimeLabel(at = s.nextSetting, color = R1.AccentCool, style = R1.labelMicro)
+                    s.nextSetting?.let {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = it.atZone(java.time.ZoneId.systemDefault()).format(timeFmt),
+                            style = R1.labelMicro,
+                            color = R1.InkSoft,
+                        )
+                    }
+                }
             }
         }
     }
