@@ -573,6 +573,7 @@ fun SettingsScreen(
 
             // ── Dashboard layout — per-section visibility + thresholds ─────────
             item { Section("DASHBOARD") }
+            item { SubGroupLabel("VISIBLE CARDS") }
             item {
                 SwitchRow(
                     label = "Greeting",
@@ -661,10 +662,11 @@ fun SettingsScreen(
                     onCheckedChange = { v -> vm.updateDashboard { it.copy(showInlineAlerts = v) } },
                 )
             }
+            item { SubGroupLabel("THRESHOLDS & INTERVALS") }
             item {
                 NumberStepperRow(
                     label = "Dashboard refresh",
-                    subtitle = "Auto-refresh cadence (0 = pull-down only)",
+                    subtitle = "Auto-refresh cadence (0 = pull-down only · long-press −/+ for ×10)",
                     value = s.dashboard.refreshIntervalSec,
                     min = 0, max = 600, step = 15, suffix = " s",
                     onChange = { v -> vm.updateDashboard { it.copy(refreshIntervalSec = v) } },
@@ -941,6 +943,24 @@ private fun Section(title: String) {
 @Composable
 private fun SectionDivider() {
     Spacer(Modifier.height(2.dp))
+}
+
+/**
+ * Smaller heading rendered inside a Section to split it into visual
+ * groups (e.g. "VISIBLE CARDS" vs "THRESHOLDS & INTERVALS" under
+ * DASHBOARD) without escalating to a full Section divider. Pairs
+ * nicely with long lists of related rows that would otherwise blur
+ * together at a glance.
+ */
+@Composable
+private fun SubGroupLabel(text: String) {
+    Spacer(Modifier.height(6.dp))
+    androidx.compose.material3.Text(
+        text = text,
+        style = R1.labelMicro,
+        color = R1.InkMuted,
+        modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 2.dp, bottom = 4.dp),
+    )
 }
 
 /**

@@ -115,9 +115,25 @@ fun ServiceCallerScreen(
                         .background(R1.SurfaceMuted)
                         .border(1.dp, R1.Hairline, R1.ShapeS)
                         .r1Pressable(onClick = {
-                            val text = clipboard.getText()?.toString().orEmpty()
-                            if (text.isBlank()) Toaster.show("Clipboard empty")
-                            else vm.setData(text)
+                            val text = clipboard.getText()?.toString().orEmpty().trim()
+                            if (text.isBlank()) {
+                                Toaster.show("Clipboard empty")
+                            } else {
+                                // Try pretty-printing JSON for readability.
+                                // Anything that doesn't parse drops through as
+                                // raw text — paste-as-is for non-JSON snippets.
+                                val pretty = runCatching {
+                                    val parsed = kotlinx.serialization.json.Json
+                                        .parseToJsonElement(text)
+                                    kotlinx.serialization.json.Json {
+                                        prettyPrint = true
+                                    }.encodeToString(
+                                        kotlinx.serialization.json.JsonElement.serializer(),
+                                        parsed,
+                                    )
+                                }.getOrNull()
+                                vm.setData(pretty ?: text)
+                            }
                         })
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                 ) {
