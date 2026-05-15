@@ -562,7 +562,12 @@ private fun Greeting() {
         java.time.format.DateTimeFormatter.ofPattern("EEEE, d MMM").withLocale(locale),
     )
     val timeLine = now.format(
-        java.time.format.DateTimeFormatter.ofPattern("HH:mm").withLocale(locale),
+        // FormatStyle.SHORT is locale-aware: 12-hour with AM/PM in
+        // en-US, 24-hour in en-GB / de-DE / most of EU. The R1's
+        // system locale drives the result.
+        java.time.format.DateTimeFormatter.ofLocalizedTime(
+            java.time.format.FormatStyle.SHORT,
+        ).withLocale(locale),
     )
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.Bottom) {

@@ -175,17 +175,19 @@ class DashboardViewModel(
                         temperatureUnit = (row.attributes["temperature_unit"] as? JsonPrimitive)?.content,
                     )
                 }
-                val persons = personJob.await().getOrNull()?.let { rows ->
-                    val homeCount = rows.count { it.state == "home" }
-                    val awayCount = rows.count { it.state == "not_home" || it.state == "away" }
-                    PersonsSummary(
-                        homeCount = homeCount,
-                        awayCount = awayCount,
-                        rows = rows.sortedBy { it.friendlyName.lowercase() }
-                            .take(6)
-                            .map { it.friendlyName to it.state },
-                    )
-                }
+                val persons = personJob.await().getOrNull()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { rows ->
+                        val homeCount = rows.count { it.state == "home" }
+                        val awayCount = rows.count { it.state == "not_home" || it.state == "away" }
+                        PersonsSummary(
+                            homeCount = homeCount,
+                            awayCount = awayCount,
+                            rows = rows.sortedBy { it.friendlyName.lowercase() }
+                                .take(6)
+                                .map { it.friendlyName to it.state },
+                        )
+                    }
                 // Next event: pick the earliest start_time across all
                 // calendar entities, or the first happening-now (state=on)
                 // if one exists.
