@@ -98,7 +98,24 @@ class ServiceCallerViewModel(
                     val newRecent = (listOf(justFired) + _ui.value.recent.filterNot { it == justFired })
                         .take(historyDepth)
                     _ui.value = _ui.value.copy(
-                        result = if (result.isBlank()) "[] (no state changes)" else result,
+                        result = if (result.isBlank()) {
+                            "[] (no state changes)"
+                        } else {
+                            // Pretty-print the JSON response for readability —
+                            // HA's /api/services returns an array of state
+                            // dicts that's hard to scan single-line. Falls
+                            // back to the raw response if parsing fails (HA
+                            // could return non-JSON for some service edge
+                            // cases).
+                            runCatching {
+                                val parsed = kotlinx.serialization.json.Json
+                                    .parseToJsonElement(result)
+                                prettyJson.encodeToString(
+                                    kotlinx.serialization.json.JsonElement.serializer(),
+                                    parsed,
+                                )
+                            }.getOrDefault(result)
+                        },
                         error = null,
                         inFlight = false,
                         recent = newRecent,
@@ -129,6 +146,12 @@ class ServiceCallerViewModel(
     }
 
     companion object {
+        /** Shared Json instance for pretty-printing service-call results.
+         *  prettyPrint = true is enough; default 4-space indent reads
+         *  fine on the R1's tiny screen. Lives in the companion so the
+         *  formatter isn't rebuilt on every fire. */
+        private val prettyJson = kotlinx.serialization.json.Json { prettyPrint = true }
+
         fun factory(
             haRepository: HaRepository,
             settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
