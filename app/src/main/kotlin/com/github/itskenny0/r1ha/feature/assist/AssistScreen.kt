@@ -55,11 +55,21 @@ import com.github.itskenny0.r1ha.ui.components.r1Pressable
 @Composable
 fun AssistScreen(
     haRepository: HaRepository,
+    settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+    wheelInput: com.github.itskenny0.r1ha.core.input.WheelInput,
     onBack: () -> Unit,
 ) {
     val vm: AssistViewModel = viewModel(factory = AssistViewModel.factory(haRepository))
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
+    // Wheel scroll for the transcript — long conversations span more
+    // than one screen + the user wants to scroll back without
+    // touching.
+    com.github.itskenny0.r1ha.ui.components.WheelScrollFor(
+        wheelInput = wheelInput,
+        listState = listState,
+        settings = settings,
+    )
     // Auto-scroll to the newest message whenever the transcript grows.
     LaunchedEffect(ui.messages.size) {
         if (ui.messages.isNotEmpty()) {

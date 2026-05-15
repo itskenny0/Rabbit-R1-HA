@@ -167,6 +167,8 @@ fun AppNavGraph(
         composable(Routes.ASSIST) {
             com.github.itskenny0.r1ha.feature.assist.AssistScreen(
                 haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }
