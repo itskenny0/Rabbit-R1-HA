@@ -34,6 +34,12 @@ fun AppNavGraph(
                         popUpTo(Routes.ONBOARDING) { inclusive = true }
                     }
                 },
+                // Skip-OAuth escape hatch — surfaces a 'Use long-lived
+                // token instead' link in the URL form so kiosk users
+                // never need to OAuth in just to reach the LLAT setup.
+                onOpenLongLivedToken = {
+                    navController.navigate(Routes.LONG_LIVED_TOKEN) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.CARD_STACK) {

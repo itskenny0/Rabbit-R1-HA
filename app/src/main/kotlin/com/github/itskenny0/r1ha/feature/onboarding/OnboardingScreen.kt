@@ -35,6 +35,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.prefs.TokenStore
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 @Composable
@@ -42,6 +44,12 @@ fun OnboardingScreen(
     settings: SettingsRepository,
     tokens: TokenStore,
     onComplete: () -> Unit,
+    /** Optional escape hatch — when set, the URL entry form shows a
+     *  small "Use long-lived token instead" link below CONNECT that
+     *  jumps to the LLAT setup screen. Lets kiosk-style installs skip
+     *  OAuth entirely without first having to OAuth in to reach the
+     *  Settings → LLAT screen (chicken-and-egg). Null disables. */
+    onOpenLongLivedToken: (() -> Unit)? = null,
     http: OkHttpClient = remember { OkHttpClient() },
 ) {
     val vm: OnboardingViewModel = viewModel(
@@ -52,6 +60,26 @@ fun OnboardingScreen(
     // Navigate away as soon as tokens are stored.
     LaunchedEffect(state) {
         if (state is OnboardingViewModel.State.Done) onComplete()
+    }
+
+    // The LLAT escape hatch saves directly to TokenStore without
+    // running the OAuth state machine, so OnboardingViewModel never
+    // transitions to Done. Observe the activity lifecycle and re-check
+    // token presence on ON_RESUME — when the user comes back from the
+    // LLAT screen with a freshly-saved token, fire onComplete so they
+    // land on the card stack instead of being stranded on the URL form.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val resumeScope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                resumeScope.launch {
+                    if (tokens.load() != null) onComplete()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     when (val s = state) {
@@ -130,6 +158,7 @@ fun OnboardingScreen(
                 error = (s as? OnboardingViewModel.State.Error)?.message,
                 onProbe = { vm.probe(it) },
                 onErrorDismiss = { vm.resetError() },
+                onUseLongLivedToken = onOpenLongLivedToken,
             )
         }
     }
@@ -141,6 +170,7 @@ private fun UrlEntryForm(
     error: String?,
     onProbe: (String) -> Unit,
     onErrorDismiss: () -> Unit,
+    onUseLongLivedToken: (() -> Unit)? = null,
 ) {
     var urlText by rememberSaveable { mutableStateOf("http://") }
     val scrollState = androidx.compose.foundation.rememberScrollState()
@@ -234,5 +264,29 @@ private fun UrlEntryForm(
                 }
             } else null,
         )
+
+        // ── LLAT escape hatch ──────────────────────────────────────────────────────
+        // Without this link the user has to OAuth first to reach the
+        // Settings → LLAT screen — pointless if they specifically don't
+        // want OAuth in the first place. The link is muted so it doesn't
+        // compete with CONNECT as the primary action.
+        if (onUseLongLivedToken != null) {
+            Spacer(Modifier.height(18.dp))
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+            ) {
+                Text(
+                    text = "Use a long-lived token instead",
+                    style = com.github.itskenny0.r1ha.core.theme.R1.labelMicro,
+                    color = com.github.itskenny0.r1ha.core.theme.R1.AccentWarm,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .r1Pressable(onClick = onUseLongLivedToken)
+                        .padding(8.dp),
+                )
+            }
+        }
     }
 }
