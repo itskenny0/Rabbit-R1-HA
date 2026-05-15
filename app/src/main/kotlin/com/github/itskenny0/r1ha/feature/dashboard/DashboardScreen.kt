@@ -512,10 +512,12 @@ private fun TimerPill(
 
 @Composable
 private fun Greeting() {
-    // Time-of-day greeting + a short date line. Refreshes whenever the
-    // Dashboard recomposes (every 60 s via the auto-refresh loop) which
-    // is enough granularity for a greeting that only changes every few
-    // hours. Kept lightweight: no animation, no live ticker.
+    // Time-of-day greeting + a date/time line. Refreshes whenever the
+    // Dashboard recomposes (every 60 s via the auto-refresh loop or
+    // on each settings/state emit) which is enough granularity for a
+    // greeting that only changes every few hours and a HH:mm time
+    // that may be a minute stale. Kept lightweight: no animation,
+    // no live ticker.
     val now = java.time.LocalDateTime.now()
     val hour = now.hour
     val greeting = when (hour) {
@@ -524,11 +526,18 @@ private fun Greeting() {
         in 18..21 -> "GOOD EVENING"
         else -> "GOOD NIGHT"
     }
+    val locale = java.util.Locale.getDefault()
     val dateLine = now.toLocalDate().format(
-        java.time.format.DateTimeFormatter.ofPattern("EEEE, d MMM").withLocale(java.util.Locale.getDefault()),
+        java.time.format.DateTimeFormatter.ofPattern("EEEE, d MMM").withLocale(locale),
+    )
+    val timeLine = now.format(
+        java.time.format.DateTimeFormatter.ofPattern("HH:mm").withLocale(locale),
     )
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp)) {
-        Text(text = greeting, style = R1.sectionHeader, color = R1.AccentWarm)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(text = greeting, style = R1.sectionHeader, color = R1.AccentWarm, modifier = Modifier.weight(1f))
+            Text(text = timeLine, style = R1.numeralM, color = R1.Ink)
+        }
         Text(text = dateLine.uppercase(), style = R1.labelMicro, color = R1.InkSoft)
     }
 }

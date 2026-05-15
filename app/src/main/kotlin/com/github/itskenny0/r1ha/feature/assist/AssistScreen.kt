@@ -94,10 +94,34 @@ fun AssistScreen(
                     Text(text = "HA ASSIST", style = R1.sectionHeader, color = R1.AccentWarm)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Type a prompt below.\n\"turn off the kitchen light\", \"what's the temperature in the bedroom\", \"run the dinner scene\".",
+                        text = "Type below or tap one of these prompts to start.",
                         style = R1.body,
                         color = R1.InkMuted,
                     )
+                    Spacer(Modifier.height(14.dp))
+                    val examples = listOf(
+                        "Turn off the kitchen light",
+                        "What's the temperature in the bedroom?",
+                        "Run the dinner scene",
+                        "Is anyone home?",
+                    )
+                    for (example in examples) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp)
+                                .clip(R1.ShapeS)
+                                .background(R1.SurfaceMuted)
+                                .border(1.dp, R1.Hairline, R1.ShapeS)
+                                .r1Pressable(onClick = {
+                                    vm.setDraft(example)
+                                    vm.send()
+                                })
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            Text(text = example, style = R1.body, color = R1.Ink, maxLines = 2)
+                        }
+                    }
                 }
             } else {
                 LazyColumn(
