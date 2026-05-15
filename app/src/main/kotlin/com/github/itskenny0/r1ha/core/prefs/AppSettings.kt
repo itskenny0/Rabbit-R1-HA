@@ -137,6 +137,96 @@ data class Behavior(
 )
 
 /**
+ * Per-section visibility + behaviour for the TODAY dashboard. Every
+ * section is on by default; users with installs that don't expose a
+ * particular HA domain (no cameras, no person entities, no power
+ * sensors) can hide the corresponding tile so the dashboard isn't
+ * dotted with empty stubs.
+ *
+ * Thresholds (battery low %, power amber/red W) are also configurable
+ * here because the right values are install-specific — a flat with
+ * one PC pulls ~200 W idle; a house with EV charging needs 5+ kW
+ * before the red tile means anything.
+ *
+ * Refresh intervals are exposed so kiosk-mounted R1s can dial them
+ * down for less network churn (a wall-mounted weather display
+ * doesn't need 60 s refresh — 5 min is fine).
+ */
+@Stable
+@kotlinx.serialization.Serializable
+data class DashboardSettings(
+    /** Show / hide each section. */
+    val showGreeting: Boolean = true,
+    val showWeather: Boolean = true,
+    val showSun: Boolean = true,
+    val showTimers: Boolean = true,
+    val showMedia: Boolean = true,
+    val showPersons: Boolean = true,
+    val showNextEvent: Boolean = true,
+    val showPower: Boolean = true,
+    val showMetrics: Boolean = true,
+    val showLowBattery: Boolean = true,
+    val showInlineAlerts: Boolean = true,
+    /** Auto-refresh cadence in seconds. 0 = no auto-refresh (pull-down only). */
+    val refreshIntervalSec: Int = 60,
+    /** Battery-low threshold for the dashboard's BATTERIES LOW alert
+     *  card. Sensors with device_class='battery' under this percentage
+     *  are listed. Default 20 % matches HA's convention. */
+    val lowBatteryThresholdPct: Int = 20,
+    /** Total-power threshold (Watts) above which the DRAW tile goes
+     *  amber. Default 500 W catches a couple of active appliances. */
+    val powerAmberThresholdW: Int = 500,
+    /** Total-power threshold (Watts) above which the DRAW tile goes
+     *  red. Default 2000 W = serious appliance running (kettle, oven,
+     *  EV charger). */
+    val powerRedThresholdW: Int = 2000,
+    /** Max inline-alert previews under the dashboard's METRICS row. */
+    val inlineAlertsCount: Int = 2,
+    /** Max media-player rows shown when playing/paused. */
+    val mediaSummaryCount: Int = 3,
+)
+
+/**
+ * Per-surface refresh intervals + integration tweaks. Each value is
+ * the auto-refresh period in seconds; 0 disables auto-refresh on
+ * that surface entirely.
+ *
+ * Defaults match the hand-tuned cadences from the AutoRefresh
+ * refactor — change them if you want quieter polling on a metered
+ * connection or snappier updates on a fast LAN.
+ */
+@Stable
+@kotlinx.serialization.Serializable
+data class IntegrationsSettings(
+    val notificationsRefreshSec: Int = 30,
+    val logbookRefreshSec: Int = 90,
+    val personsRefreshSec: Int = 120,
+    val weatherRefreshSec: Int = 300,
+    val calendarsRefreshSec: Int = 300,
+    /** Camera detail-overlay snapshot polling interval (seconds). */
+    val cameraOverlayPollSec: Int = 4,
+    /** Camera GRID tile snapshot polling interval (seconds). Slower
+     *  by default because N tiles each polling at this cadence is
+     *  N requests per interval. */
+    val cameraGridPollSec: Int = 8,
+    /** Default time window for the Logbook on entry (hours). The
+     *  user can still flip between 12 h / 24 h / 3 d window chips. */
+    val logbookDefaultWindowHours: Int = 12,
+    /** Camera grid default — open in GRID view rather than LIST. Off
+     *  by default because the polling stampede on big installs
+     *  surprised early testers. */
+    val camerasDefaultGrid: Boolean = false,
+    /** Universal Search result cap. Higher = scroll further on a big
+     *  install; lower = snappier on a slow renderer. */
+    val searchResultCap: Int = 80,
+    /** In-memory RECENT history size for Templates / Service Caller. */
+    val recentHistoryDepth: Int = 5,
+    /** Calendar drill-down — how many days ahead to fetch from
+     *  /api/calendars. */
+    val calendarLookaheadDays: Int = 14,
+)
+
+/**
  * Knobs surfaced through the dev menu (About → Dev menu). Most are wired into real
  * code paths; a handful are placeholders for future feature flags so the dev menu
  * has enough to feel like a real diagnostic surface rather than a placeholder
@@ -297,4 +387,8 @@ data class AppSettings(
     val entityOverrides: Map<String, EntityOverride> = emptyMap(),
     /** Power-user knobs surfaced via About → Dev menu. */
     val advanced: AdvancedSettings = AdvancedSettings(),
+    /** Per-section dashboard visibility + thresholds. */
+    val dashboard: DashboardSettings = DashboardSettings(),
+    /** Per-surface refresh intervals + integration tuning. */
+    val integrations: IntegrationsSettings = IntegrationsSettings(),
 )

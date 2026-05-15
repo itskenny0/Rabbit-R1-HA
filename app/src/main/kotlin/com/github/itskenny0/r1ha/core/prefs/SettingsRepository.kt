@@ -136,6 +136,8 @@ class SettingsRepository private constructor(
         val behaviorWheelTogglesSwitches = booleanPreferencesKey("behavior.wheel_toggles_switches")
         val behaviorToastLogLevel = stringPreferencesKey("behavior.toast_log_level")
         val advancedJson = stringPreferencesKey("advanced.json")
+        val dashboardJson = stringPreferencesKey("dashboard.json")
+        val integrationsJson = stringPreferencesKey("integrations.json")
         val pagesJson = stringPreferencesKey("pages.json")
         val activePageId = stringPreferencesKey("active_page_id")
         val uiTextHistoryLen = intPreferencesKey("ui.text_history_length")
@@ -237,6 +239,20 @@ class SettingsRepository private constructor(
                         }.getOrNull()
                     }
                     ?: AdvancedSettings(),
+                dashboard = p[K.dashboardJson]
+                    ?.let {
+                        runCatching {
+                            advancedJson.decodeFromString(DashboardSettings.serializer(), it)
+                        }.getOrNull()
+                    }
+                    ?: DashboardSettings(),
+                integrations = p[K.integrationsJson]
+                    ?.let {
+                        runCatching {
+                            advancedJson.decodeFromString(IntegrationsSettings.serializer(), it)
+                        }.getOrNull()
+                    }
+                    ?: IntegrationsSettings(),
                 pages = decodePages(p[K.pagesJson], favorites),
                 activePageId = p[K.activePageId].orEmpty(),
             )
@@ -326,6 +342,14 @@ class SettingsRepository private constructor(
                 p[K.advancedJson] = advancedJson.encodeToString(
                     AdvancedSettings.serializer(),
                     next.advanced,
+                )
+                p[K.dashboardJson] = advancedJson.encodeToString(
+                    DashboardSettings.serializer(),
+                    next.dashboard,
+                )
+                p[K.integrationsJson] = advancedJson.encodeToString(
+                    IntegrationsSettings.serializer(),
+                    next.integrations,
                 )
                 // Pages — encoded as JSON. Keep next.pages canonical and recompute
                 // [favorites] as their flat union before writing so any legacy

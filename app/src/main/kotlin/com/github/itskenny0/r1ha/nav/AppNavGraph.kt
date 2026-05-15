@@ -296,6 +296,16 @@ fun AppNavGraph(
                 onOpenScenes = {
                     navController.navigate(Routes.SCENES) { launchSingleTop = true }
                 },
+                onOpenCardStack = {
+                    // Kiosk-mode escape hatch — Dashboard is the start
+                    // destination so there's nothing to pop back to.
+                    // launchSingleTop keeps a rapid double-tap from
+                    // stacking copies.
+                    navController.navigate(Routes.CARD_STACK) { launchSingleTop = true }
+                },
+                onOpenSettings = {
+                    navController.navigate(Routes.SETTINGS) { launchSingleTop = true }
+                },
             )
         }
     }

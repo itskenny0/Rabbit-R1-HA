@@ -64,6 +64,8 @@ data class AppBackup(
     val behaviorToastLogLevel: ToastLogLevel = ToastLogLevel.OFF,
 
     val advanced: AdvancedSettings = AdvancedSettings(),
+    val dashboard: DashboardSettings = DashboardSettings(),
+    val integrations: IntegrationsSettings = IntegrationsSettings(),
 
     val pages: List<FavoritePage> = emptyList(),
     val activePageId: String = "",
@@ -124,6 +126,8 @@ fun AppSettings.toBackup(createdAt: String): AppBackup = AppBackup(
     behaviorWheelTogglesSwitches = behavior.wheelTogglesSwitches,
     behaviorToastLogLevel = behavior.toastLogLevel,
     advanced = advanced,
+    dashboard = dashboard,
+    integrations = integrations,
     pages = pages,
     activePageId = activePageId,
     favorites = favorites,
@@ -178,6 +182,8 @@ fun AppBackup.applyOnto(prev: AppSettings): AppSettings {
             toastLogLevel = behaviorToastLogLevel,
         ),
         advanced = advanced,
+        dashboard = dashboard,
+        integrations = integrations,
         pages = pages,
         activePageId = activeId,
         favorites = pages.flatMap { it.favorites }.distinct(),

@@ -53,6 +53,15 @@ fun DashboardScreen(
     onOpenCameras: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenScenes: () -> Unit,
+    /** Cards icon — opens the card stack from anywhere on the
+     *  dashboard. Critical for the kiosk-mode 'Start on Dashboard'
+     *  path where the back button has no card stack on the back
+     *  stack to pop to. */
+    onOpenCardStack: () -> Unit = {},
+    /** Settings icon — same rationale: when Dashboard is the start
+     *  destination, the only way to reach Settings is via this
+     *  explicit affordance. */
+    onOpenSettings: () -> Unit = {},
 ) {
     val vm: DashboardViewModel = viewModel(factory = DashboardViewModel.factory(haRepository))
     val ui by vm.ui.collectAsState()
@@ -67,7 +76,16 @@ fun DashboardScreen(
             .background(R1.Bg)
             .systemBarsPadding(),
     ) {
-        R1TopBar(title = "TODAY", onBack = onBack)
+        // Custom top bar — instead of R1TopBar's bare back+title, this
+        // dashboard surface needs explicit CARDS + SETTINGS entries so a
+        // kiosk-mode 'Start on Dashboard' user isn't trapped (the chevron
+        // back is a no-op when Dashboard is the nav-graph start
+        // destination since there's nothing on the back stack).
+        DashboardTopBar(
+            onBack = onBack,
+            onOpenCardStack = onOpenCardStack,
+            onOpenSettings = onOpenSettings,
+        )
         if (ui.loading && ui.weather == null && ui.persons == null && ui.nextEvent == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(
@@ -240,6 +258,65 @@ private fun SunCard(s: DashboardViewModel.SunSummary) {
                 Text(text = "NEXT SET", style = R1.labelMicro, color = R1.InkMuted)
                 RelativeTimeLabel(at = s.nextSetting, color = R1.AccentCool, style = R1.labelMicro)
             }
+        }
+    }
+}
+
+@Composable
+private fun DashboardTopBar(
+    onBack: () -> Unit,
+    onOpenCardStack: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Chevron-back tile — only meaningful when entered via nav (not
+        // start destination). Still rendered for visual consistency;
+        // popBackStack is a no-op when there's nothing on the back stack
+        // so it doesn't misfire in kiosk mode either.
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(R1.ShapeS)
+                .r1Pressable(onClick = onBack),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "‹", style = R1.numeralXl, color = R1.InkSoft)
+        }
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = "TODAY",
+            style = R1.sectionHeader,
+            color = R1.Ink,
+            modifier = Modifier.weight(1f),
+        )
+        // CARDS — opens the card stack. Most-frequent action from the
+        // dashboard for kiosk users who occasionally want to control
+        // something rather than just glance.
+        Box(
+            modifier = Modifier
+                .clip(R1.ShapeS)
+                .background(R1.SurfaceMuted)
+                .r1Pressable(onClick = onOpenCardStack)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Text(text = "CARDS", style = R1.labelMicro, color = R1.InkSoft)
+        }
+        Spacer(Modifier.width(6.dp))
+        // SETTINGS gear — wireframe drawn glyph (same as the card-stack
+        // chrome) for consistency. Tap opens Settings.
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(R1.ShapeS)
+                .r1Pressable(onClick = onOpenSettings),
+            contentAlignment = Alignment.Center,
+        ) {
+            com.github.itskenny0.r1ha.ui.components.SettingsCogGlyph(size = 18.dp)
         }
     }
 }
