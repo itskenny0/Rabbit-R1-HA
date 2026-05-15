@@ -24,4 +24,5 @@ object Routes {
     const val DASHBOARD = "dashboard"
     const val AREAS = "areas"
     const val SERVICES = "services"
+    const val SEARCH = "search"
 }

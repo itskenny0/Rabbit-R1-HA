@@ -61,6 +61,7 @@ fun SettingsScreen(
     onOpenDashboard: () -> Unit,
     onOpenAreas: () -> Unit,
     onOpenServices: () -> Unit,
+    onOpenSearch: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -583,10 +584,13 @@ fun SettingsScreen(
 
             item { SectionDivider() }
 
-            // ── Today — at-a-glance dashboard ─────────────────────────────
+            // ── Today — at-a-glance dashboard + quick search ──────────────
             item { Section("TODAY") }
             item {
                 NavRow(label = "Dashboard", value = "Weather · People · Next event", onClick = onOpenDashboard)
+            }
+            item {
+                NavRow(label = "Quick Search", value = "Find any entity", onClick = onOpenSearch)
             }
 
             item { SectionDivider() }
