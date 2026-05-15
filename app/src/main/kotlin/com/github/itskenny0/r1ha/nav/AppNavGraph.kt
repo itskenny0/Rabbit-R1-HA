@@ -251,6 +251,8 @@ fun AppNavGraph(
         composable(Routes.SYSTEM_HEALTH) {
             com.github.itskenny0.r1ha.feature.systemhealth.SystemHealthScreen(
                 haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }

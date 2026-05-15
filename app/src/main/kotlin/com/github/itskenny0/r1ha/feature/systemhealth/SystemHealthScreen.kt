@@ -43,6 +43,8 @@ import com.github.itskenny0.r1ha.ui.components.r1Pressable
 @Composable
 fun SystemHealthScreen(
     haRepository: HaRepository,
+    settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+    wheelInput: com.github.itskenny0.r1ha.core.input.WheelInput,
     onBack: () -> Unit,
 ) {
     val vm: SystemHealthViewModel = viewModel(factory = SystemHealthViewModel.factory(haRepository))
@@ -66,11 +68,17 @@ fun SystemHealthScreen(
             }
             return@Column
         }
+        val scrollState = rememberScrollState()
+        com.github.itskenny0.r1ha.ui.components.WheelScrollForScrollState(
+            wheelInput = wheelInput,
+            scrollState = scrollState,
+            settings = settings,
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
         ) {
             Text(text = "SERVER", style = R1.labelMicro, color = R1.InkSoft)
             Spacer(Modifier.size(4.dp))
