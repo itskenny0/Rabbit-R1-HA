@@ -32,6 +32,7 @@ import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import com.github.itskenny0.r1ha.ui.components.r1RowPressable
 
 /**
  * Today dashboard — single at-a-glance home screen composed from
@@ -133,6 +134,7 @@ fun DashboardScreen(
                     lightsOnCount = ui.lightsOnCount,
                     totalPowerW = ui.totalPowerW,
                     onLights = onOpenScenes,
+                    onLightsLongPress = { vm.allLightsOff() },
                     onCameras = onOpenCameras,
                     onNotifications = onOpenNotifications,
                 )
@@ -509,6 +511,7 @@ private fun MetricsRow(
     lightsOnCount: Int,
     totalPowerW: Int,
     onLights: () -> Unit,
+    onLightsLongPress: () -> Unit,
     onCameras: () -> Unit,
     onNotifications: () -> Unit,
 ) {
@@ -552,15 +555,17 @@ private fun MetricsRow(
         // lighter than fetching every light entity. -1 sentinel
         // renders as '—' so the tile doesn't claim "0 on" while the
         // template is still rendering. Tap routes to the Scenes
-        // screen so the user can fire 'ALL LIGHTS OFF' from there
-        // — the natural next action when noticing too many lights
-        // are on.
+        // screen for the master-action trio; long-press fires
+        // ALL LIGHTS OFF directly from the dashboard without an
+        // extra navigation hop — ideal kiosk affordance for "you
+        // can see they're on, deal with it now".
         Metric(
             modifier = Modifier.weight(1f),
             label = "LIGHTS ON",
             value = if (lightsOnCount < 0) "—" else lightsOnCount.toString(),
             accent = if (lightsOnCount > 0) R1.AccentWarm else R1.InkSoft,
             onClick = onLights,
+            onLongPress = onLightsLongPress,
         )
         Metric(
             modifier = Modifier.weight(1f),
@@ -586,13 +591,19 @@ private fun Metric(
     value: String,
     accent: androidx.compose.ui.graphics.Color,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
 ) {
+    val pressable = if (onLongPress != null) {
+        Modifier.r1RowPressable(onTap = onClick, onLongPress = onLongPress)
+    } else {
+        Modifier.r1Pressable(onClick = onClick)
+    }
     Column(
         modifier = modifier
             .clip(R1.ShapeS)
             .background(R1.SurfaceMuted)
             .border(1.dp, R1.Hairline, R1.ShapeS)
-            .r1Pressable(onClick = onClick)
+            .then(pressable)
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Text(text = label, style = R1.labelMicro, color = R1.InkSoft)

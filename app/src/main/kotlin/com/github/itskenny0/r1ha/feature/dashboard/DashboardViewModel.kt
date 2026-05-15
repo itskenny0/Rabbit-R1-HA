@@ -273,6 +273,30 @@ class DashboardViewModel(
         }
     }
 
+    /** Master 'all lights off' — fired from the LIGHTS ON tile's
+     *  long-press affordance. Reuses the all-domain HA trick (target
+     *  any light entity + entity_id='all' in data) so it scales to
+     *  installs of any size in a single call.  */
+    fun allLightsOff() {
+        viewModelScope.launch {
+            val anyLight = haRepository.listAllEntities().getOrNull()
+                ?.firstOrNull { it.id.domain == com.github.itskenny0.r1ha.core.ha.Domain.LIGHT }
+                ?.id ?: return@launch
+            haRepository.call(
+                com.github.itskenny0.r1ha.core.ha.ServiceCall(
+                    target = anyLight,
+                    service = "turn_off",
+                    data = kotlinx.serialization.json.buildJsonObject {
+                        put("entity_id", kotlinx.serialization.json.JsonPrimitive("all"))
+                    },
+                ),
+            )
+            com.github.itskenny0.r1ha.core.util.Toaster.show("All lights off")
+            kotlinx.coroutines.delay(800L)
+            refresh()
+        }
+    }
+
     /** Transport dispatch for the on-dashboard media card. Uses the
      *  existing ServiceCall.mediaTransport helper + haRepository.call
      *  WS path so the dispatch is debounced + coalesced like every
