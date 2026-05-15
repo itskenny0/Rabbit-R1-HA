@@ -133,6 +133,13 @@ fun DashboardScreen(
             onRefresh = { vm.refresh() },
             modifier = Modifier.fillMaxSize(),
         ) {
+            // Detect 'all sections hidden' so we can render a friendly
+            // empty state instead of a near-blank dashboard — happens
+            // when a user turns every toggle in Settings → DASHBOARD off.
+            val anyVisible = ds.showGreeting || ds.showWeather || ds.showSun ||
+                ds.showTimers || ds.showMedia || ds.showPersons ||
+                ds.showNextEvent || ds.showPower || ds.showMetrics ||
+                ds.showLowBattery || ds.showInlineAlerts
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -211,6 +218,30 @@ fun DashboardScreen(
                             onClick = onOpenNotifications,
                             onDismiss = { vm.dismissNotification(notif.notificationId) },
                         )
+                    }
+                }
+                if (!anyVisible) {
+                    Spacer(Modifier.size(24.dp))
+                    Text(
+                        text = "Every dashboard tile is hidden.",
+                        style = R1.body,
+                        color = R1.InkMuted,
+                    )
+                    Text(
+                        text = "Re-enable cards under Settings → DASHBOARD → VISIBLE CARDS.",
+                        style = R1.labelMicro,
+                        color = R1.InkSoft,
+                    )
+                    Spacer(Modifier.size(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(R1.ShapeS)
+                            .background(R1.SurfaceMuted)
+                            .border(1.dp, R1.Hairline, R1.ShapeS)
+                            .r1Pressable(onClick = onOpenSettings)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Text(text = "OPEN SETTINGS", style = R1.labelMicro, color = R1.AccentWarm)
                     }
                 }
                 Spacer(Modifier.size(24.dp))
