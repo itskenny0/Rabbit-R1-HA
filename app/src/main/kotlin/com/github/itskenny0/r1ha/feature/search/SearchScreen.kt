@@ -64,7 +64,7 @@ fun SearchScreen(
     wheelInput: WheelInput,
     onBack: () -> Unit,
 ) {
-    val vm: SearchViewModel = viewModel(factory = SearchViewModel.factory(haRepository))
+    val vm: SearchViewModel = viewModel(factory = SearchViewModel.factory(haRepository, settings))
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     val focus = remember { FocusRequester() }
@@ -193,6 +193,7 @@ fun SearchScreen(
                         entity,
                         onTap = { vm.activate(entity) },
                         onLongPress = { openInHa(entity) },
+                        onFavorite = { vm.addToFavorites(entity.id) },
                     )
                 }
             }
@@ -241,6 +242,7 @@ private fun SearchResultRow(
     entity: EntityState,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
+    onFavorite: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -270,6 +272,18 @@ private fun SearchResultRow(
             Text(text = stateLine, style = R1.labelMicro, color = R1.InkSoft, maxLines = 1)
         }
         Spacer(Modifier.width(8.dp))
+        // Star tap target — adds the entity to the active page's
+        // favourites. Separate from the row's main r1RowPressable so a
+        // tap on the star doesn't fire the entity's action.
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .r1Pressable(onClick = onFavorite),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "☆", style = R1.body, color = R1.InkSoft)
+        }
+        Spacer(Modifier.width(4.dp))
         // Action affordance hint — what tap will do.
         val actionLabel = when (entity.id.domain) {
             Domain.SCENE, Domain.SCRIPT -> "FIRE"

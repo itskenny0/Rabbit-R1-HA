@@ -35,6 +35,7 @@ import kotlinx.serialization.json.JsonObject
  */
 class SearchViewModel(
     private val haRepository: HaRepository,
+    private val settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
 ) : ViewModel() {
 
     /** Coarse-grained domain bucket for the filter chips. Maps the
@@ -173,9 +174,27 @@ class SearchViewModel(
         }
     }
 
+    /** Add an entity to the active page's favourites set. Used by the
+     *  Search screen's star affordance — turns "I just found this
+     *  entity by name" into "now it's a card on my home stack" in one
+     *  tap. Idempotent (re-adding does nothing). */
+    fun addToFavorites(entityId: EntityId) {
+        viewModelScope.launch {
+            settings.updateActivePage { page ->
+                if (entityId.value in page.favorites) page
+                else page.copy(favorites = page.favorites + entityId.value)
+            }
+            R1Log.i("Search", "favourited ${entityId.value}")
+            Toaster.show("Added '${entityId.value}' to favourites")
+        }
+    }
+
     companion object {
-        fun factory(haRepository: HaRepository) = viewModelFactory {
-            initializer { SearchViewModel(haRepository) }
+        fun factory(
+            haRepository: HaRepository,
+            settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+        ) = viewModelFactory {
+            initializer { SearchViewModel(haRepository, settings) }
         }
     }
 }
