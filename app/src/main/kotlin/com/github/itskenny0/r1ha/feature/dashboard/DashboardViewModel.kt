@@ -97,6 +97,10 @@ class DashboardViewModel(
         /** Count of light.* entities currently in state='on'. -1 sentinel
          *  for "not loaded yet" so the UI can render '—' rather than 0. */
         val lightsOnCount: Int = -1,
+        /** Total real-time power consumption from every sensor.* with
+         *  device_class='power', in Watts. -1 sentinel for "not loaded
+         *  yet" / "no power sensors". */
+        val totalPowerW: Int = -1,
         val error: String? = null,
     )
 
@@ -123,7 +127,19 @@ class DashboardViewModel(
                         "{{ states.light | selectattr('state','eq','on') | list | count }}",
                     )
                 }
-                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob, mediaJob, timerJob, lightsJob)
+                // Sum power-class sensor states. The rejectattr guards
+                // against 'unavailable' / 'unknown' rows which would fail
+                // the float() coercion. round() to whole watts because
+                // the dashboard tile shows an integer.
+                val powerJob = async {
+                    haRepository.renderTemplate(
+                        "{{ states.sensor " +
+                            "| selectattr('attributes.device_class','eq','power') " +
+                            "| rejectattr('state','in',['unavailable','unknown']) " +
+                            "| map(attribute='state') | map('float',0) | sum | round(0) | int }}",
+                    )
+                }
+                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob, mediaJob, timerJob, lightsJob, powerJob)
                 val weather = weatherJob.await().getOrNull()?.firstOrNull()?.let { row ->
                     WeatherSummary(
                         name = row.friendlyName,
@@ -179,6 +195,7 @@ class DashboardViewModel(
                     ?.take(3)
                     .orEmpty()
                 val lightsOn = lightsJob.await().getOrNull()?.trim()?.toIntOrNull() ?: -1
+                val totalPower = powerJob.await().getOrNull()?.trim()?.toIntOrNull() ?: -1
                 val timers = timerJob.await().getOrNull()
                     ?.filter { it.state == "active" || it.state == "paused" }
                     ?.map { row ->
@@ -218,6 +235,7 @@ class DashboardViewModel(
                     media = media,
                     timers = timers,
                     lightsOnCount = lightsOn,
+                    totalPowerW = totalPower,
                     error = null,
                 )
             } catch (t: Throwable) {

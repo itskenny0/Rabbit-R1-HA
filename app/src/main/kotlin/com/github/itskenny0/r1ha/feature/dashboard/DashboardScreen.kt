@@ -136,6 +136,7 @@ fun DashboardScreen(
                     cameraCount = ui.cameraCount,
                     notificationCount = ui.notifications.size,
                     lightsOnCount = ui.lightsOnCount,
+                    totalPowerW = ui.totalPowerW,
                     onLights = onOpenScenes,
                     onCameras = onOpenCameras,
                     onNotifications = onOpenNotifications,
@@ -461,10 +462,43 @@ private fun MetricsRow(
     cameraCount: Int,
     notificationCount: Int,
     lightsOnCount: Int,
+    totalPowerW: Int,
     onLights: () -> Unit,
     onCameras: () -> Unit,
     onNotifications: () -> Unit,
 ) {
+    // Power tile sits on its own row when present (wider value display).
+    // Hidden entirely when the install has no power-class sensors.
+    if (totalPowerW >= 0) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(R1.ShapeS)
+                .background(R1.SurfaceMuted)
+                .border(1.dp, R1.Hairline, R1.ShapeS)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "DRAW", style = R1.labelMicro, color = R1.InkSoft)
+                    Text(
+                        text = "${totalPowerW} W",
+                        style = R1.numeralXl,
+                        color = when {
+                            totalPowerW > 2000 -> R1.StatusRed
+                            totalPowerW > 500 -> R1.StatusAmber
+                            else -> R1.AccentCool
+                        },
+                    )
+                }
+                Text(
+                    text = "sum of power sensors",
+                    style = R1.labelMicro,
+                    color = R1.InkMuted,
+                )
+            }
+        }
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
