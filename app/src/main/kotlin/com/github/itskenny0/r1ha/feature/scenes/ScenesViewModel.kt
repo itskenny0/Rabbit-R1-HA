@@ -167,6 +167,17 @@ class ScenesViewModel(
         failurePrefix = "All-lights-off",
     )
 
+    /** Master "all lights on" — opposite end of allLightsOff. Useful
+     *  for kiosk-mode wake-up sequences. Single tap, no brightness
+     *  ramp (HA's turn_on with no payload restores last-known state). */
+    fun allLightsOn() = fireMasterOff(
+        domain = Domain.LIGHT,
+        service = "turn_on",
+        emptyMessage = "No light entities — nothing to turn on",
+        successMessage = "All lights on",
+        failurePrefix = "All-lights-on",
+    )
+
     /** Master "all media pause" — fires `media_player.media_pause` for
      *  every media_player entity. Some integrations honour pause as
      *  stop; that's HA's responsibility, not ours. */

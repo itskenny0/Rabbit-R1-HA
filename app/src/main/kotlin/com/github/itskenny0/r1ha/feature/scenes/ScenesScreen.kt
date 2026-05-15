@@ -77,6 +77,11 @@ fun ScenesScreen(
         MasterActionsRow(
             inFlight = ui.masterActionInFlight,
             onLightsOff = { vm.allLightsOff() },
+            // Long-press LIGHTS → ON (instead of off). Asymmetric vs
+            // MEDIA / SWITCHES because lights are the entity class users
+            // most want to turn ON en-masse (kiosk wake-up sequences,
+            // 'oh dark in here'); the others have no such common use.
+            onLightsOn = { vm.allLightsOn() },
             onMediaPause = { vm.allMediaPause() },
             onSwitchesOff = { vm.allSwitchesOff() },
         )
@@ -194,6 +199,7 @@ private fun SceneRow(
 private fun MasterActionsRow(
     inFlight: Boolean,
     onLightsOff: () -> Unit,
+    onLightsOn: () -> Unit,
     onMediaPause: () -> Unit,
     onSwitchesOff: () -> Unit,
 ) {
@@ -211,6 +217,7 @@ private fun MasterActionsRow(
             accent = R1.StatusRed,
             inFlight = inFlight,
             onClick = onLightsOff,
+            onLongClick = onLightsOn,
         )
         MasterActionPill(
             modifier = Modifier.weight(1f),
@@ -236,13 +243,22 @@ private fun MasterActionPill(
     accent: androidx.compose.ui.graphics.Color,
     inFlight: Boolean,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
+    val pressable = if (onLongClick != null) {
+        Modifier.r1RowPressable(
+            onTap = { if (!inFlight) onClick() },
+            onLongPress = { if (!inFlight) onLongClick() },
+        )
+    } else {
+        Modifier.r1Pressable(onClick = { if (!inFlight) onClick() })
+    }
     Box(
         modifier = modifier
             .height(36.dp)
             .clip(R1.ShapeS)
             .background(if (inFlight) R1.SurfaceMuted else accent.copy(alpha = 0.18f))
-            .r1Pressable(onClick = { if (!inFlight) onClick() }),
+            .then(pressable),
         contentAlignment = Alignment.Center,
     ) {
         Text(
