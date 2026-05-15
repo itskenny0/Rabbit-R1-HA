@@ -722,6 +722,7 @@ fun SettingsScreen(
 
             // ── Integrations — per-surface refresh intervals + tuning ──────────
             item { Section("INTEGRATIONS") }
+            item { SubGroupLabel("AUTO-REFRESH INTERVALS") }
             item {
                 NumberStepperRow(
                     label = "Notifications refresh",
@@ -767,6 +768,7 @@ fun SettingsScreen(
                     onChange = { v -> vm.updateIntegrations { it.copy(calendarsRefreshSec = v) } },
                 )
             }
+            item { SubGroupLabel("CAMERAS") }
             item {
                 NumberStepperRow(
                     label = "Camera overlay polling",
@@ -793,6 +795,7 @@ fun SettingsScreen(
                     onCheckedChange = { v -> vm.updateIntegrations { it.copy(camerasDefaultGrid = v) } },
                 )
             }
+            item { SubGroupLabel("DEFAULTS & LIMITS") }
             item {
                 NumberStepperRow(
                     label = "Logbook default window",
