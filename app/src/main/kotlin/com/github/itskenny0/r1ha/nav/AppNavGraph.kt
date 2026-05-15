@@ -250,6 +250,7 @@ fun AppNavGraph(
                 settings = settings,
                 tokens = tokens,
                 haRepository = haRepository,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }

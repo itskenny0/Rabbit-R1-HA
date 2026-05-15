@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -58,6 +59,7 @@ fun LongLivedTokenScreen(
     settings: SettingsRepository,
     tokens: TokenStore,
     haRepository: HaRepository,
+    wheelInput: com.github.itskenny0.r1ha.core.input.WheelInput,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -81,11 +83,17 @@ fun LongLivedTokenScreen(
             .imePadding(),
     ) {
         R1TopBar(title = "LONG-LIVED TOKEN", onBack = onBack)
+        val scrollState = rememberScrollState()
+        com.github.itskenny0.r1ha.ui.components.WheelScrollForScrollState(
+            wheelInput = wheelInput,
+            scrollState = scrollState,
+            settings = settings,
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 22.dp, vertical = 12.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
         ) {
             Text(
                 text = "Skip OAuth: paste an HA long-lived access token. Generate one " +
@@ -94,9 +102,9 @@ fun LongLivedTokenScreen(
                 style = R1.body,
                 color = R1.InkMuted,
             )
-            Spacer(Modifier.heightIn(min = 16.dp).fillMaxWidth())
+            Spacer(Modifier.height(16.dp))
             Text(text = "HA URL", style = R1.labelMicro, color = R1.InkSoft)
-            Spacer(Modifier.heightIn(min = 4.dp).fillMaxWidth())
+            Spacer(Modifier.height(4.dp))
             R1TextField(
                 value = url,
                 onValueChange = { url = it },
@@ -104,9 +112,9 @@ fun LongLivedTokenScreen(
                 monospace = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.heightIn(min = 12.dp).fillMaxWidth())
+            Spacer(Modifier.height(12.dp))
             Text(text = "ACCESS TOKEN", style = R1.labelMicro, color = R1.InkSoft)
-            Spacer(Modifier.heightIn(min = 4.dp).fillMaxWidth())
+            Spacer(Modifier.height(4.dp))
             R1TextField(
                 value = token,
                 onValueChange = { token = it },
@@ -116,7 +124,7 @@ fun LongLivedTokenScreen(
                     .fillMaxWidth()
                     .heightIn(min = 80.dp),
             )
-            Spacer(Modifier.heightIn(min = 16.dp).fillMaxWidth())
+            Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 R1Button(
                     text = if (saving) "SAVING…" else "SAVE & CONNECT",
@@ -172,7 +180,7 @@ fun LongLivedTokenScreen(
             }
             val e = error
             if (e != null) {
-                Spacer(Modifier.heightIn(min = 12.dp).fillMaxWidth())
+                Spacer(Modifier.height(12.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
