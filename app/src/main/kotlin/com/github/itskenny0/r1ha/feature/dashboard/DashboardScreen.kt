@@ -65,6 +65,9 @@ fun DashboardScreen(
      *  destination, the only way to reach Settings is via this
      *  explicit affordance. */
     onOpenSettings: () -> Unit = {},
+    /** Mic glyph — opens HA Assist directly. Same affordance as the
+     *  card stack chrome so the action is consistent across surfaces. */
+    onOpenAssist: () -> Unit = {},
     /** True when the back stack has at least one previous entry —
      *  the chevron-back tile renders only when this is true so the
      *  inert chevron isn't visible on the kiosk start path. */
@@ -104,6 +107,7 @@ fun DashboardScreen(
             canGoBack = canGoBack,
             onOpenCardStack = onOpenCardStack,
             onOpenSettings = onOpenSettings,
+            onOpenAssist = onOpenAssist,
         )
         if (ui.loading && ui.weather == null && ui.persons == null && ui.nextEvent == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -300,6 +304,7 @@ private fun DashboardTopBar(
     canGoBack: Boolean,
     onOpenCardStack: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenAssist: () -> Unit,
 ) {
     // Match R1TopBar's vertical metrics so the dashboard top edge
     // aligns with every other sub-screen on the device.
@@ -327,6 +332,20 @@ private fun DashboardTopBar(
                 color = R1.Ink,
                 modifier = Modifier.weight(1f),
             )
+            // 🎤 Assist — same affordance as on the card stack chrome,
+            // so the action is consistent across surfaces. Sits before
+            // CARDS so it's the closer-to-centre 'talk to HA' tap target
+            // for thumb reach on a wall-mounted R1.
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(R1.ShapeS)
+                    .r1Pressable(onClick = onOpenAssist),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "🎤", style = R1.labelMicro, color = R1.InkSoft)
+            }
+            Spacer(Modifier.width(4.dp))
             // CARDS — opens the card stack. Most-frequent action from the
             // dashboard for kiosk users who occasionally want to control
             // something rather than just glance.

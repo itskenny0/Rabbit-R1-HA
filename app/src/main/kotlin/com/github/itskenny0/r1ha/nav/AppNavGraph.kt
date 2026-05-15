@@ -56,6 +56,9 @@ fun AppNavGraph(
                 onOpenSearch = {
                     navController.navigate(Routes.SEARCH) { launchSingleTop = true }
                 },
+                onOpenAssist = {
+                    navController.navigate(Routes.ASSIST) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.FAVORITES_PICKER) {
@@ -319,6 +322,9 @@ fun AppNavGraph(
                 },
                 onOpenSettings = {
                     navController.navigate(Routes.SETTINGS) { launchSingleTop = true }
+                },
+                onOpenAssist = {
+                    navController.navigate(Routes.ASSIST) { launchSingleTop = true }
                 },
             )
         }

@@ -82,6 +82,9 @@ fun CardStackScreen(
      *  to the Universal Quick Search dialog from anywhere on the
      *  card stack. */
     onOpenSearch: () -> Unit = {},
+    /** Tap the chrome's mic glyph to open the HA Assist surface
+     *  directly. Default no-op for previews. */
+    onOpenAssist: () -> Unit = {},
 ) {
     val vm: CardStackViewModel = viewModel(
         factory = CardStackViewModel.factory(
@@ -597,6 +600,7 @@ fun CardStackScreen(
                 onTapCounter = { jumpPickerOpen.value = true },
                 onLongPressHamburger = { quickActionsOpen.value = true },
                 onLongPressGear = onOpenSearch,
+                onOpenAssist = onOpenAssist,
                 solidBackdrop = appSettings.ui.hideCardTailAbove,
                 // Battery indicator surfaces only when the system status bar is hidden
                 // AND the user explicitly opted in — otherwise the system bar already
@@ -2083,6 +2087,10 @@ private fun ChromeRow(
      *  the natural "I'm looking for X" affordance from anywhere on
      *  the card stack. Defaults to a no-op for preview compatibility. */
     onLongPressGear: () -> Unit = {},
+    /** Tap the mic glyph to jump to the HA Assist surface. Surfaced
+     *  in the chrome rather than buried in Settings so 'ask HA' is
+     *  a single-tap action from anywhere on the card stack. */
+    onOpenAssist: () -> Unit = {},
     solidBackdrop: Boolean = true,
     /** Render a tiny BATTERY% pill in the right cluster — used only when
      *  the system status bar is hidden AND the user opted into the
@@ -2161,6 +2169,22 @@ private fun ChromeRow(
             com.github.itskenny0.r1ha.ui.components.BatteryIndicator()
             Spacer(Modifier.width(6.dp))
         }
+
+        // Assist mic — opens the HA Assist surface from anywhere on the
+        // card stack. Surfacing this in the chrome row makes
+        // 'ask HA about something' a single-tap action rather than a
+        // Settings → Assist navigation. 32 dp tap target so it fits
+        // next to the pencil + gear without crowding the right cluster.
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .r1Pressable(onOpenAssist),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "🎤", style = R1.labelMicro, color = R1.InkSoft)
+        }
+        Spacer(Modifier.width(2.dp))
 
         // Edit pencil — opens the customize dialog for the active card. This was the
         // entry point users were missing from the card stack (previously only in the
