@@ -154,7 +154,25 @@ private fun PersonRow(entry: PersonsViewModel.Entry) {
         Text(text = label, style = R1.labelMicro, color = color)
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = entry.name, style = R1.body, color = R1.Ink, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = entry.name,
+                    style = R1.body,
+                    color = R1.Ink,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                // Relative timestamp on the right of the name — 'since
+                // 2h' so the user can see how long the person/device has
+                // been in their current state. Same ticker as the rest
+                // of the app, so live-updates without us touching it.
+                Spacer(Modifier.width(6.dp))
+                com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel(
+                    at = entry.since,
+                    color = R1.InkMuted,
+                    style = R1.labelMicro,
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = entry.entityId,

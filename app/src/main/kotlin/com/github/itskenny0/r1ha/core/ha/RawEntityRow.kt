@@ -2,6 +2,7 @@ package com.github.itskenny0.r1ha.core.ha
 
 import androidx.compose.runtime.Stable
 import kotlinx.serialization.json.JsonObject
+import java.time.Instant
 
 /**
  * Raw `/api/states` row for domains we don't model in the [Domain]
@@ -28,4 +29,10 @@ data class RawEntityRow(
      *  about (e.g. cameras read `entity_picture`, weather reads
      *  `temperature` + `condition`). */
     val attributes: JsonObject,
+    /** When HA last reported a state change for this entity. Decoded
+     *  from the `last_changed` field on `/api/states`; null when HA
+     *  didn't include one or the timestamp was unparseable. Used by
+     *  the Persons screen + similar surfaces to show 'since X'
+     *  relative timestamps. */
+    val lastChanged: Instant? = null,
 )

@@ -37,6 +37,9 @@ class PersonsViewModel(
         val source: String?,
         /** GPS accuracy in metres — null when not GPS-based. */
         val gpsAccuracy: Int?,
+        /** When HA last reported this person/device's state. Used for
+         *  the "since X" relative timestamp on each row. */
+        val since: java.time.Instant?,
     )
 
     @androidx.compose.runtime.Stable
@@ -76,6 +79,7 @@ class PersonsViewModel(
                     source = null,
                     gpsAccuracy = (row.attributes["gps_accuracy"] as? JsonPrimitive)?.content
                         ?.toDoubleOrNull()?.toInt(),
+                    since = row.lastChanged,
                 )
             }.sortedBy { it.name.lowercase() }
             val devices = deviceResult.getOrNull().orEmpty().map { row ->
@@ -87,6 +91,7 @@ class PersonsViewModel(
                     source = (row.attributes["source_type"] as? JsonPrimitive)?.content,
                     gpsAccuracy = (row.attributes["gps_accuracy"] as? JsonPrimitive)?.content
                         ?.toDoubleOrNull()?.toInt(),
+                    since = row.lastChanged,
                 )
             }.sortedBy { it.name.lowercase() }
             R1Log.i("Persons", "loaded people=${people.size} devices=${devices.size}")

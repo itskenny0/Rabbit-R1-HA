@@ -1494,7 +1494,18 @@ class DefaultHaRepository(
             val attrs = (obj["attributes"] as? kotlinx.serialization.json.JsonObject)
                 ?: kotlinx.serialization.json.JsonObject(emptyMap())
             val friendly = (attrs["friendly_name"] as? JsonPrimitive)?.content ?: eid
-            RawEntityRow(entityId = eid, friendlyName = friendly, state = state, attributes = attrs)
+            // last_changed is ISO-8601 from HA; runCatching guards
+            // against malformed strings (some integrations emit
+            // 'unavailable' or omit the field).
+            val lastChanged = (obj["last_changed"] as? JsonPrimitive)?.content
+                ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            RawEntityRow(
+                entityId = eid,
+                friendlyName = friendly,
+                state = state,
+                attributes = attrs,
+                lastChanged = lastChanged,
+            )
         }
     }
 
