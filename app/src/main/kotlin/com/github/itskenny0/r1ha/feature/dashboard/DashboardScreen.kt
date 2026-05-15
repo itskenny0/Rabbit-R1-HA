@@ -538,7 +538,16 @@ private fun TimerCard(
             Spacer(Modifier.width(10.dp))
             Text(text = t.name, style = R1.body, color = R1.Ink, modifier = Modifier.weight(1f), maxLines = 1)
             Spacer(Modifier.width(8.dp))
-            RelativeTimeLabel(at = t.finishesAt, color = color, style = R1.labelMicro)
+            // Paused timers freeze finishes_at at the pause moment, so a
+            // RelativeTimeLabel would tick into the past and show
+            // 'finished 5 min ago' even though the timer hasn't fired.
+            // Instead surface HA's `remaining` attribute (HH:MM:SS) as
+            // a static label so the user sees the actual time left.
+            if (t.state == "paused" && !t.remaining.isNullOrBlank()) {
+                Text(text = t.remaining, style = R1.labelMicro, color = color)
+            } else {
+                RelativeTimeLabel(at = t.finishesAt, color = color, style = R1.labelMicro)
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),

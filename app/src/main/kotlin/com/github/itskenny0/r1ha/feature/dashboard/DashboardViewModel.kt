@@ -88,6 +88,10 @@ class DashboardViewModel(
         val name: String,
         val state: String, // active / paused / idle
         val finishesAt: Instant?,
+        /** HH:MM:SS string from HA's `remaining` attribute — only
+         *  meaningful when paused; for active timers HA exposes
+         *  finishes_at and the UI ticks down off that instead. */
+        val remaining: String? = null,
     )
 
     @androidx.compose.runtime.Stable
@@ -256,6 +260,7 @@ class DashboardViewModel(
                             state = row.state,
                             finishesAt = (row.attributes["finishes_at"] as? JsonPrimitive)?.content
                                 ?.let { runCatching { Instant.parse(it) }.getOrNull() },
+                            remaining = (row.attributes["remaining"] as? JsonPrimitive)?.content,
                         )
                     }
                     ?.sortedBy { it.finishesAt ?: Instant.MAX }
