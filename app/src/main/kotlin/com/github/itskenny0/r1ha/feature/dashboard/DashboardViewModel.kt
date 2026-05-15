@@ -276,7 +276,10 @@ class DashboardViewModel(
     /** Transport dispatch for the on-dashboard media card. Uses the
      *  existing ServiceCall.mediaTransport helper + haRepository.call
      *  WS path so the dispatch is debounced + coalesced like every
-     *  other service call in the app. */
+     *  other service call in the app. Triggers an immediate dashboard
+     *  refresh after a short settle delay so the play/pause state
+     *  reflects the new reality without waiting for the next 60 s
+     *  auto-refresh tick — makes the buttons feel responsive. */
     fun mediaTransport(
         entityId: String,
         action: com.github.itskenny0.r1ha.core.ha.MediaTransport,
@@ -288,6 +291,12 @@ class DashboardViewModel(
             haRepository.call(
                 com.github.itskenny0.r1ha.core.ha.ServiceCall.mediaTransport(target, action),
             )
+            // 800 ms settle delay — HA needs a moment for the media
+            // entity to report its new state after a play/pause. Faster
+            // and we'd refresh on the pre-action state and have to
+            // refresh again on the next tick.
+            kotlinx.coroutines.delay(800L)
+            refresh()
         }
     }
 
