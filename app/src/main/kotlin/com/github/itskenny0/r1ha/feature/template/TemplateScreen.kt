@@ -49,9 +49,12 @@ import com.github.itskenny0.r1ha.ui.components.r1Pressable
 @Composable
 fun TemplateScreen(
     haRepository: HaRepository,
+    settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
     onBack: () -> Unit,
 ) {
-    val vm: TemplateViewModel = viewModel(factory = TemplateViewModel.factory(haRepository))
+    val vm: TemplateViewModel = viewModel(
+        factory = TemplateViewModel.factory(haRepository, settings),
+    )
     val ui by vm.ui.collectAsState()
     Column(
         modifier = Modifier

@@ -8,6 +8,7 @@ import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.util.R1Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -26,7 +27,11 @@ import kotlinx.coroutines.launch
  */
 class ServiceCallerViewModel(
     private val haRepository: HaRepository,
+    private val settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
 ) : ViewModel() {
+
+    @Volatile
+    private var historyDepth: Int = 5
 
     @androidx.compose.runtime.Stable
     data class RecentCall(
@@ -81,13 +86,17 @@ class ServiceCallerViewModel(
         }
         _ui.value = s.copy(inFlight = true, error = null, result = "")
         viewModelScope.launch {
+            // Snapshot history depth from settings so each fire honours
+            // the user's current Settings → INTEGRATIONS preference.
+            historyDepth = settings.settings.first().integrations.recentHistoryDepth
+                .coerceIn(0, 100)
             haRepository.callRawService(s.domain.trim(), s.service.trim(), payload).fold(
                 onSuccess = { result ->
                     R1Log.i("ServiceCaller", "${s.domain}.${s.service} OK len=${result.length}")
-                    // Push to recent history (dedupe + cap at 5). Newest first.
+                    // Push to recent history (dedupe + cap). Newest first.
                     val justFired = RecentCall(s.domain.trim(), s.service.trim(), s.data)
                     val newRecent = (listOf(justFired) + _ui.value.recent.filterNot { it == justFired })
-                        .take(5)
+                        .take(historyDepth)
                     _ui.value = _ui.value.copy(
                         result = if (result.isBlank()) "[] (no state changes)" else result,
                         error = null,
@@ -120,8 +129,11 @@ class ServiceCallerViewModel(
     }
 
     companion object {
-        fun factory(haRepository: HaRepository) = viewModelFactory {
-            initializer { ServiceCallerViewModel(haRepository) }
+        fun factory(
+            haRepository: HaRepository,
+            settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+        ) = viewModelFactory {
+            initializer { ServiceCallerViewModel(haRepository, settings) }
         }
     }
 }

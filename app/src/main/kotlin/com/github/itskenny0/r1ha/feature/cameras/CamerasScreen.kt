@@ -80,16 +80,25 @@ fun CamerasScreen(
     // background polling) so big installs don't accidentally fire a
     // thumbnail-fetch stampede on first entry.
     // Default view-mode comes from the camerasDefaultGrid pref; user can
-    // still flip via the LIST/GRID chips. rememberSaveable preserves the
-    // override across config changes.
+    // still flip via the LIST/GRID chips. Local override is stored as a
+    // nullable string in rememberSaveable so:
+    //   - first paint (no override + setting not yet loaded) → LIST
+    //   - first paint (no override + setting loaded GRID) → GRID
+    //   - user taps LIST/GRID → override pinned, setting no longer
+    //     resets the in-screen choice until they pick "follow default"
     val appSettings by settings.settings.collectAsState(
         initial = com.github.itskenny0.r1ha.core.prefs.AppSettings(),
     )
-    val initialMode = if (appSettings.integrations.camerasDefaultGrid) "GRID" else "LIST"
-    var viewMode by rememberSaveable(initialMode) { mutableStateOf(initialMode) }
+    var viewModeOverride by rememberSaveable { mutableStateOf<String?>(null) }
+    val viewMode = viewModeOverride
+        ?: if (appSettings.integrations.camerasDefaultGrid) "GRID" else "LIST"
+    // Wheel scroll is wired to the LIST view's lazy state. In GRID view
+    // there's no LazyColumn to scroll — wheel events fall through to a
+    // no-op (LazyVerticalGrid scrolling isn't yet wired into WheelScrollFor).
+    // Bug to fix in a follow-up: add GRID-state wheel support.
     WheelScrollFor(
         wheelInput = wheelInput,
-        listState = if (viewMode == "LIST") listState else rememberLazyListState(),
+        listState = listState,
         settings = settings,
     )
     LaunchedEffect(Unit) { vm.refresh() }
@@ -111,7 +120,7 @@ fun CamerasScreen(
         // LIST is text-only. Default to LIST so big installs don't fire
         // a thumbnail stampede on first entry.
         if (ui.cameras.isNotEmpty()) {
-            ViewModeRow(current = viewMode, onSelect = { viewMode = it })
+            ViewModeRow(current = viewMode, onSelect = { viewModeOverride = it })
         }
         when {
             ui.loading -> Box(

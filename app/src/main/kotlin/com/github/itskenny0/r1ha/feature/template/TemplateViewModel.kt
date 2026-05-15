@@ -8,6 +8,7 @@ import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.util.R1Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -24,7 +25,11 @@ import kotlinx.coroutines.launch
  */
 class TemplateViewModel(
     private val haRepository: HaRepository,
+    private val settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
 ) : ViewModel() {
+
+    @Volatile
+    private var historyDepth: Int = 5
 
     @androidx.compose.runtime.Stable
     data class UiState(
@@ -55,12 +60,14 @@ class TemplateViewModel(
         if (template.isBlank() || _ui.value.inFlight) return
         _ui.value = _ui.value.copy(inFlight = true, error = null)
         viewModelScope.launch {
+            historyDepth = settings.settings.first().integrations.recentHistoryDepth
+                .coerceIn(0, 100)
             haRepository.renderTemplate(template).fold(
                 onSuccess = { rendered ->
                     R1Log.i("Template", "rendered len=${rendered.length}")
-                    // Push to recent (dedupe + cap at 5).
+                    // Push to recent (dedupe + cap honouring the depth setting).
                     val newRecent = (listOf(template) + _ui.value.recent.filterNot { it == template })
-                        .take(5)
+                        .take(historyDepth)
                     _ui.value = _ui.value.copy(
                         rendered = rendered,
                         error = null,
@@ -83,8 +90,11 @@ class TemplateViewModel(
     }
 
     companion object {
-        fun factory(haRepository: HaRepository) = viewModelFactory {
-            initializer { TemplateViewModel(haRepository) }
+        fun factory(
+            haRepository: HaRepository,
+            settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+        ) = viewModelFactory {
+            initializer { TemplateViewModel(haRepository, settings) }
         }
     }
 }

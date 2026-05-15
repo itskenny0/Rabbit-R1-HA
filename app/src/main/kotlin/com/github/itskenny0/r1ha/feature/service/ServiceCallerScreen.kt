@@ -53,9 +53,12 @@ import com.github.itskenny0.r1ha.ui.components.r1Pressable
 @Composable
 fun ServiceCallerScreen(
     haRepository: HaRepository,
+    settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
     onBack: () -> Unit,
 ) {
-    val vm: ServiceCallerViewModel = viewModel(factory = ServiceCallerViewModel.factory(haRepository))
+    val vm: ServiceCallerViewModel = viewModel(
+        factory = ServiceCallerViewModel.factory(haRepository, settings),
+    )
     val ui by vm.ui.collectAsState()
     val clipboard = LocalClipboardManager.current
     Column(

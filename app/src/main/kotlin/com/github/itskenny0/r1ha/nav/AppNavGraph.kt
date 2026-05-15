@@ -186,12 +186,14 @@ fun AppNavGraph(
         composable(Routes.TEMPLATE) {
             com.github.itskenny0.r1ha.feature.template.TemplateScreen(
                 haRepository = haRepository,
+                settings = settings,
                 onBack = { navController.popBackStack() },
             )
         }
         composable(Routes.SERVICE_CALLER) {
             com.github.itskenny0.r1ha.feature.service.ServiceCallerScreen(
                 haRepository = haRepository,
+                settings = settings,
                 onBack = { navController.popBackStack() },
             )
         }
@@ -274,10 +276,16 @@ fun AppNavGraph(
                 onBack = { navController.popBackStack() },
             )
         }
-        composable(Routes.DASHBOARD) {
+        composable(Routes.DASHBOARD) { backStackEntry ->
+            // canGoBack — true when Dashboard was reached via nav, false
+            // when it's the start destination. previousBackStackEntry is
+            // null in the latter case. The Dashboard top bar uses this
+            // to hide the inert chevron-back.
+            val canGoBack = navController.previousBackStackEntry != null
             com.github.itskenny0.r1ha.feature.dashboard.DashboardScreen(
                 haRepository = haRepository,
                 settings = settings,
+                canGoBack = canGoBack,
                 onBack = { navController.popBackStack() },
                 onOpenWeather = {
                     navController.navigate(Routes.WEATHER) { launchSingleTop = true }

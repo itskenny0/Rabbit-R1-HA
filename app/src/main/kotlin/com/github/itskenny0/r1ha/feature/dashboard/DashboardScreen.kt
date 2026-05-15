@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -63,6 +64,10 @@ fun DashboardScreen(
      *  destination, the only way to reach Settings is via this
      *  explicit affordance. */
     onOpenSettings: () -> Unit = {},
+    /** True when the back stack has at least one previous entry —
+     *  the chevron-back tile renders only when this is true so the
+     *  inert chevron isn't visible on the kiosk start path. */
+    canGoBack: Boolean = true,
 ) {
     val vm: DashboardViewModel = viewModel(factory = DashboardViewModel.factory(haRepository, settings))
     val ui by vm.ui.collectAsState()
@@ -90,11 +95,12 @@ fun DashboardScreen(
     ) {
         // Custom top bar — instead of R1TopBar's bare back+title, this
         // dashboard surface needs explicit CARDS + SETTINGS entries so a
-        // kiosk-mode 'Start on Dashboard' user isn't trapped (the chevron
-        // back is a no-op when Dashboard is the nav-graph start
-        // destination since there's nothing on the back stack).
+        // kiosk-mode 'Start on Dashboard' user isn't trapped. The
+        // chevron-back hides entirely when canGoBack is false (the
+        // start-destination path).
         DashboardTopBar(
             onBack = onBack,
+            canGoBack = canGoBack,
             onOpenCardStack = onOpenCardStack,
             onOpenSettings = onOpenSettings,
         )
@@ -281,59 +287,68 @@ private fun SunCard(s: DashboardViewModel.SunSummary) {
 @Composable
 private fun DashboardTopBar(
     onBack: () -> Unit,
+    canGoBack: Boolean,
     onOpenCardStack: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Chevron-back tile — only meaningful when entered via nav (not
-        // start destination). Still rendered for visual consistency;
-        // popBackStack is a no-op when there's nothing on the back stack
-        // so it doesn't misfire in kiosk mode either.
+    // Match R1TopBar's vertical metrics so the dashboard top edge
+    // aligns with every other sub-screen on the device.
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        ) {
+            // Chevron-back tile — only rendered when canGoBack is true.
+            // On the kiosk 'Start on Dashboard' path the back stack is
+            // empty, so the chevron would be inert; hiding it removes
+            // the dead affordance + makes the CARDS / SETTINGS shortcuts
+            // the obvious escape paths.
+            if (canGoBack) {
+                com.github.itskenny0.r1ha.ui.components.ChevronBack(onClick = onBack)
+                Spacer(Modifier.width(4.dp))
+            } else {
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(
+                text = "TODAY",
+                style = R1.screenTitle,
+                color = R1.Ink,
+                modifier = Modifier.weight(1f),
+            )
+            // CARDS — opens the card stack. Most-frequent action from the
+            // dashboard for kiosk users who occasionally want to control
+            // something rather than just glance.
+            Box(
+                modifier = Modifier
+                    .clip(R1.ShapeS)
+                    .background(R1.SurfaceMuted)
+                    .r1Pressable(onClick = onOpenCardStack)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(text = "CARDS", style = R1.labelMicro, color = R1.InkSoft)
+            }
+            Spacer(Modifier.width(6.dp))
+            // SETTINGS gear — wireframe drawn glyph (same as the
+            // card-stack chrome) for consistency. Tap opens Settings.
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(R1.ShapeS)
+                    .r1Pressable(onClick = onOpenSettings),
+                contentAlignment = Alignment.Center,
+            ) {
+                com.github.itskenny0.r1ha.ui.components.SettingsCogGlyph(size = 18.dp)
+            }
+        }
+        // Hairline divider — matches R1TopBar's exact metric.
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .clip(R1.ShapeS)
-                .r1Pressable(onClick = onBack),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(text = "‹", style = R1.numeralXl, color = R1.InkSoft)
-        }
-        Spacer(Modifier.width(4.dp))
-        Text(
-            text = "TODAY",
-            style = R1.sectionHeader,
-            color = R1.Ink,
-            modifier = Modifier.weight(1f),
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(R1.Hairline),
         )
-        // CARDS — opens the card stack. Most-frequent action from the
-        // dashboard for kiosk users who occasionally want to control
-        // something rather than just glance.
-        Box(
-            modifier = Modifier
-                .clip(R1.ShapeS)
-                .background(R1.SurfaceMuted)
-                .r1Pressable(onClick = onOpenCardStack)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-        ) {
-            Text(text = "CARDS", style = R1.labelMicro, color = R1.InkSoft)
-        }
-        Spacer(Modifier.width(6.dp))
-        // SETTINGS gear — wireframe drawn glyph (same as the card-stack
-        // chrome) for consistency. Tap opens Settings.
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(R1.ShapeS)
-                .r1Pressable(onClick = onOpenSettings),
-            contentAlignment = Alignment.Center,
-        ) {
-            com.github.itskenny0.r1ha.ui.components.SettingsCogGlyph(size = 18.dp)
-        }
     }
 }
 
