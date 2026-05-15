@@ -98,6 +98,12 @@ fun DashboardScreen(
                 Greeting()
                 ui.weather?.let { WeatherCard(it, onClick = onOpenWeather) }
                 ui.sun?.let { SunCard(it) }
+                if (ui.timers.isNotEmpty()) {
+                    Text(text = "TIMERS", style = R1.labelMicro, color = R1.InkSoft)
+                    for (t in ui.timers) {
+                        TimerCard(t)
+                    }
+                }
                 if (ui.media.isNotEmpty()) {
                     Text(text = "NOW PLAYING", style = R1.labelMicro, color = R1.InkSoft)
                     for (m in ui.media) {
@@ -235,6 +241,34 @@ private fun SunCard(s: DashboardViewModel.SunSummary) {
                 RelativeTimeLabel(at = s.nextSetting, color = R1.AccentCool, style = R1.labelMicro)
             }
         }
+    }
+}
+
+@Composable
+private fun TimerCard(t: DashboardViewModel.TimerSummary) {
+    // Read-only timer summary — state chip + remaining time. Pause/start
+    // dispatch isn't exposed here (would clutter the dashboard with
+    // controls); user can favourite a timer for full control via the
+    // card stack or use the Service Caller.
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val (label, color) = when (t.state) {
+            "active" -> "RUNNING" to R1.AccentGreen
+            "paused" -> "PAUSED" to R1.StatusAmber
+            else -> t.state.uppercase() to R1.InkSoft
+        }
+        Text(text = label, style = R1.labelMicro, color = color)
+        Spacer(Modifier.width(10.dp))
+        Text(text = t.name, style = R1.body, color = R1.Ink, modifier = Modifier.weight(1f), maxLines = 1)
+        Spacer(Modifier.width(8.dp))
+        RelativeTimeLabel(at = t.finishesAt, color = color, style = R1.labelMicro)
     }
 }
 

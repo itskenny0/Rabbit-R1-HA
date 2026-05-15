@@ -72,6 +72,14 @@ class DashboardViewModel(
     )
 
     @androidx.compose.runtime.Stable
+    data class TimerSummary(
+        val entityId: String,
+        val name: String,
+        val state: String, // active / paused / idle
+        val finishesAt: Instant?,
+    )
+
+    @androidx.compose.runtime.Stable
     data class UiState(
         val loading: Boolean = true,
         val weather: WeatherSummary? = null,
@@ -83,6 +91,9 @@ class DashboardViewModel(
         /** Currently-playing or paused media players. Limited to 3 on
          *  the dashboard to keep the surface scannable. */
         val media: List<MediaSummary> = emptyList(),
+        /** Currently-active (or paused) HA timer.* entities. Empty means
+         *  no timers running. */
+        val timers: List<TimerSummary> = emptyList(),
         /** Count of light.* entities currently in state='on'. -1 sentinel
          *  for "not loaded yet" so the UI can render '—' rather than 0. */
         val lightsOnCount: Int = -1,
@@ -103,6 +114,7 @@ class DashboardViewModel(
                 val notifJob = async { haRepository.listPersistentNotifications() }
                 val sunJob = async { haRepository.listRawEntitiesByDomain("sun") }
                 val mediaJob = async { haRepository.listRawEntitiesByDomain("media_player") }
+                val timerJob = async { haRepository.listRawEntitiesByDomain("timer") }
                 // Lightweight server-side count rather than transporting
                 // every light entity's full row. The integer comes back
                 // as plain text body from /api/template.
@@ -111,7 +123,7 @@ class DashboardViewModel(
                         "{{ states.light | selectattr('state','eq','on') | list | count }}",
                     )
                 }
-                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob, mediaJob, lightsJob)
+                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob, mediaJob, timerJob, lightsJob)
                 val weather = weatherJob.await().getOrNull()?.firstOrNull()?.let { row ->
                     WeatherSummary(
                         name = row.friendlyName,
@@ -167,6 +179,19 @@ class DashboardViewModel(
                     ?.take(3)
                     .orEmpty()
                 val lightsOn = lightsJob.await().getOrNull()?.trim()?.toIntOrNull() ?: -1
+                val timers = timerJob.await().getOrNull()
+                    ?.filter { it.state == "active" || it.state == "paused" }
+                    ?.map { row ->
+                        TimerSummary(
+                            entityId = row.entityId,
+                            name = row.friendlyName,
+                            state = row.state,
+                            finishesAt = (row.attributes["finishes_at"] as? JsonPrimitive)?.content
+                                ?.let { runCatching { Instant.parse(it) }.getOrNull() },
+                        )
+                    }
+                    ?.sortedBy { it.finishesAt ?: Instant.MAX }
+                    .orEmpty()
                 val sun = sunJob.await().getOrNull()?.firstOrNull()?.let { row ->
                     SunSummary(
                         state = row.state,
@@ -191,6 +216,7 @@ class DashboardViewModel(
                     cameraCount = cameras.size,
                     notifications = notifs,
                     media = media,
+                    timers = timers,
                     lightsOnCount = lightsOn,
                     error = null,
                 )
