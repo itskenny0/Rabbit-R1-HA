@@ -146,7 +146,12 @@ fun DashboardScreen(
                 if (ds.showTimers && ui.timers.isNotEmpty()) {
                     Text(text = "TIMERS", style = R1.labelMicro, color = R1.InkSoft)
                     for (t in ui.timers) {
-                        TimerCard(t)
+                        TimerCard(
+                            t,
+                            onPause = { vm.timerService(t.entityId, "pause") },
+                            onResume = { vm.timerService(t.entityId, "start") },
+                            onCancel = { vm.timerService(t.entityId, "cancel") },
+                        )
                     }
                 }
                 if (ds.showMedia && ui.media.isNotEmpty()) {
@@ -201,7 +206,11 @@ fun DashboardScreen(
                     Spacer(Modifier.size(2.dp))
                     Text(text = "RECENT ALERTS", style = R1.labelMicro, color = R1.InkSoft)
                     for (notif in ui.notifications.take(ds.inlineAlertsCount)) {
-                        NotificationPreview(notif, onClick = onOpenNotifications)
+                        NotificationPreview(
+                            notif,
+                            onClick = onOpenNotifications,
+                            onDismiss = { vm.dismissNotification(notif.notificationId) },
+                        )
                     }
                 }
                 Spacer(Modifier.size(24.dp))
@@ -429,30 +438,75 @@ private fun LowBatteryCard(entries: List<String>) {
 }
 
 @Composable
-private fun TimerCard(t: DashboardViewModel.TimerSummary) {
-    // Read-only timer summary — state chip + remaining time. Pause/start
-    // dispatch isn't exposed here (would clutter the dashboard with
-    // controls); user can favourite a timer for full control via the
-    // card stack or use the Service Caller.
-    Row(
+private fun TimerCard(
+    t: DashboardViewModel.TimerSummary,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    // Active-or-paused timer with three transport pills. CANCEL is on
+    // the right with the StatusRed accent to flag the destructive
+    // action; the PAUSE/RESUME pill swaps semantically based on the
+    // current state so the user always sees the OTHER option.
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(R1.ShapeS)
             .background(R1.SurfaceMuted)
             .border(1.dp, R1.Hairline, R1.ShapeS)
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        val (label, color) = when (t.state) {
-            "active" -> "RUNNING" to R1.AccentGreen
-            "paused" -> "PAUSED" to R1.StatusAmber
-            else -> t.state.uppercase() to R1.InkSoft
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val (label, color) = when (t.state) {
+                "active" -> "RUNNING" to R1.AccentGreen
+                "paused" -> "PAUSED" to R1.StatusAmber
+                else -> t.state.uppercase() to R1.InkSoft
+            }
+            Text(text = label, style = R1.labelMicro, color = color)
+            Spacer(Modifier.width(10.dp))
+            Text(text = t.name, style = R1.body, color = R1.Ink, modifier = Modifier.weight(1f), maxLines = 1)
+            Spacer(Modifier.width(8.dp))
+            RelativeTimeLabel(at = t.finishesAt, color = color, style = R1.labelMicro)
         }
-        Text(text = label, style = R1.labelMicro, color = color)
-        Spacer(Modifier.width(10.dp))
-        Text(text = t.name, style = R1.body, color = R1.Ink, modifier = Modifier.weight(1f), maxLines = 1)
-        Spacer(Modifier.width(8.dp))
-        RelativeTimeLabel(at = t.finishesAt, color = color, style = R1.labelMicro)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            val isActive = t.state == "active"
+            TimerPill(
+                modifier = Modifier.weight(1f),
+                label = if (isActive) "PAUSE" else "RESUME",
+                accent = if (isActive) R1.StatusAmber else R1.AccentGreen,
+                onClick = if (isActive) onPause else onResume,
+            )
+            TimerPill(
+                modifier = Modifier.weight(1f),
+                label = "CANCEL",
+                accent = R1.StatusRed,
+                onClick = onCancel,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimerPill(
+    modifier: Modifier,
+    label: String,
+    accent: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(R1.ShapeS)
+            .background(R1.Bg)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .r1Pressable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = label, style = R1.labelMicro, color = accent)
     }
 }
 
@@ -753,8 +807,9 @@ private fun Metric(
 private fun NotificationPreview(
     n: com.github.itskenny0.r1ha.core.ha.PersistentNotification,
     onClick: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(R1.ShapeS)
@@ -762,19 +817,35 @@ private fun NotificationPreview(
             .border(1.dp, R1.StatusRed.copy(alpha = 0.35f), R1.ShapeS)
             .r1Pressable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = n.title?.takeIf { it.isNotBlank() } ?: n.notificationId,
-            style = R1.body.copy(fontWeight = FontWeight.SemiBold),
-            color = R1.Ink,
-            maxLines = 1,
-        )
-        Text(
-            text = n.message,
-            style = R1.labelMicro,
-            color = R1.InkSoft,
-            maxLines = 2,
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = n.title?.takeIf { it.isNotBlank() } ?: n.notificationId,
+                style = R1.body.copy(fontWeight = FontWeight.SemiBold),
+                color = R1.Ink,
+                maxLines = 1,
+            )
+            Text(
+                text = n.message,
+                style = R1.labelMicro,
+                color = R1.InkSoft,
+                maxLines = 2,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        // ✕ dismiss tile — separate tap target from the row's onClick
+        // so a dismiss doesn't accidentally navigate to the
+        // Notifications surface (and vice versa).
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(R1.ShapeS)
+                .r1Pressable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "✕", style = R1.body, color = R1.InkSoft)
+        }
     }
 }
 

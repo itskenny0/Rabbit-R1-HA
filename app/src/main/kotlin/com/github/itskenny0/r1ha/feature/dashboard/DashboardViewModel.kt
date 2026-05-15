@@ -284,6 +284,52 @@ class DashboardViewModel(
      *  long-press affordance. Reuses the all-domain HA trick (target
      *  any light entity + entity_id='all' in data) so it scales to
      *  installs of any size in a single call.  */
+    /** Fire a HA timer service against the given entity. Used by the
+     *  TimerCard's pause / resume / cancel controls on the dashboard.
+     *  Refreshes the dashboard 600 ms later so the visible state
+     *  flips immediately rather than waiting for the auto-refresh
+     *  tick. */
+    fun timerService(entityId: String, service: String) {
+        viewModelScope.launch {
+            val target = runCatching {
+                com.github.itskenny0.r1ha.core.ha.EntityId(entityId)
+            }.getOrNull() ?: return@launch
+            haRepository.call(
+                com.github.itskenny0.r1ha.core.ha.ServiceCall(
+                    target = target,
+                    service = service,
+                    data = kotlinx.serialization.json.JsonObject(emptyMap()),
+                ),
+            )
+            kotlinx.coroutines.delay(600L)
+            refresh()
+        }
+    }
+
+    /** Dismiss a single persistent notification from the dashboard's
+     *  inline alerts preview. Optimistically drops the row from the
+     *  in-memory list so the dashboard updates without waiting for
+     *  the next refresh tick. */
+    fun dismissNotification(notificationId: String) {
+        viewModelScope.launch {
+            haRepository.dismissPersistentNotification(notificationId).fold(
+                onSuccess = {
+                    _ui.value = _ui.value.copy(
+                        notifications = _ui.value.notifications.filterNot {
+                            it.notificationId == notificationId
+                        },
+                    )
+                },
+                onFailure = { t ->
+                    R1Log.w("Dashboard", "dismiss $notificationId failed: ${t.message}")
+                    com.github.itskenny0.r1ha.core.util.Toaster.error(
+                        "Dismiss failed: ${t.message ?: "unknown"}",
+                    )
+                },
+            )
+        }
+    }
+
     fun allLightsOff() {
         viewModelScope.launch {
             val anyLight = haRepository.listAllEntities().getOrNull()
