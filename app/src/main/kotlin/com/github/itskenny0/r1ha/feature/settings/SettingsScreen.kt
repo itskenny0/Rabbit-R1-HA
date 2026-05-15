@@ -465,7 +465,8 @@ fun SettingsScreen(
             item {
                 SwitchRow(
                     label = "Start on Dashboard",
-                    subtitle = "Open the app on the TODAY dashboard (weather / people / next event) instead of the card stack. Useful for wall-mounted / kiosk R1s.",
+                    subtitle = "Open the app on the TODAY dashboard instead of the card stack. " +
+                        "Useful for wall-mounted / kiosk R1s. Takes effect on next app launch.",
                     checked = s.behavior.startOnDashboard,
                     onCheckedChange = { vm.setStartOnDashboard(it) },
                 )
