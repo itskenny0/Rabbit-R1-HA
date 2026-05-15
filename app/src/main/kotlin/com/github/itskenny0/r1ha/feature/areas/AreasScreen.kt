@@ -34,9 +34,13 @@ import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.core.util.R1Log
+import com.github.itskenny0.r1ha.core.util.Toaster
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Areas browser — lists HA's area registry, with entity count per
@@ -57,9 +61,32 @@ fun AreasScreen(
     val vm: AreasViewModel = viewModel(factory = AreasViewModel.factory(haRepository))
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
     LaunchedEffect(Unit) { vm.refresh() }
     var expandedAreaName by remember { mutableStateOf<String?>(null) }
+    fun openInHa(entityId: String) {
+        scope.launch {
+            val server = runCatching { settings.settings.first().server?.url }.getOrNull()
+            if (server.isNullOrBlank()) {
+                Toaster.error("No HA server configured")
+                return@launch
+            }
+            val url = "${server.trimEnd('/')}/history?entity_id=$entityId"
+            runCatching {
+                context.startActivity(
+                    android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(url),
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }.onFailure { t ->
+                R1Log.w("Areas", "open-in-HA failed: ${t.message}")
+                Toaster.error("No browser to open $url")
+            }
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -114,6 +141,7 @@ fun AreasScreen(
                             onToggle = {
                                 expandedAreaName = if (expandedAreaName == area.name) null else area.name
                             },
+                            onTapEntity = { eid -> openInHa(eid) },
                         )
                     }
                 }
@@ -127,6 +155,7 @@ private fun AreaRow(
     area: AreasViewModel.Area,
     expanded: Boolean,
     onToggle: () -> Unit,
+    onTapEntity: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -161,6 +190,10 @@ private fun AreaRow(
                         style = R1.labelMicro,
                         color = R1.InkSoft,
                         maxLines = 1,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .r1Pressable(onClick = { onTapEntity(eid) })
+                            .padding(vertical = 2.dp),
                     )
                 }
             }
