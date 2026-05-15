@@ -77,6 +77,19 @@ class SettingsViewModel(
     fun updateAdvanced(transform: (com.github.itskenny0.r1ha.core.prefs.AdvancedSettings) -> com.github.itskenny0.r1ha.core.prefs.AdvancedSettings) =
         update { it.copy(advanced = transform(it.advanced)) }
 
+    /** Generic mutator for the dashboard's per-section visibility +
+     *  threshold settings. Used by the DASHBOARD section in
+     *  SettingsScreen to flip any toggle / nudge any threshold without
+     *  one setter per field. */
+    fun updateDashboard(transform: (com.github.itskenny0.r1ha.core.prefs.DashboardSettings) -> com.github.itskenny0.r1ha.core.prefs.DashboardSettings) =
+        update { it.copy(dashboard = transform(it.dashboard)) }
+
+    /** Generic mutator for the per-surface refresh intervals +
+     *  integration tweaks. Used by the INTEGRATIONS section in
+     *  SettingsScreen. */
+    fun updateIntegrations(transform: (com.github.itskenny0.r1ha.core.prefs.IntegrationsSettings) -> com.github.itskenny0.r1ha.core.prefs.IntegrationsSettings) =
+        update { it.copy(integrations = transform(it.integrations)) }
+
     // ── Appearance ──────────────────────────────────────────────────────────
 
     fun setTheme(themeId: ThemeId) = update { it.copy(theme = themeId) }

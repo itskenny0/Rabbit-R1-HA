@@ -569,6 +569,265 @@ fun SettingsScreen(
 
             item { SectionDivider() }
 
+            // ── Dashboard layout — per-section visibility + thresholds ─────────
+            item { Section("DASHBOARD") }
+            item {
+                SwitchRow(
+                    label = "Greeting",
+                    subtitle = "GOOD MORNING / AFTERNOON / EVENING / NIGHT row",
+                    checked = s.dashboard.showGreeting,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showGreeting = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Weather card",
+                    subtitle = "Current condition + temperature from your first weather.* entity",
+                    checked = s.dashboard.showWeather,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showWeather = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Sun card",
+                    subtitle = "Above/below horizon, elevation, next rise/set",
+                    checked = s.dashboard.showSun,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showSun = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Timers",
+                    subtitle = "Active timer.* entities with remaining time",
+                    checked = s.dashboard.showTimers,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showTimers = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Now Playing",
+                    subtitle = "Currently-playing media_player entities with prev / play / next",
+                    checked = s.dashboard.showMedia,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showMedia = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "People",
+                    subtitle = "Home/away count + per-person state",
+                    checked = s.dashboard.showPersons,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showPersons = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Next event",
+                    subtitle = "Earliest upcoming calendar event with NOW pill",
+                    checked = s.dashboard.showNextEvent,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showNextEvent = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "DRAW (power)",
+                    subtitle = "Sum of device_class=power sensors in watts",
+                    checked = s.dashboard.showPower,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showPower = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Metrics row",
+                    subtitle = "LIGHTS ON / CAMERAS / ALERTS tiles",
+                    checked = s.dashboard.showMetrics,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showMetrics = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Low-battery alerts",
+                    subtitle = "Surface battery sensors under the threshold",
+                    checked = s.dashboard.showLowBattery,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showLowBattery = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Inline alert previews",
+                    subtitle = "Preview the first N HA persistent alerts on the dashboard",
+                    checked = s.dashboard.showInlineAlerts,
+                    onCheckedChange = { v -> vm.updateDashboard { it.copy(showInlineAlerts = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Dashboard refresh",
+                    subtitle = "Auto-refresh cadence (0 = pull-down only)",
+                    value = s.dashboard.refreshIntervalSec,
+                    min = 0, max = 600, step = 15, suffix = " s",
+                    onChange = { v -> vm.updateDashboard { it.copy(refreshIntervalSec = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Low-battery threshold",
+                    subtitle = "Surface batteries below this percentage",
+                    value = s.dashboard.lowBatteryThresholdPct,
+                    min = 1, max = 100, step = 5, suffix = " %",
+                    onChange = { v -> vm.updateDashboard { it.copy(lowBatteryThresholdPct = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "DRAW amber above",
+                    subtitle = "Power threshold where the DRAW tile turns amber",
+                    value = s.dashboard.powerAmberThresholdW,
+                    min = 50, max = 10_000, step = 50, suffix = " W",
+                    onChange = { v -> vm.updateDashboard { it.copy(powerAmberThresholdW = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "DRAW red above",
+                    subtitle = "Power threshold where the DRAW tile turns red",
+                    value = s.dashboard.powerRedThresholdW,
+                    min = 200, max = 30_000, step = 100, suffix = " W",
+                    onChange = { v -> vm.updateDashboard { it.copy(powerRedThresholdW = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Inline alerts shown",
+                    subtitle = "Max HA persistent-alert previews under METRICS",
+                    value = s.dashboard.inlineAlertsCount,
+                    min = 0, max = 10, step = 1,
+                    onChange = { v -> vm.updateDashboard { it.copy(inlineAlertsCount = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Media rows shown",
+                    subtitle = "Max simultaneous media-player cards on the dashboard",
+                    value = s.dashboard.mediaSummaryCount,
+                    min = 1, max = 10, step = 1,
+                    onChange = { v -> vm.updateDashboard { it.copy(mediaSummaryCount = v) } },
+                )
+            }
+
+            item { SectionDivider() }
+
+            // ── Integrations — per-surface refresh intervals + tuning ──────────
+            item { Section("INTEGRATIONS") }
+            item {
+                NumberStepperRow(
+                    label = "Notifications refresh",
+                    subtitle = "Auto-refresh the Notifications surface every…",
+                    value = s.integrations.notificationsRefreshSec,
+                    min = 0, max = 600, step = 15, suffix = " s",
+                    onChange = { v -> vm.updateIntegrations { it.copy(notificationsRefreshSec = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Logbook refresh",
+                    subtitle = "Auto-refresh the Recent Activity feed every…",
+                    value = s.integrations.logbookRefreshSec,
+                    min = 0, max = 900, step = 30, suffix = " s",
+                    onChange = { v -> vm.updateIntegrations { it.copy(logbookRefreshSec = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Who's-home refresh",
+                    subtitle = "Auto-refresh the Persons surface every…",
+                    value = s.integrations.personsRefreshSec,
+                    min = 0, max = 900, step = 30, suffix = " s",
+                    onChange = { v -> vm.updateIntegrations { it.copy(personsRefreshSec = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Weather refresh",
+                    subtitle = "Auto-refresh the Weather surface every…",
+                    value = s.integrations.weatherRefreshSec,
+                    min = 0, max = 3600, step = 60, suffix = " s",
+                    onChange = { v -> vm.updateIntegrations { it.copy(weatherRefreshSec = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Calendars refresh",
+                    subtitle = "Auto-refresh the Calendars surface every…",
+                    value = s.integrations.calendarsRefreshSec,
+                    min = 0, max = 3600, step = 60, suffix = " s",
+                    onChange = { v -> vm.updateIntegrations { it.copy(calendarsRefreshSec = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Camera overlay polling",
+                    subtitle = "Snapshot fetch interval when viewing a camera fullscreen",
+                    value = s.integrations.cameraOverlayPollSec,
+                    min = 1, max = 60, step = 1, suffix = " s",
+                    onChange = { v -> vm.updateIntegrations { it.copy(cameraOverlayPollSec = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Camera grid polling",
+                    subtitle = "Snapshot fetch interval per tile in GRID view",
+                    value = s.integrations.cameraGridPollSec,
+                    min = 2, max = 120, step = 2, suffix = " s",
+                    onChange = { v -> vm.updateIntegrations { it.copy(cameraGridPollSec = v) } },
+                )
+            }
+            item {
+                SwitchRow(
+                    label = "Cameras open in GRID",
+                    subtitle = "Default to the polling-tiles view rather than the text list",
+                    checked = s.integrations.camerasDefaultGrid,
+                    onCheckedChange = { v -> vm.updateIntegrations { it.copy(camerasDefaultGrid = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Logbook default window",
+                    subtitle = "Time window applied on Recent Activity entry",
+                    value = s.integrations.logbookDefaultWindowHours,
+                    min = 1, max = 168, step = 1, suffix = " h",
+                    onChange = { v -> vm.updateIntegrations { it.copy(logbookDefaultWindowHours = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Calendar look-ahead",
+                    subtitle = "Days of events fetched when drilling into a calendar",
+                    value = s.integrations.calendarLookaheadDays,
+                    min = 1, max = 90, step = 1, suffix = " d",
+                    onChange = { v -> vm.updateIntegrations { it.copy(calendarLookaheadDays = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "Quick Search result cap",
+                    subtitle = "Maximum entities shown for a search",
+                    value = s.integrations.searchResultCap,
+                    min = 10, max = 500, step = 10,
+                    onChange = { v -> vm.updateIntegrations { it.copy(searchResultCap = v) } },
+                )
+            }
+            item {
+                NumberStepperRow(
+                    label = "RECENT history depth",
+                    subtitle = "Items kept in Templates / Service Caller RECENT lists",
+                    value = s.integrations.recentHistoryDepth,
+                    min = 0, max = 30, step = 1,
+                    onChange = { v -> vm.updateIntegrations { it.copy(recentHistoryDepth = v) } },
+                )
+            }
+
+            item { SectionDivider() }
+
             // ── Appearance ─────────────────────────────────────────────────────────
             item { Section("APPEARANCE") }
             item {
@@ -762,6 +1021,83 @@ private fun SwitchRow(
             onCheckedChange = onCheckedChange,
             modifier = Modifier.padding(start = 12.dp),
         )
+    }
+}
+
+/**
+ * NumberStepperRow — label + subtitle + −/+ pills around the current
+ * value. Used for the new dashboard / integrations settings where
+ * thresholds (battery low %, power amber/red watts) and intervals
+ * (refresh cadence, polling intervals) need granular tuning without
+ * a slider's tap-imprecision penalty on the R1's small screen.
+ *
+ * Clamped at [min] / [max]; the [step] controls how much each tap
+ * moves the value. Pills disable themselves when the value is at the
+ * matching boundary so the user doesn't waste taps.
+ */
+@Composable
+private fun NumberStepperRow(
+    label: String,
+    subtitle: String? = null,
+    value: Int,
+    min: Int,
+    max: Int,
+    step: Int = 1,
+    suffix: String = "",
+    onChange: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 22.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = R1.bodyEmph, color = R1.Ink)
+            if (subtitle != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(subtitle, style = R1.body, color = R1.InkMuted)
+            }
+        }
+        // −/value/+ cluster. Each pill is 28 dp tall, the value cell
+        // sits between them as plain text — feels less busy than three
+        // border-bordered pills in a row.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val canDec = value > min
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(R1.ShapeS)
+                    .background(if (canDec) R1.SurfaceMuted else R1.Bg)
+                    .r1Pressable(onClick = {
+                        if (canDec) onChange((value - step).coerceAtLeast(min))
+                    }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "−", style = R1.body, color = if (canDec) R1.Ink else R1.InkMuted)
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "$value$suffix",
+                style = R1.bodyEmph,
+                color = R1.Ink,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            val canInc = value < max
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(R1.ShapeS)
+                    .background(if (canInc) R1.SurfaceMuted else R1.Bg)
+                    .r1Pressable(onClick = {
+                        if (canInc) onChange((value + step).coerceAtMost(max))
+                    }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "+", style = R1.body, color = if (canInc) R1.Ink else R1.InkMuted)
+            }
+        }
     }
 }
 

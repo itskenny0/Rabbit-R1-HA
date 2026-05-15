@@ -9,6 +9,7 @@ import com.github.itskenny0.r1ha.core.ha.PersistentNotification
 import com.github.itskenny0.r1ha.core.util.R1Log
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -28,6 +29,7 @@ import java.time.Instant
  */
 class DashboardViewModel(
     private val haRepository: HaRepository,
+    private val settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
 ) : ViewModel() {
 
     @androidx.compose.runtime.Stable
@@ -142,9 +144,14 @@ class DashboardViewModel(
                             "| map(attribute='state') | map('float',0) | sum | round(0) | int }}",
                     )
                 }
-                // Low-battery list: every battery-class sensor under 20%.
-                // Builds a JSON array of "<entity_id>=<pct>" strings so
-                // we can parse it back client-side.
+                // Low-battery list: every battery-class sensor under the
+                // configured threshold. Builds a JSON array of
+                // "<entity_id>=<pct>" strings so we can parse it back
+                // client-side. Threshold is read from settings each refresh.
+                val lowBatteryPct = settings.settings.first().dashboard.lowBatteryThresholdPct
+                // ^ first() on the StateFlow gives us the current snapshot
+                //   without waiting for an emit. Safe because settings is a
+                //   hot StateFlow seeded on the repo's init.
                 val batteryJob = async {
                     haRepository.renderTemplate(
                         "{%- set out = namespace(items=[]) -%}" +
@@ -152,7 +159,7 @@ class DashboardViewModel(
                             "| selectattr('attributes.device_class','eq','battery') " +
                             "| rejectattr('state','in',['unavailable','unknown']) -%}" +
                             "{%- set pct = s.state | float(101) -%}" +
-                            "{%- if pct < 20 -%}" +
+                            "{%- if pct < $lowBatteryPct -%}" +
                             "{%- set _ = out.items.append(s.entity_id ~ '=' ~ (pct | int)) -%}" +
                             "{%- endif -%}" +
                             "{%- endfor -%}" +
@@ -325,8 +332,11 @@ class DashboardViewModel(
     }
 
     companion object {
-        fun factory(haRepository: HaRepository) = viewModelFactory {
-            initializer { DashboardViewModel(haRepository) }
+        fun factory(
+            haRepository: HaRepository,
+            settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+        ) = viewModelFactory {
+            initializer { DashboardViewModel(haRepository, settings) }
         }
     }
 }

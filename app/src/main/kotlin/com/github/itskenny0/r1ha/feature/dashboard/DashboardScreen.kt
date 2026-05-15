@@ -46,6 +46,7 @@ import com.github.itskenny0.r1ha.ui.components.r1RowPressable
 @Composable
 fun DashboardScreen(
     haRepository: HaRepository,
+    settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
     onBack: () -> Unit,
     onOpenWeather: () -> Unit,
     onOpenPersons: () -> Unit,
@@ -63,13 +64,24 @@ fun DashboardScreen(
      *  explicit affordance. */
     onOpenSettings: () -> Unit = {},
 ) {
-    val vm: DashboardViewModel = viewModel(factory = DashboardViewModel.factory(haRepository))
+    val vm: DashboardViewModel = viewModel(factory = DashboardViewModel.factory(haRepository, settings))
     val ui by vm.ui.collectAsState()
-    // Auto-refresh while the screen is composed — 60 s is the sweet spot
-    // between "stale enough to notice" and "polling /api/states 6× per
-    // minute". LaunchedEffect inside AutoRefresh cancels cleanly on
-    // screen exit so backing out doesn't leak the work.
-    com.github.itskenny0.r1ha.ui.components.AutoRefresh(60_000L) { vm.refresh() }
+    // Read per-section visibility + interval/threshold settings live.
+    // Falls back to defaults during cold paint so the dashboard is
+    // never empty during the first DataStore read.
+    val appSettings by settings.settings.collectAsState(
+        initial = com.github.itskenny0.r1ha.core.prefs.AppSettings(),
+    )
+    val ds = appSettings.dashboard
+    // Auto-refresh — interval comes from the dashboard prefs; 0 disables
+    // auto-refresh entirely (pull-down only).
+    val refreshSec = ds.refreshIntervalSec
+    if (refreshSec > 0) {
+        com.github.itskenny0.r1ha.ui.components.AutoRefresh(refreshSec * 1000L) { vm.refresh() }
+    } else {
+        // Still trigger one initial load when auto-refresh is off.
+        androidx.compose.runtime.LaunchedEffect(Unit) { vm.refresh() }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -108,16 +120,16 @@ fun DashboardScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Greeting()
-                ui.weather?.let { WeatherCard(it, onClick = onOpenWeather) }
-                ui.sun?.let { SunCard(it) }
-                if (ui.timers.isNotEmpty()) {
+                if (ds.showGreeting) Greeting()
+                if (ds.showWeather) ui.weather?.let { WeatherCard(it, onClick = onOpenWeather) }
+                if (ds.showSun) ui.sun?.let { SunCard(it) }
+                if (ds.showTimers && ui.timers.isNotEmpty()) {
                     Text(text = "TIMERS", style = R1.labelMicro, color = R1.InkSoft)
                     for (t in ui.timers) {
                         TimerCard(t)
                     }
                 }
-                if (ui.media.isNotEmpty()) {
+                if (ds.showMedia && ui.media.isNotEmpty()) {
                     Text(text = "NOW PLAYING", style = R1.labelMicro, color = R1.InkSoft)
                     for (m in ui.media) {
                         MediaCard(
@@ -143,28 +155,32 @@ fun DashboardScreen(
                         )
                     }
                 }
-                ui.persons?.let { PersonsCard(it, onClick = onOpenPersons) }
-                ui.nextEvent?.let { CalendarCard(it, onClick = onOpenCalendars) }
-                MetricsRow(
-                    cameraCount = ui.cameraCount,
-                    notificationCount = ui.notifications.size,
-                    lightsOnCount = ui.lightsOnCount,
-                    totalPowerW = ui.totalPowerW,
-                    onLights = onOpenScenes,
-                    onLightsLongPress = { vm.allLightsOff() },
-                    onCameras = onOpenCameras,
-                    onNotifications = onOpenNotifications,
-                )
-                if (ui.lowBatteries.isNotEmpty()) {
+                if (ds.showPersons) ui.persons?.let { PersonsCard(it, onClick = onOpenPersons) }
+                if (ds.showNextEvent) ui.nextEvent?.let { CalendarCard(it, onClick = onOpenCalendars) }
+                if (ds.showMetrics) {
+                    MetricsRow(
+                        cameraCount = ui.cameraCount,
+                        notificationCount = ui.notifications.size,
+                        lightsOnCount = ui.lightsOnCount,
+                        totalPowerW = if (ds.showPower) ui.totalPowerW else -1,
+                        amberW = ds.powerAmberThresholdW,
+                        redW = ds.powerRedThresholdW,
+                        onLights = onOpenScenes,
+                        onLightsLongPress = { vm.allLightsOff() },
+                        onCameras = onOpenCameras,
+                        onNotifications = onOpenNotifications,
+                    )
+                }
+                if (ds.showLowBattery && ui.lowBatteries.isNotEmpty()) {
                     LowBatteryCard(ui.lowBatteries)
                 }
-                // If there are notifications, show the first 2 inline below
+                // If there are notifications, surface the first N inline below
                 // the metrics row so the user sees what HA is shouting about
-                // without having to drill in.
-                if (ui.notifications.isNotEmpty()) {
+                // without having to drill in. Count comes from settings.
+                if (ds.showInlineAlerts && ui.notifications.isNotEmpty() && ds.inlineAlertsCount > 0) {
                     Spacer(Modifier.size(2.dp))
                     Text(text = "RECENT ALERTS", style = R1.labelMicro, color = R1.InkSoft)
-                    for (notif in ui.notifications.take(2)) {
+                    for (notif in ui.notifications.take(ds.inlineAlertsCount)) {
                         NotificationPreview(notif, onClick = onOpenNotifications)
                     }
                 }
@@ -586,6 +602,8 @@ private fun MetricsRow(
     notificationCount: Int,
     lightsOnCount: Int,
     totalPowerW: Int,
+    amberW: Int,
+    redW: Int,
     onLights: () -> Unit,
     onLightsLongPress: () -> Unit,
     onCameras: () -> Unit,
@@ -609,8 +627,8 @@ private fun MetricsRow(
                         text = "${totalPowerW} W",
                         style = R1.numeralXl,
                         color = when {
-                            totalPowerW > 2000 -> R1.StatusRed
-                            totalPowerW > 500 -> R1.StatusAmber
+                            totalPowerW > redW -> R1.StatusRed
+                            totalPowerW > amberW -> R1.StatusAmber
                             else -> R1.AccentCool
                         },
                     )

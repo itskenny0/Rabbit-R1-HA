@@ -277,6 +277,7 @@ fun AppNavGraph(
         composable(Routes.DASHBOARD) {
             com.github.itskenny0.r1ha.feature.dashboard.DashboardScreen(
                 haRepository = haRepository,
+                settings = settings,
                 onBack = { navController.popBackStack() },
                 onOpenWeather = {
                     navController.navigate(Routes.WEATHER) { launchSingleTop = true }

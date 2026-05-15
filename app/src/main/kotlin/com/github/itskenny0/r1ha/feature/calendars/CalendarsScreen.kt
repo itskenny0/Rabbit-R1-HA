@@ -60,10 +60,15 @@ fun CalendarsScreen(
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
-    // Auto-refresh every 5 minutes — calendars only mutate when the user
-    // adds/edits events upstream, so a slow poll is fine. The relative-
-    // timestamp ticker already keeps 'in 23 min' fresh between polls.
-    com.github.itskenny0.r1ha.ui.components.AutoRefresh(300_000L) { vm.refresh() }
+    val appSettings by settings.settings.collectAsState(
+        initial = com.github.itskenny0.r1ha.core.prefs.AppSettings(),
+    )
+    val refreshSec = appSettings.integrations.calendarsRefreshSec
+    if (refreshSec > 0) {
+        com.github.itskenny0.r1ha.ui.components.AutoRefresh(refreshSec * 1000L) { vm.refresh() }
+    } else {
+        androidx.compose.runtime.LaunchedEffect(Unit) { vm.refresh() }
+    }
     var drillingInto by remember { mutableStateOf<CalendarsViewModel.Calendar?>(null) }
     val drillTarget = drillingInto
     if (drillTarget != null) {

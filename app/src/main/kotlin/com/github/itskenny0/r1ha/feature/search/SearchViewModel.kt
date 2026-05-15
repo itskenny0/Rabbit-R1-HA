@@ -13,6 +13,7 @@ import com.github.itskenny0.r1ha.core.util.R1Log
 import com.github.itskenny0.r1ha.core.util.Toaster
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 
@@ -37,6 +38,9 @@ class SearchViewModel(
     private val haRepository: HaRepository,
     private val settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
 ) : ViewModel() {
+
+    @Volatile
+    private var resultCap: Int = 80
 
     /** Coarse-grained domain bucket for the filter chips. Maps the
      *  Domain enum into the four user-facing groupings the chips
@@ -90,7 +94,7 @@ class SearchViewModel(
                             )
                     }.thenBy { it.friendlyName.lowercase() },
                 )
-                .take(80)
+                .take(resultCap)
         }
 
     private val _ui = MutableStateFlow(UiState())
@@ -99,6 +103,10 @@ class SearchViewModel(
     fun refresh() {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(loading = true, error = null)
+            // Snapshot the result cap from settings so the .take() below
+            // reflects user prefs without each call paying for a flow
+            // collection.
+            resultCap = settings.settings.first().integrations.searchResultCap.coerceIn(1, 1000)
             haRepository.listAllEntities().fold(
                 onSuccess = { entities ->
                     R1Log.i("Search", "loaded ${entities.size} entities")

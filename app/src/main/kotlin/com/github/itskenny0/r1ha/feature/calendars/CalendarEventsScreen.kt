@@ -45,6 +45,7 @@ import com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.Instant
 
@@ -59,6 +60,7 @@ import java.time.Instant
  */
 class CalendarEventsViewModel(
     private val haRepository: HaRepository,
+    private val settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
     private val entityId: String,
 ) : ViewModel() {
 
@@ -75,7 +77,8 @@ class CalendarEventsViewModel(
     fun refresh() {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(loading = true, error = null)
-            haRepository.fetchCalendarEvents(entityId, fromDaysBack = 0, toDaysAhead = 14).fold(
+            val lookahead = settings.settings.first().integrations.calendarLookaheadDays
+            haRepository.fetchCalendarEvents(entityId, fromDaysBack = 0, toDaysAhead = lookahead).fold(
                 onSuccess = { events ->
                     R1Log.i("CalendarEvents", "$entityId loaded ${events.size}")
                     _ui.value = _ui.value.copy(loading = false, events = events, error = null)
@@ -89,8 +92,12 @@ class CalendarEventsViewModel(
     }
 
     companion object {
-        fun factory(haRepository: HaRepository, entityId: String) = viewModelFactory {
-            initializer { CalendarEventsViewModel(haRepository, entityId) }
+        fun factory(
+            haRepository: HaRepository,
+            settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+            entityId: String,
+        ) = viewModelFactory {
+            initializer { CalendarEventsViewModel(haRepository, settings, entityId) }
         }
     }
 }
@@ -106,7 +113,7 @@ fun CalendarEventsScreen(
 ) {
     val vm: CalendarEventsViewModel = viewModel(
         key = entityId,
-        factory = CalendarEventsViewModel.factory(haRepository, entityId),
+        factory = CalendarEventsViewModel.factory(haRepository, settings, entityId),
     )
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()

@@ -59,9 +59,17 @@ fun NotificationsScreen(
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
-    // Auto-refresh every 30 s — alerts are the most time-sensitive HA
-    // surface so a faster cadence than the dashboard's 60 s makes sense.
-    com.github.itskenny0.r1ha.ui.components.AutoRefresh(30_000L) { vm.refresh() }
+    // Auto-refresh — cadence comes from Settings → Integrations →
+    // 'Notifications refresh'. 0 disables auto-refresh (pull-down only).
+    val appSettings by settings.settings.collectAsState(
+        initial = com.github.itskenny0.r1ha.core.prefs.AppSettings(),
+    )
+    val refreshSec = appSettings.integrations.notificationsRefreshSec
+    if (refreshSec > 0) {
+        com.github.itskenny0.r1ha.ui.components.AutoRefresh(refreshSec * 1000L) { vm.refresh() }
+    } else {
+        androidx.compose.runtime.LaunchedEffect(Unit) { vm.refresh() }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()

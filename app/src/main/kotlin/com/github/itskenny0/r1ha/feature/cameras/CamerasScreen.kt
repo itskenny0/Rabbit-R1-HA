@@ -79,7 +79,14 @@ fun CamerasScreen(
     // changes and back-then-forward nav. Defaults to LIST (cheap; no
     // background polling) so big installs don't accidentally fire a
     // thumbnail-fetch stampede on first entry.
-    var viewMode by rememberSaveable { mutableStateOf("LIST") }
+    // Default view-mode comes from the camerasDefaultGrid pref; user can
+    // still flip via the LIST/GRID chips. rememberSaveable preserves the
+    // override across config changes.
+    val appSettings by settings.settings.collectAsState(
+        initial = com.github.itskenny0.r1ha.core.prefs.AppSettings(),
+    )
+    val initialMode = if (appSettings.integrations.camerasDefaultGrid) "GRID" else "LIST"
+    var viewMode by rememberSaveable(initialMode) { mutableStateOf(initialMode) }
     WheelScrollFor(
         wheelInput = wheelInput,
         listState = if (viewMode == "LIST") listState else rememberLazyListState(),
@@ -147,6 +154,7 @@ fun CamerasScreen(
                             camera = camera,
                             serverUrl = serverUrl!!,
                             bearerToken = token,
+                            pollSec = appSettings.integrations.cameraGridPollSec,
                             onTap = { viewingEntityId = camera.entityId },
                         )
                     }
@@ -180,6 +188,7 @@ fun CamerasScreen(
             displayName = ui.cameras.firstOrNull { it.entityId == viewing }?.name ?: viewing,
             settings = settings,
             tokens = tokens,
+            pollSec = appSettings.integrations.cameraOverlayPollSec,
             onDismiss = { viewingEntityId = null },
         )
     }
@@ -217,6 +226,7 @@ private fun CameraTile(
     camera: CamerasViewModel.Camera,
     serverUrl: String,
     bearerToken: String?,
+    pollSec: Int,
     onTap: () -> Unit,
 ) {
     Column(
@@ -235,9 +245,10 @@ private fun CameraTile(
                 serverUrl = serverUrl,
                 bearerToken = bearerToken,
                 entityId = camera.entityId,
-                // Slower polling on the grid — 8 s per tile keeps the
-                // total fetch rate sane when there are many cameras.
-                intervalMillis = 8_000L,
+                // Polling cadence comes from the Camera grid polling
+                // setting — N tiles × this interval keeps total fetch
+                // rate predictable on big installs.
+                intervalMillis = pollSec * 1000L,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -294,6 +305,7 @@ private fun CameraDetailOverlay(
     displayName: String,
     settings: SettingsRepository,
     tokens: TokenStore,
+    pollSec: Int,
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
@@ -354,6 +366,7 @@ private fun CameraDetailOverlay(
                         serverUrl = s,
                         bearerToken = token,
                         entityId = entityId,
+                        intervalMillis = pollSec * 1000L,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -365,7 +378,7 @@ private fun CameraDetailOverlay(
                     modifier = Modifier.padding(horizontal = 12.dp),
                 )
                 Text(
-                    text = "Polling every 4 s · tap ✕ to close",
+                    text = "Polling every $pollSec s · tap ✕ to close",
                     style = R1.labelMicro,
                     color = R1.InkMuted,
                     modifier = Modifier.padding(horizontal = 12.dp),

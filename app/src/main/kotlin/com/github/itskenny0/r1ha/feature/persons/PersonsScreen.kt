@@ -53,10 +53,15 @@ fun PersonsScreen(
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
-    // Auto-refresh every 2 minutes — home/away transitions are the user-
-    // visible signal; people leave / arrive often enough that a 2-min
-    // poll keeps "who's home" feeling live without churn.
-    com.github.itskenny0.r1ha.ui.components.AutoRefresh(120_000L) { vm.refresh() }
+    val appSettings by settings.settings.collectAsState(
+        initial = com.github.itskenny0.r1ha.core.prefs.AppSettings(),
+    )
+    val refreshSec = appSettings.integrations.personsRefreshSec
+    if (refreshSec > 0) {
+        com.github.itskenny0.r1ha.ui.components.AutoRefresh(refreshSec * 1000L) { vm.refresh() }
+    } else {
+        androidx.compose.runtime.LaunchedEffect(Unit) { vm.refresh() }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
