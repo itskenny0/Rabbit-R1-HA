@@ -58,14 +58,9 @@ fun DashboardScreen(
     val ui by vm.ui.collectAsState()
     // Auto-refresh while the screen is composed — 60 s is the sweet spot
     // between "stale enough to notice" and "polling /api/states 6× per
-    // minute". LaunchedEffect cancellation on screen exit kills the loop
-    // cleanly so backing out doesn't leak the work.
-    LaunchedEffect(Unit) {
-        while (true) {
-            vm.refresh()
-            kotlinx.coroutines.delay(60_000L)
-        }
-    }
+    // minute". LaunchedEffect inside AutoRefresh cancels cleanly on
+    // screen exit so backing out doesn't leak the work.
+    com.github.itskenny0.r1ha.ui.components.AutoRefresh(60_000L) { vm.refresh() }
     Column(
         modifier = Modifier
             .fillMaxSize()

@@ -60,15 +60,9 @@ fun NotificationsScreen(
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
-    // Auto-refresh every 30 s while the screen is composed — alerts are
-    // the most time-sensitive HA surface so a faster cadence than the
-    // dashboard's 60 s makes sense. Cancelled on screen exit.
-    LaunchedEffect(Unit) {
-        while (true) {
-            vm.refresh()
-            kotlinx.coroutines.delay(30_000L)
-        }
-    }
+    // Auto-refresh every 30 s — alerts are the most time-sensitive HA
+    // surface so a faster cadence than the dashboard's 60 s makes sense.
+    com.github.itskenny0.r1ha.ui.components.AutoRefresh(30_000L) { vm.refresh() }
     Column(
         modifier = Modifier
             .fillMaxSize()

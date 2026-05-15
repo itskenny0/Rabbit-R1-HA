@@ -56,13 +56,8 @@ fun PersonsScreen(
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
     // Auto-refresh every 2 minutes — home/away transitions are the user-
     // visible signal; people leave / arrive often enough that a 2-min
-    // poll keeps the "who's home" view feeling live without churn.
-    LaunchedEffect(Unit) {
-        while (true) {
-            vm.refresh()
-            kotlinx.coroutines.delay(120_000L)
-        }
-    }
+    // poll keeps "who's home" feeling live without churn.
+    com.github.itskenny0.r1ha.ui.components.AutoRefresh(120_000L) { vm.refresh() }
     Column(
         modifier = Modifier
             .fillMaxSize()

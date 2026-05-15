@@ -71,16 +71,10 @@ fun LogbookScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
-    // Auto-refresh every 90 s while composed — events are append-only
-    // and HA stamps each row's wall-clock time, so an 'as of …' header
-    // would also be nice (follow-up). Cancellation on screen exit is
-    // handled by LaunchedEffect's normal lifecycle.
-    LaunchedEffect(Unit) {
-        while (true) {
-            vm.refresh()
-            kotlinx.coroutines.delay(90_000L)
-        }
-    }
+    // Auto-refresh every 90 s — events are append-only and HA stamps
+    // each row's wall-clock time, so an 'as of …' header would also be
+    // nice (follow-up).
+    com.github.itskenny0.r1ha.ui.components.AutoRefresh(90_000L) { vm.refresh() }
     // Long-press → open the entity's history in HA's web UI via the
     // system browser. The R1's stock browser is rough but works; users on
     // a tablet next to the device are the more likely audience for this
