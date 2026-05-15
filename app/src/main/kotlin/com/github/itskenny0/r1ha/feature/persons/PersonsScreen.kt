@@ -54,7 +54,15 @@ fun PersonsScreen(
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
-    LaunchedEffect(Unit) { vm.refresh() }
+    // Auto-refresh every 2 minutes — home/away transitions are the user-
+    // visible signal; people leave / arrive often enough that a 2-min
+    // poll keeps the "who's home" view feeling live without churn.
+    LaunchedEffect(Unit) {
+        while (true) {
+            vm.refresh()
+            kotlinx.coroutines.delay(120_000L)
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()

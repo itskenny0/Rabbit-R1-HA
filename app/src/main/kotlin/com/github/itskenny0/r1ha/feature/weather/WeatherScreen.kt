@@ -58,7 +58,15 @@ fun WeatherScreen(
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
-    LaunchedEffect(Unit) { vm.refresh() }
+    // Auto-refresh every 5 minutes — weather doesn't change minute-to-
+    // minute and HA's weather integrations typically poll their upstream
+    // sources at a similar cadence, so faster is wasted bandwidth.
+    LaunchedEffect(Unit) {
+        while (true) {
+            vm.refresh()
+            kotlinx.coroutines.delay(300_000L)
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
