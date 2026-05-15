@@ -187,6 +187,7 @@ fun AppNavGraph(
             com.github.itskenny0.r1ha.feature.template.TemplateScreen(
                 haRepository = haRepository,
                 settings = settings,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }
@@ -194,6 +195,7 @@ fun AppNavGraph(
             com.github.itskenny0.r1ha.feature.service.ServiceCallerScreen(
                 haRepository = haRepository,
                 settings = settings,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }

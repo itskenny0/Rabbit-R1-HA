@@ -54,6 +54,7 @@ import com.github.itskenny0.r1ha.ui.components.r1Pressable
 fun ServiceCallerScreen(
     haRepository: HaRepository,
     settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+    wheelInput: com.github.itskenny0.r1ha.core.input.WheelInput,
     onBack: () -> Unit,
 ) {
     val vm: ServiceCallerViewModel = viewModel(
@@ -69,11 +70,17 @@ fun ServiceCallerScreen(
             .imePadding(),
     ) {
         R1TopBar(title = "SERVICE CALLER", onBack = onBack)
+        val scrollState = rememberScrollState()
+        com.github.itskenny0.r1ha.ui.components.WheelScrollForScrollState(
+            wheelInput = wheelInput,
+            scrollState = scrollState,
+            settings = settings,
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
         ) {
             ExampleChips(onPick = vm::load)
             Spacer(Modifier.padding(top = 10.dp))

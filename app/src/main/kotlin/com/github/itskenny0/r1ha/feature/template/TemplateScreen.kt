@@ -50,6 +50,7 @@ import com.github.itskenny0.r1ha.ui.components.r1Pressable
 fun TemplateScreen(
     haRepository: HaRepository,
     settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+    wheelInput: com.github.itskenny0.r1ha.core.input.WheelInput,
     onBack: () -> Unit,
 ) {
     val vm: TemplateViewModel = viewModel(
@@ -64,11 +65,19 @@ fun TemplateScreen(
             .imePadding(),
     ) {
         R1TopBar(title = "TEMPLATES", onBack = onBack)
+        // Wheel scroll for the form area — long Jinja templates +
+        // RECENT history can exceed one screen.
+        val scrollState = rememberScrollState()
+        com.github.itskenny0.r1ha.ui.components.WheelScrollForScrollState(
+            wheelInput = wheelInput,
+            scrollState = scrollState,
+            settings = settings,
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
         ) {
             // Example chips — one-tap insertion of common templates so the
             // user can iterate without having to remember the Jinja2 syntax
