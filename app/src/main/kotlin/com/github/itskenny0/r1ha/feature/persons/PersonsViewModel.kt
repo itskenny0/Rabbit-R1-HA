@@ -40,6 +40,10 @@ class PersonsViewModel(
         /** When HA last reported this person/device's state. Used for
          *  the "since X" relative timestamp on each row. */
         val since: java.time.Instant?,
+        /** Battery percent from HA's `battery_level` attribute — common
+         *  on device_trackers backed by a phone integration. Null when
+         *  not reported. */
+        val batteryLevel: Int?,
     )
 
     @androidx.compose.runtime.Stable
@@ -80,6 +84,8 @@ class PersonsViewModel(
                     gpsAccuracy = (row.attributes["gps_accuracy"] as? JsonPrimitive)?.content
                         ?.toDoubleOrNull()?.toInt(),
                     since = row.lastChanged,
+                    batteryLevel = (row.attributes["battery_level"] as? JsonPrimitive)?.content
+                        ?.toDoubleOrNull()?.toInt(),
                 )
             }.sortedBy { it.name.lowercase() }
             val devices = deviceResult.getOrNull().orEmpty().map { row ->
@@ -92,6 +98,8 @@ class PersonsViewModel(
                     gpsAccuracy = (row.attributes["gps_accuracy"] as? JsonPrimitive)?.content
                         ?.toDoubleOrNull()?.toInt(),
                     since = row.lastChanged,
+                    batteryLevel = (row.attributes["battery_level"] as? JsonPrimitive)?.content
+                        ?.toDoubleOrNull()?.toInt(),
                 )
             }.sortedBy { it.name.lowercase() }
             R1Log.i("Persons", "loaded people=${people.size} devices=${devices.size}")

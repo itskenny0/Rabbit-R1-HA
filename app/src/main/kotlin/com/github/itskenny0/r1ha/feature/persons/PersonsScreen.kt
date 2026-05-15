@@ -201,6 +201,23 @@ private fun PersonRow(entry: PersonsViewModel.Entry) {
                         color = R1.AccentNeutral,
                     )
                 }
+                if (entry.batteryLevel != null) {
+                    Spacer(Modifier.width(6.dp))
+                    // Colour the battery digit by threshold so a low
+                    // phone battery on a person tracker stands out at
+                    // a glance — same red/amber/muted ramp the other
+                    // battery surfaces use.
+                    val batteryColor = when {
+                        entry.batteryLevel < 10 -> R1.StatusRed
+                        entry.batteryLevel < 25 -> R1.StatusAmber
+                        else -> R1.AccentNeutral
+                    }
+                    Text(
+                        text = "${entry.batteryLevel}%",
+                        style = R1.labelMicro,
+                        color = batteryColor,
+                    )
+                }
                 if (entry.gpsAccuracy != null) {
                     Spacer(Modifier.width(6.dp))
                     Text(
