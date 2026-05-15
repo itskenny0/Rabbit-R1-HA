@@ -78,6 +78,10 @@ fun CardStackScreen(
      *  TODAY). Lets the user jump to the at-a-glance dashboard without
      *  going through Settings. */
     onOpenDashboard: () -> Unit = {},
+    /** Surfaced via long-press on the chrome's settings gear. Jumps
+     *  to the Universal Quick Search dialog from anywhere on the
+     *  card stack. */
+    onOpenSearch: () -> Unit = {},
 ) {
     val vm: CardStackViewModel = viewModel(
         factory = CardStackViewModel.factory(
@@ -592,6 +596,7 @@ fun CardStackScreen(
                 },
                 onTapCounter = { jumpPickerOpen.value = true },
                 onLongPressHamburger = { quickActionsOpen.value = true },
+                onLongPressGear = onOpenSearch,
                 solidBackdrop = appSettings.ui.hideCardTailAbove,
                 // Battery indicator surfaces only when the system status bar is hidden
                 // AND the user explicitly opted in — otherwise the system bar already
@@ -2074,6 +2079,10 @@ private fun ChromeRow(
      *  just 'all off'). Defaulted to a no-op so existing previews that
      *  don't care about the gesture don't need to thread it through. */
     onLongPressHamburger: () -> Unit = {},
+    /** Long-press on the settings gear opens the Quick Search dialog —
+     *  the natural "I'm looking for X" affordance from anywhere on
+     *  the card stack. Defaults to a no-op for preview compatibility. */
+    onLongPressGear: () -> Unit = {},
     solidBackdrop: Boolean = true,
     /** Render a tiny BATTERY% pill in the right cluster — used only when
      *  the system status bar is hidden AND the user opted into the
@@ -2169,12 +2178,14 @@ private fun ChromeRow(
 
         // Settings gear + connection-state dot. The gear is a Canvas-drawn wireframe
         // (see `SettingsCogGlyph`) so it matches the rest of the chrome's hairline-stroke
-        // language instead of Material's filled gear.
+        // language instead of Material's filled gear. Long-press opens
+        // the Quick Search dialog — accessible from anywhere on the
+        // card stack without a Settings detour.
         Box(
             modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .r1Pressable(onOpenSettings),
+                .r1RowPressable(onTap = onOpenSettings, onLongPress = onLongPressGear),
             contentAlignment = Alignment.Center,
         ) {
             SettingsCogGlyph(size = 18.dp)
