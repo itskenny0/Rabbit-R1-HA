@@ -92,15 +92,24 @@ fun CamerasScreen(
     var viewModeOverride by rememberSaveable { mutableStateOf<String?>(null) }
     val viewMode = viewModeOverride
         ?: if (appSettings.integrations.camerasDefaultGrid) "GRID" else "LIST"
-    // Wheel scroll is wired to the LIST view's lazy state. In GRID view
-    // there's no LazyColumn to scroll — wheel events fall through to a
-    // no-op (LazyVerticalGrid scrolling isn't yet wired into WheelScrollFor).
-    // Bug to fix in a follow-up: add GRID-state wheel support.
-    WheelScrollFor(
-        wheelInput = wheelInput,
-        listState = listState,
-        settings = settings,
-    )
+    // Wheel scroll wired to whichever state is currently visible —
+    // LIST drives listState, GRID drives gridState. Both go through
+    // the WheelScrollFor* family which shares the accel + cancellation
+    // profile. Switching mode swaps which composable is in
+    // composition, which auto-cancels the inactive listener.
+    if (viewMode == "LIST") {
+        WheelScrollFor(
+            wheelInput = wheelInput,
+            listState = listState,
+            settings = settings,
+        )
+    } else {
+        com.github.itskenny0.r1ha.ui.components.WheelScrollForGrid(
+            wheelInput = wheelInput,
+            gridState = gridState,
+            settings = settings,
+        )
+    }
     LaunchedEffect(Unit) { vm.refresh() }
     var viewingEntityId by remember { mutableStateOf<String?>(null) }
     // Server URL + token for the grid-view thumbnails; null in LIST mode

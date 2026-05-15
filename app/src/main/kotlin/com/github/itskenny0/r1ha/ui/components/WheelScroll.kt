@@ -89,6 +89,49 @@ fun WheelScrollFor(
 }
 
 /**
+ * Variant of [WheelScrollFor] that drives a [LazyGridState] — the
+ * type returned by `rememberLazyGridState()` and consumed by
+ * `LazyVerticalGrid`. Used by the Cameras GRID view; same
+ * wheel-acceleration + cancellation behaviour, different
+ * ScrollableState recipient.
+ */
+@Composable
+fun WheelScrollForGrid(
+    wheelInput: WheelInput,
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
+    stepDp: Int = 56,
+    settings: SettingsRepository? = null,
+) {
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    val accelEnabled by (settings?.settings?.map { it.wheel.acceleration }
+        ?: kotlinx.coroutines.flow.flowOf(false))
+        .collectAsState(initial = AppSettings().wheel.acceleration)
+    LaunchedEffect(gridState, accelEnabled) {
+        val timestamps = ArrayDeque<Long>()
+        val windowMs = 250L
+        var pendingJob: kotlinx.coroutines.Job? = null
+        wheelInput.events.collect { event ->
+            val now = event.timestampMillis
+            timestamps.addLast(now)
+            while (timestamps.isNotEmpty() && now - timestamps.first() > windowMs) {
+                timestamps.removeFirst()
+            }
+            val ratePerSec = timestamps.size * (1000.0 / windowMs)
+            val effective = if (accelEnabled) {
+                WheelInput.effectiveStep(stepDp, ratePerSec, accelerate = true)
+            } else {
+                stepDp
+            }
+            val stepPx = with(density) { effective.dp.toPx() }
+            val delta = if (event.direction == WheelEvent.Direction.UP) -stepPx else stepPx
+            pendingJob?.cancel()
+            pendingJob = scope.launch { gridState.animateScrollBy(delta) }
+        }
+    }
+}
+
+/**
  * Variant of [WheelScrollFor] that drives a [androidx.compose.foundation.ScrollState]
  * — the type returned by `rememberScrollState()` and consumed by `verticalScroll()`.
  *
