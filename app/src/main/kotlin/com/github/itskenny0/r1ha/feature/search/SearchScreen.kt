@@ -215,6 +215,14 @@ fun SearchScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                item("__count_header") {
+                    Text(
+                        text = "${vm.results.size} result${if (vm.results.size == 1) "" else "s"}",
+                        style = R1.labelMicro,
+                        color = R1.InkMuted,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                    )
+                }
                 items(items = vm.results, key = { it.id.value }) { entity ->
                     SearchResultRow(
                         entity,
