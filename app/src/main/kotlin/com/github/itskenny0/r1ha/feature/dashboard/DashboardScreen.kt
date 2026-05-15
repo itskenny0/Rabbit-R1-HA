@@ -108,6 +108,12 @@ fun DashboardScreen(
             onOpenCardStack = onOpenCardStack,
             onOpenSettings = onOpenSettings,
             onOpenAssist = onOpenAssist,
+            // Mirror the card-stack chrome — when the user has hidden
+            // the system status bar AND opted into the app-side battery
+            // indicator, surface it here so they don't lose visibility
+            // of charge level just by sitting on the dashboard.
+            showBatteryIndicator = appSettings.behavior.hideStatusBar &&
+                appSettings.behavior.showBatteryWhenStatusBarHidden,
         )
         if (ui.loading && ui.weather == null && ui.persons == null && ui.nextEvent == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -370,6 +376,7 @@ private fun DashboardTopBar(
     onOpenCardStack: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAssist: () -> Unit,
+    showBatteryIndicator: Boolean = false,
 ) {
     // Match R1TopBar's vertical metrics so the dashboard top edge
     // aligns with every other sub-screen on the device.
@@ -397,6 +404,14 @@ private fun DashboardTopBar(
                 color = R1.Ink,
                 modifier = Modifier.weight(1f),
             )
+            // Battery indicator — only when both 'hide statusbar' and
+            // 'show battery when statusbar hidden' are on. Sits before
+            // the action chips so charge level reads naturally
+            // left-to-right past the title.
+            if (showBatteryIndicator) {
+                com.github.itskenny0.r1ha.ui.components.BatteryIndicator()
+                Spacer(Modifier.width(8.dp))
+            }
             // 🎤 Assist — same affordance as on the card stack chrome,
             // so the action is consistent across surfaces. Sits before
             // CARDS so it's the closer-to-centre 'talk to HA' tap target
