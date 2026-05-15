@@ -10,6 +10,7 @@ import com.github.itskenny0.r1ha.core.util.R1Log
 import com.github.itskenny0.r1ha.core.util.Toaster
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -24,12 +25,24 @@ import kotlinx.coroutines.launch
  */
 class LogbookViewModel(
     private val haRepository: HaRepository,
+    private val settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
 ) : ViewModel() {
 
     enum class Window(val hours: Int, val label: String) {
         H12(12, "12 H"),
         H24(24, "24 H"),
         D3(72, "3 D"),
+        ;
+
+        companion object {
+            /** Snap an arbitrary hours value to the nearest available
+             *  chip. Used to honour the
+             *  Settings → INTEGRATIONS → 'Logbook default window' value
+             *  (which lets the user pick any 1..168 h) without
+             *  expanding the chip vocabulary. */
+            fun forHours(hours: Int): Window =
+                entries.minByOrNull { kotlin.math.abs(it.hours - hours) } ?: H12
+        }
     }
 
     @androidx.compose.runtime.Stable
@@ -59,8 +72,21 @@ class LogbookViewModel(
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui
 
+    /** First fetch needs to honour the user's
+     *  Settings → INTEGRATIONS → 'Logbook default window' value. Track
+     *  whether we've done that snap so subsequent vm.refresh() calls
+     *  don't re-snap if the user manually picked a different chip. */
+    private var defaultWindowApplied = false
+
     fun refresh() {
         viewModelScope.launch {
+            // On the very first refresh, snap the active window to the
+            // closest chip for the configured default-window hours.
+            if (!defaultWindowApplied) {
+                val defaultHours = settings.settings.first().integrations.logbookDefaultWindowHours
+                _ui.value = _ui.value.copy(window = Window.forHours(defaultHours))
+                defaultWindowApplied = true
+            }
             _ui.value = _ui.value.copy(loading = true, error = null)
             val window = _ui.value.window
             haRepository.fetchLogbook(hours = window.hours).fold(
@@ -123,8 +149,11 @@ class LogbookViewModel(
     }
 
     companion object {
-        fun factory(haRepository: HaRepository) = viewModelFactory {
-            initializer { LogbookViewModel(haRepository) }
+        fun factory(
+            haRepository: HaRepository,
+            settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+        ) = viewModelFactory {
+            initializer { LogbookViewModel(haRepository, settings) }
         }
     }
 }

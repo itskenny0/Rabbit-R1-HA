@@ -64,7 +64,7 @@ fun LogbookScreen(
     wheelInput: WheelInput,
     onBack: () -> Unit,
 ) {
-    val vm: LogbookViewModel = viewModel(factory = LogbookViewModel.factory(haRepository))
+    val vm: LogbookViewModel = viewModel(factory = LogbookViewModel.factory(haRepository, settings))
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     val context = LocalContext.current
