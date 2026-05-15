@@ -100,6 +100,18 @@ fun CalendarsScreen(
                     color = R1.AccentWarm,
                 )
             }
+            ui.error != null && ui.calendars.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                // Calendar registry fetch failed — distinct from "no
+                // calendar integrations configured" empty state.
+                Text(
+                    text = "Calendars load failed: ${ui.error}",
+                    style = R1.body,
+                    color = R1.StatusRed,
+                )
+            }
             ui.calendars.isEmpty() -> Box(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,

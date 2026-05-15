@@ -80,6 +80,18 @@ fun PersonsScreen(
                     color = R1.AccentWarm,
                 )
             }
+            ui.error != null && ui.people.isEmpty() && ui.devices.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                // Distinct from "no person integrations" — the request
+                // itself failed (auth, network, server down).
+                Text(
+                    text = "Persons load failed: ${ui.error}",
+                    style = R1.body,
+                    color = R1.StatusRed,
+                )
+            }
             ui.people.isEmpty() && ui.devices.isEmpty() -> Box(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,

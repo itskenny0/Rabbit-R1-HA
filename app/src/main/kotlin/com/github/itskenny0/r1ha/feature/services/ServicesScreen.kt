@@ -85,6 +85,19 @@ fun ServicesScreen(
                     color = R1.AccentWarm,
                 )
             }
+            ui.error != null && ui.domains.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                // Service registry fetch failed — surface the real error
+                // rather than the "no services" fallback so the user
+                // doesn't think their HA install is empty.
+                Text(
+                    text = "Services load failed: ${ui.error}",
+                    style = R1.body,
+                    color = R1.StatusRed,
+                )
+            }
             ui.domains.isEmpty() -> Box(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,

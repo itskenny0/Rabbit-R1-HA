@@ -138,6 +138,17 @@ fun NotificationsScreen(
                     color = R1.AccentWarm,
                 )
             }
+            ui.error != null && ui.notifications.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                // Distinct from "all clear" — the request itself failed.
+                Text(
+                    text = "Notifications load failed: ${ui.error}",
+                    style = R1.body,
+                    color = R1.StatusRed,
+                )
+            }
             ui.notifications.isEmpty() -> Box(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,

@@ -142,6 +142,18 @@ fun CamerasScreen(
                     color = R1.AccentWarm,
                 )
             }
+            ui.error != null && ui.cameras.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                // The camera registry fetch itself failed (auth, DNS,
+                // server down) — distinct from "no cameras in HA".
+                Text(
+                    text = "Cameras load failed: ${ui.error}",
+                    style = R1.body,
+                    color = R1.StatusRed,
+                )
+            }
             ui.cameras.isEmpty() -> Box(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,

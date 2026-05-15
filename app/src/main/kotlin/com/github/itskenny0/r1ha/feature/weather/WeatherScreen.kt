@@ -84,6 +84,19 @@ fun WeatherScreen(
                     color = R1.AccentWarm,
                 )
             }
+            ui.error != null && ui.weathers.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                // Distinct from "empty integration" — surface the actual
+                // error so the user knows it's a transport problem (auth,
+                // DNS, server down) rather than a config gap.
+                Text(
+                    text = "Weather load failed: ${ui.error}",
+                    style = R1.body,
+                    color = R1.StatusRed,
+                )
+            }
             ui.weathers.isEmpty() -> Box(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
                 contentAlignment = Alignment.Center,
