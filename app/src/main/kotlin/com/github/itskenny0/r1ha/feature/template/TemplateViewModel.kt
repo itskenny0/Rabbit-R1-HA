@@ -69,7 +69,12 @@ class TemplateViewModel(
                     val newRecent = (listOf(template) + _ui.value.recent.filterNot { it == template })
                         .take(historyDepth)
                     _ui.value = _ui.value.copy(
-                        rendered = rendered,
+                        // Strip outer whitespace — HA wraps template
+                        // output with the leading/trailing whitespace of
+                        // the original template (e.g. spaces around
+                        // `{{ … }}`); displaying raw makes the result
+                        // panel start with a blank line.
+                        rendered = rendered.trim(),
                         error = null,
                         inFlight = false,
                         recent = newRecent,
