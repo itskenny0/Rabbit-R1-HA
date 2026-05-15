@@ -141,6 +141,9 @@ fun DashboardScreen(
                     onCameras = onOpenCameras,
                     onNotifications = onOpenNotifications,
                 )
+                if (ui.lowBatteries.isNotEmpty()) {
+                    LowBatteryCard(ui.lowBatteries)
+                }
                 // If there are notifications, show the first 2 inline below
                 // the metrics row so the user sees what HA is shouting about
                 // without having to drill in.
@@ -241,6 +244,53 @@ private fun SunCard(s: DashboardViewModel.SunSummary) {
                 Text(text = "NEXT SET", style = R1.labelMicro, color = R1.InkMuted)
                 RelativeTimeLabel(at = s.nextSetting, color = R1.AccentCool, style = R1.labelMicro)
             }
+        }
+    }
+}
+
+@Composable
+private fun LowBatteryCard(entries: List<String>) {
+    // Each entry is "<entity_id>=<pct>" — split and render two-column.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.StatusAmber.copy(alpha = 0.12f))
+            .border(1.dp, R1.StatusAmber.copy(alpha = 0.4f), R1.ShapeS)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = "${entries.size} BATTERIES LOW",
+            style = R1.labelMicro.copy(fontWeight = FontWeight.SemiBold),
+            color = R1.StatusAmber,
+        )
+        for (entry in entries.take(5)) {
+            val idx = entry.indexOf('=')
+            val id = if (idx > 0) entry.substring(0, idx) else entry
+            val pct = if (idx > 0) entry.substring(idx + 1) else "?"
+            Row {
+                Text(
+                    text = id,
+                    style = R1.body,
+                    color = R1.Ink,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "${pct}%",
+                    style = R1.body,
+                    color = if (pct.toIntOrNull()?.let { it < 10 } == true) R1.StatusRed else R1.StatusAmber,
+                )
+            }
+        }
+        if (entries.size > 5) {
+            Text(
+                text = "and ${entries.size - 5} more…",
+                style = R1.labelMicro,
+                color = R1.InkMuted,
+            )
         }
     }
 }

@@ -101,6 +101,9 @@ class DashboardViewModel(
          *  device_class='power', in Watts. -1 sentinel for "not loaded
          *  yet" / "no power sensors". */
         val totalPowerW: Int = -1,
+        /** List of "<entity_id>=<pct>" for every battery sensor under
+         *  20%. Empty list means all batteries healthy. */
+        val lowBatteries: List<String> = emptyList(),
         val error: String? = null,
     )
 
@@ -139,7 +142,24 @@ class DashboardViewModel(
                             "| map(attribute='state') | map('float',0) | sum | round(0) | int }}",
                     )
                 }
-                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob, mediaJob, timerJob, lightsJob, powerJob)
+                // Low-battery list: every battery-class sensor under 20%.
+                // Builds a JSON array of "<entity_id>=<pct>" strings so
+                // we can parse it back client-side.
+                val batteryJob = async {
+                    haRepository.renderTemplate(
+                        "{%- set out = namespace(items=[]) -%}" +
+                            "{%- for s in states.sensor " +
+                            "| selectattr('attributes.device_class','eq','battery') " +
+                            "| rejectattr('state','in',['unavailable','unknown']) -%}" +
+                            "{%- set pct = s.state | float(101) -%}" +
+                            "{%- if pct < 20 -%}" +
+                            "{%- set _ = out.items.append(s.entity_id ~ '=' ~ (pct | int)) -%}" +
+                            "{%- endif -%}" +
+                            "{%- endfor -%}" +
+                            "{{ out.items | tojson }}",
+                    )
+                }
+                awaitAll(weatherJob, personJob, calendarJob, cameraJob, notifJob, sunJob, mediaJob, timerJob, lightsJob, powerJob, batteryJob)
                 val weather = weatherJob.await().getOrNull()?.firstOrNull()?.let { row ->
                     WeatherSummary(
                         name = row.friendlyName,
@@ -196,6 +216,13 @@ class DashboardViewModel(
                     .orEmpty()
                 val lightsOn = lightsJob.await().getOrNull()?.trim()?.toIntOrNull() ?: -1
                 val totalPower = powerJob.await().getOrNull()?.trim()?.toIntOrNull() ?: -1
+                val lowBatteries = batteryJob.await().getOrNull()?.let { raw ->
+                    runCatching {
+                        val arr = kotlinx.serialization.json.Json.parseToJsonElement(raw)
+                            as? kotlinx.serialization.json.JsonArray
+                        arr?.mapNotNull { (it as? JsonPrimitive)?.content }
+                    }.getOrNull()
+                }.orEmpty()
                 val timers = timerJob.await().getOrNull()
                     ?.filter { it.state == "active" || it.state == "paused" }
                     ?.map { row ->
@@ -236,6 +263,7 @@ class DashboardViewModel(
                     timers = timers,
                     lightsOnCount = lightsOn,
                     totalPowerW = totalPower,
+                    lowBatteries = lowBatteries,
                     error = null,
                 )
             } catch (t: Throwable) {
