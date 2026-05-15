@@ -36,10 +36,15 @@ import com.github.itskenny0.r1ha.core.ha.HaRepository
 import com.github.itskenny0.r1ha.core.input.WheelInput
 import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.core.util.R1Log
+import com.github.itskenny0.r1ha.core.util.Toaster
 import com.github.itskenny0.r1ha.ui.components.R1TextField
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import com.github.itskenny0.r1ha.ui.components.r1RowPressable
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Universal Search surface — search every HA entity by name / id /
@@ -63,11 +68,38 @@ fun SearchScreen(
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     val focus = remember { FocusRequester() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
     LaunchedEffect(Unit) {
         vm.refresh()
         kotlinx.coroutines.delay(80)
         runCatching { focus.requestFocus() }
+    }
+    // Long-press handler — open the entity in HA's web UI (the
+    // /lovelace?edit=1&entity_id=… form HA uses internally to focus a
+    // specific entity). Falls back to plain /lovelace when server isn't
+    // configured.
+    fun openInHa(entity: EntityState) {
+        scope.launch {
+            val server = runCatching { settings.settings.first().server?.url }.getOrNull()
+            if (server.isNullOrBlank()) {
+                Toaster.error("No HA server configured")
+                return@launch
+            }
+            val url = "${server.trimEnd('/')}/history?entity_id=${entity.id.value}"
+            runCatching {
+                context.startActivity(
+                    android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(url),
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }.onFailure { t ->
+                R1Log.w("Search", "open-in-HA failed: ${t.message}")
+                Toaster.error("No browser to open $url")
+            }
+        }
     }
     Column(
         modifier = Modifier
@@ -157,7 +189,11 @@ fun SearchScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 items(items = vm.results, key = { it.id.value }) { entity ->
-                    SearchResultRow(entity, onTap = { vm.activate(entity) })
+                    SearchResultRow(
+                        entity,
+                        onTap = { vm.activate(entity) },
+                        onLongPress = { openInHa(entity) },
+                    )
                 }
             }
         }
@@ -201,14 +237,20 @@ private fun BucketChips(
 }
 
 @Composable
-private fun SearchResultRow(entity: EntityState, onTap: () -> Unit) {
+private fun SearchResultRow(
+    entity: EntityState,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(R1.ShapeS)
             .background(R1.SurfaceMuted)
             .border(1.dp, R1.Hairline, R1.ShapeS)
-            .r1Pressable(onClick = onTap)
+            // Tap = the domain-appropriate action (fire/press/toggle/info).
+            // Long-press = open the entity's /history view in HA's web UI.
+            .r1RowPressable(onTap = onTap, onLongPress = onLongPress)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
