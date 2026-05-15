@@ -58,6 +58,11 @@ class DashboardViewModel(
         val eventTitle: String,
         val eventStart: Instant?,
         val happeningNow: Boolean,
+        /** True when the upstream event is an all-day entry (HA emits
+         *  these as date-only start strings without a time component).
+         *  Lets the dashboard show an ALL-DAY pill so the user doesn't
+         *  expect a precise time. */
+        val allDay: Boolean,
     )
 
     @androidx.compose.runtime.Stable
@@ -202,11 +207,16 @@ class DashboardViewModel(
                             ?: return@mapNotNull null
                         val startRaw = (row.attributes["start_time"] as? JsonPrimitive)?.content
                         val start = startRaw?.let { runCatching { Instant.parse(it.replace(' ', 'T') + "Z") }.getOrNull() }
+                        // All-day events arrive as date-only strings (no T
+                        // or space separator with a time component). Length
+                        // 10 = 'YYYY-MM-DD'; longer = has time.
+                        val allDay = startRaw != null && startRaw.length <= 10
                         CalendarSummary(
                             calendarName = row.friendlyName,
                             eventTitle = title,
                             eventStart = start,
                             happeningNow = row.state == "on",
+                            allDay = allDay,
                         )
                     }
                     parsed.firstOrNull { it.happeningNow }

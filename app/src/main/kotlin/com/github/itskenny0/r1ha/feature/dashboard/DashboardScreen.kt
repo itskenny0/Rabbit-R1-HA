@@ -733,6 +733,17 @@ private fun CalendarCard(
                 Text(text = "NEXT", style = R1.labelMicro, color = R1.InkSoft)
                 Spacer(Modifier.width(8.dp))
             }
+            if (c.allDay) {
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.AccentCool.copy(alpha = 0.22f))
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                ) {
+                    Text(text = "ALL-DAY", style = R1.labelMicro, color = R1.AccentCool)
+                }
+                Spacer(Modifier.width(8.dp))
+            }
             Text(
                 text = c.calendarName.uppercase(),
                 style = R1.labelMicro,
