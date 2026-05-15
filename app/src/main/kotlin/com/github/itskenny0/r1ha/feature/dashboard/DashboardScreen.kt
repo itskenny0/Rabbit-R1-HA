@@ -48,6 +48,7 @@ import com.github.itskenny0.r1ha.ui.components.r1RowPressable
 fun DashboardScreen(
     haRepository: HaRepository,
     settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+    wheelInput: com.github.itskenny0.r1ha.core.input.WheelInput,
     onBack: () -> Unit,
     onOpenWeather: () -> Unit,
     onOpenPersons: () -> Unit,
@@ -114,6 +115,15 @@ fun DashboardScreen(
             }
             return@Column
         }
+        // Wire the physical wheel to the dashboard's verticalScroll so
+        // kiosk-mode users can scroll through a tall dashboard without
+        // touching the screen. Same acceleration profile as elsewhere.
+        val scrollState = rememberScrollState()
+        com.github.itskenny0.r1ha.ui.components.WheelScrollForScrollState(
+            wheelInput = wheelInput,
+            scrollState = scrollState,
+            settings = settings,
+        )
         androidx.compose.material3.pulltorefresh.PullToRefreshBox(
             isRefreshing = ui.loading,
             onRefresh = { vm.refresh() },
@@ -123,7 +133,7 @@ fun DashboardScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (ds.showGreeting) Greeting()

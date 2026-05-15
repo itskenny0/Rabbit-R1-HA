@@ -285,6 +285,7 @@ fun AppNavGraph(
             com.github.itskenny0.r1ha.feature.dashboard.DashboardScreen(
                 haRepository = haRepository,
                 settings = settings,
+                wheelInput = wheelInput,
                 canGoBack = canGoBack,
                 onBack = { navController.popBackStack() },
                 onOpenWeather = {
