@@ -164,10 +164,25 @@ private fun CalendarRow(c: CalendarsViewModel.Calendar, onTap: () -> Unit) {
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
             )
-            // Relative timestamp for the next event (or current event end
-            // if NOW). Same ticker as the rest of the app.
-            val ts = if (c.state == "on") c.eventEnd else c.eventStart
-            RelativeTimeLabel(at = ts, color = R1.InkMuted, style = R1.labelMicro)
+            if (c.allDay) {
+                // ALL-DAY pill — surfaced instead of a relative-time
+                // countdown that would be misleading for events without
+                // a specific start time. Sits in the position the
+                // RelativeTimeLabel would normally occupy.
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.AccentWarm.copy(alpha = 0.18f))
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                ) {
+                    Text(text = "ALL-DAY", style = R1.labelMicro, color = R1.AccentWarm)
+                }
+            } else {
+                // Relative timestamp for the next event (or current event end
+                // if NOW). Same ticker as the rest of the app.
+                val ts = if (c.state == "on") c.eventEnd else c.eventStart
+                RelativeTimeLabel(at = ts, color = R1.InkMuted, style = R1.labelMicro)
+            }
         }
         if (!c.eventMessage.isNullOrBlank()) {
             Spacer(Modifier.size(4.dp))

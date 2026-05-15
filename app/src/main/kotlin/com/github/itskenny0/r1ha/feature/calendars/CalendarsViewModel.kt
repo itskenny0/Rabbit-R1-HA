@@ -40,6 +40,11 @@ class CalendarsViewModel(
         val eventStart: Instant?,
         val eventEnd: Instant?,
         val eventDescription: String?,
+        /** All-day event detected via start_time being a bare YYYY-MM-DD
+         *  (length ≤ 10, no time component). The UI tags these with an
+         *  ALL-DAY pill instead of a "in 2 h" countdown that would be
+         *  misleading for events without a specific start time. */
+        val allDay: Boolean,
     )
 
     @androidx.compose.runtime.Stable
@@ -59,17 +64,18 @@ class CalendarsViewModel(
                 onSuccess = { rows ->
                     val list = rows.map { row ->
                         val attrs = row.attributes
+                        val startRaw = (attrs["start_time"] as? JsonPrimitive)?.content
                         Calendar(
                             entityId = row.entityId,
                             name = row.friendlyName,
                             state = row.state,
                             eventMessage = (attrs["message"] as? JsonPrimitive)?.content,
                             eventLocation = (attrs["location"] as? JsonPrimitive)?.content,
-                            eventStart = (attrs["start_time"] as? JsonPrimitive)?.content
-                                ?.let { parseLooseTime(it) },
+                            eventStart = startRaw?.let { parseLooseTime(it) },
                             eventEnd = (attrs["end_time"] as? JsonPrimitive)?.content
                                 ?.let { parseLooseTime(it) },
                             eventDescription = (attrs["description"] as? JsonPrimitive)?.content,
+                            allDay = startRaw != null && startRaw.length <= 10,
                         )
                     }
                     // Currently-happening calendars first (state=on), then
