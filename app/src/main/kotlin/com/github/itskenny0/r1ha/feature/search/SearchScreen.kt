@@ -150,6 +150,33 @@ fun SearchScreen(
                     color = R1.AccentWarm,
                 )
             }
+            // Failure path — listAllEntities errored. Show the error +
+            // hint at recovery (pull-to-refresh or reconnect via
+            // Settings).
+            ui.error != null && ui.all.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column {
+                    Text(
+                        text = "Couldn't load entities.",
+                        style = R1.body,
+                        color = R1.StatusRed,
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = ui.error ?: "Unknown error",
+                        style = R1.labelMicro,
+                        color = R1.InkSoft,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        text = "Check Settings → Server, or wait for the WS to reconnect.",
+                        style = R1.labelMicro,
+                        color = R1.InkMuted,
+                    )
+                }
+            }
             vm.results.isEmpty() && ui.query.isBlank() &&
                 ui.bucket == SearchViewModel.Bucket.ALL -> Box(
                 modifier = Modifier.fillMaxSize().padding(22.dp),
