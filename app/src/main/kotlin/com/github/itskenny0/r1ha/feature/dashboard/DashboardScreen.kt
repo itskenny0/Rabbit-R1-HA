@@ -592,12 +592,28 @@ private fun TimerPill(
 
 @Composable
 private fun Greeting() {
-    // Time-of-day greeting + a date/time line. Refreshes whenever the
-    // Dashboard recomposes (every 60 s via the auto-refresh loop or
-    // on each settings/state emit) which is enough granularity for a
-    // greeting that only changes every few hours and a HH:mm time
-    // that may be a minute stale. Kept lightweight: no animation,
-    // no live ticker.
+    // Time-of-day greeting + a date/time line. Drives its own 60-second
+    // ticker so the time stays current even when the dashboard
+    // auto-refresh is disabled (refreshIntervalSec == 0) — otherwise
+    // the HH:mm reading froze whenever auto-refresh was off, and the
+    // user had to pull-to-refresh just to see the clock advance.
+    val tick = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            // Align the next tick to the next wall-clock minute so the
+            // HH:mm reading flips on the minute rather than on an
+            // arbitrary 60-second offset from when the screen mounted.
+            val now = java.time.LocalDateTime.now()
+            val msToNextMinute = (60_000L - (now.second * 1000L + (now.nano / 1_000_000L)))
+                .coerceIn(250L, 60_000L)
+            kotlinx.coroutines.delay(msToNextMinute)
+            tick.intValue++
+        }
+    }
+    // Read tick.intValue so this composable subscribes to the ticker and
+    // re-runs on each minute boundary.
+    @Suppress("UNUSED_VARIABLE")
+    val unused = tick.intValue
     val now = java.time.LocalDateTime.now()
     val hour = now.hour
     val greeting = when (hour) {
