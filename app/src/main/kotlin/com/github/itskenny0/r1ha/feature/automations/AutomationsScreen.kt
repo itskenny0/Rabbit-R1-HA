@@ -64,6 +64,10 @@ fun AutomationsScreen(
     settings: SettingsRepository,
     wheelInput: WheelInput,
     onBack: () -> Unit,
+    /** Optional drill-in to the History surface for this entity.
+     *  Wired from AppNavGraph; defaults to a no-op for preview /
+     *  test sites that don't care about nav. */
+    onOpenHistory: (entityId: String) -> Unit = {},
 ) {
     val vm: AutomationsViewModel = viewModel(
         factory = AutomationsViewModel.factory(haRepository, settings),
@@ -174,6 +178,7 @@ fun AutomationsScreen(
                             isFavorite = entry.id.value in activeFavourites,
                             onRun = { vm.trigger(entry) },
                             onToggleEnabled = { vm.setEnabled(entry, !entry.enabled) },
+                            onLongPress = { onOpenHistory(entry.id.value) },
                             onFavorite = { vm.addToFavorites(entry) },
                         )
                     }
@@ -223,6 +228,7 @@ private fun AutomationRow(
     isFavorite: Boolean,
     onRun: () -> Unit,
     onToggleEnabled: () -> Unit,
+    onLongPress: () -> Unit,
     onFavorite: () -> Unit,
 ) {
     Row(
@@ -232,10 +238,11 @@ private fun AutomationRow(
             .background(R1.SurfaceMuted)
             .border(1.dp, R1.Hairline, R1.ShapeS)
             // Tap toggles enabled/disabled (state-change verb on the
-            // row body), separate RUN affordance on the right edge
-            // dispatches a manual trigger. Long-press = same as tap
-            // (no distinct secondary action here).
-            .r1RowPressable(onTap = onToggleEnabled, onLongPress = onToggleEnabled)
+            // row body), long-press drills into History so the user
+            // can see when this automation last fired + how
+            // frequently. Separate RUN affordance on the right edge
+            // dispatches a manual trigger.
+            .r1RowPressable(onTap = onToggleEnabled, onLongPress = onLongPress)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

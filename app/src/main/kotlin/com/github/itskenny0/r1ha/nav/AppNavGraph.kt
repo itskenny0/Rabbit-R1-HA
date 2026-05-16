@@ -361,6 +361,9 @@ fun AppNavGraph(
                 settings = settings,
                 wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
+                onOpenHistory = { eid ->
+                    navController.navigate(Routes.historyRoute(eid)) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.HELPERS) {
