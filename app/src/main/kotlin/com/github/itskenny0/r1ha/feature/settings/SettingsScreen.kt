@@ -1,6 +1,7 @@
 package com.github.itskenny0.r1ha.feature.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -78,6 +79,13 @@ fun SettingsScreen(
     val s by vm.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
+
+    // Overlay flag for the Quick Settings tile entity-picker. Lives at
+    // screen scope so the picker can render above the LazyColumn body.
+    // Driven by the PICK chip on the Quick Settings tile row.
+    val tilePickerOpen = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
 
     // SAF launchers for backup export / import. Using CreateDocument / OpenDocument
     // routes through the Android system file picker, so the user can save to the
@@ -516,17 +524,31 @@ fun SettingsScreen(
             // our app first.
             item {
                 LabeledControl(label = "Quick Settings tile") {
-                    // Single entity_id text input — the user types
-                    // (e.g.) 'light.kitchen' and the HaQuickTileService
-                    // picks it up on its next listen window. Blank
-                    // clears the binding.
-                    R1TextField(
-                        value = s.behavior.quickTileEntityId ?: "",
-                        onValueChange = { vm.setQuickTileEntityId(it) },
-                        placeholder = "light.kitchen",
-                        monospace = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    // entity_id text input + PICK button so the user
+                    // can either type a known id or browse the live
+                    // registry. The HaQuickTileService picks up the
+                    // bound entity on its next listen window.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            R1TextField(
+                                value = s.behavior.quickTileEntityId ?: "",
+                                onValueChange = { vm.setQuickTileEntityId(it) },
+                                placeholder = "light.kitchen",
+                                monospace = true,
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(R1.ShapeS)
+                                .background(R1.SurfaceMuted)
+                                .border(1.dp, R1.Hairline, R1.ShapeS)
+                                .r1Pressable(onClick = { tilePickerOpen.value = true })
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            Text(text = "PICK", style = R1.labelMicro, color = R1.AccentWarm)
+                        }
+                    }
                 }
             }
 
@@ -1000,6 +1022,20 @@ fun SettingsScreen(
 
             item { Spacer(Modifier.height(48.dp)) }
         }
+    }
+    // Entity-picker overlay for the Quick Settings tile binding —
+    // sits above the LazyColumn so the picker isn't squeezed inside
+    // a single row.
+    if (tilePickerOpen.value) {
+        EntityPickerSheet(
+            haRepository = haRepository,
+            onPick = { entityId ->
+                vm.setQuickTileEntityId(entityId)
+                tilePickerOpen.value = false
+                com.github.itskenny0.r1ha.core.util.Toaster.show("Tile bound to $entityId")
+            },
+            onDismiss = { tilePickerOpen.value = false },
+        )
     }
 }
 
