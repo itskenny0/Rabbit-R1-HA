@@ -2,6 +2,8 @@
 
 An Android app for the Rabbit R1 (running LineageOS) that turns the scroll wheel into a fluent way to control Home Assistant entities — light brightness, fan speed, cover position, media volume — without fighting the WebView slider in the official HA app.
 
+Where the official [Home Assistant Companion app](https://github.com/home-assistant/android) is fundamentally a WebView wrapped around HA's Lovelace frontend, this client renders everything natively in a Compose-first idiom built around the R1's portrait display + physical scroll wheel — and falls back to a Lovelace WebView only for the long tail that doesn't fit (HACS cards, automation editor, configuration panel). Designed to run equally well on a wall-mounted tablet kiosk, a regular Android phone, and the R1 itself.
+
 ---
 
 ## Features
