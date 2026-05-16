@@ -156,6 +156,9 @@ fun AppNavGraph(
                 onOpenEnergy = {
                     navController.navigate(Routes.ENERGY) { launchSingleTop = true }
                 },
+                onOpenZones = {
+                    navController.navigate(Routes.ZONES) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
@@ -337,6 +340,14 @@ fun AppNavGraph(
         }
         composable(Routes.ENERGY) {
             com.github.itskenny0.r1ha.feature.energy.EnergyScreen(
+                haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.ZONES) {
+            com.github.itskenny0.r1ha.feature.zones.ZonesScreen(
                 haRepository = haRepository,
                 settings = settings,
                 wheelInput = wheelInput,

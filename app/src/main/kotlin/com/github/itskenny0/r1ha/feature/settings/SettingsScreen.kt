@@ -66,6 +66,7 @@ fun SettingsScreen(
     onOpenAutomations: () -> Unit,
     onOpenHelpers: () -> Unit,
     onOpenEnergy: () -> Unit,
+    onOpenZones: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -927,6 +928,13 @@ fun SettingsScreen(
             }
             item {
                 NavRow(label = "Areas", value = "HA area registry", onClick = onOpenAreas)
+            }
+            item {
+                NavRow(
+                    label = "Zones",
+                    value = "Geographic zones + who's there",
+                    onClick = onOpenZones,
+                )
             }
             item {
                 NavRow(
