@@ -429,8 +429,18 @@ private fun DashboardTopBar(
             } else {
                 Spacer(Modifier.width(8.dp))
             }
+            // 'TODAY · MON' — abbreviated day-of-week alongside the
+            // title so the screen identifies which day's snapshot the
+            // user is looking at, particularly handy past midnight when
+            // a glance might otherwise still 'feel like yesterday'.
+            val dayName = androidx.compose.runtime.remember {
+                java.time.LocalDate.now().dayOfWeek.getDisplayName(
+                    java.time.format.TextStyle.SHORT,
+                    java.util.Locale.getDefault(),
+                ).uppercase()
+            }
             Text(
-                text = "TODAY",
+                text = "TODAY · $dayName",
                 style = R1.screenTitle,
                 color = R1.Ink,
                 modifier = Modifier.weight(1f),
