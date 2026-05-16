@@ -47,6 +47,16 @@ class HaQuickTileService : TileService() {
      *  killing the next refresh. Lives across listen/click cycles. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    override fun onCreate() {
+        super.onCreate()
+        // Eagerly warm the dependency graph — the lazy `app.graph`
+        // construction would otherwise happen on the first onClick,
+        // adding ~100-300 ms of disk-read latency to the tile tap
+        // (DataStore's first access reads from disk). Touching it
+        // here lets onClick run with a warm graph and feel responsive.
+        runCatching { (applicationContext as App).graph }
+    }
+
     override fun onStartListening() {
         super.onStartListening()
         refreshTile()
