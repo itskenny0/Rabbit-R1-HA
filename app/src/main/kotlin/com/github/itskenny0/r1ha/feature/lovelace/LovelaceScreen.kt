@@ -193,12 +193,16 @@ private fun LovelaceWebView(
                         // the frontend's own refresh path kick in when
                         // the access token expires, so the user doesn't
                         // get bounced to a login screen after ~30 min.
-                        // `expires` is the absolute wall-clock millis at
-                        // which the access_token expires; computed as
-                        // now + 30 min so the frontend triggers a
-                        // refresh before our copy expires.
+                        //
+                        // Guard with !localStorage.getItem('hassTokens')
+                        // so we only inject on the FIRST page-start
+                        // (before any frontend bootstrap). Without this
+                        // we'd overwrite the frontend's freshly-
+                        // refreshed tokens on every subsequent
+                        // navigation, defeating the refresh flow.
                         val expiresAt = System.currentTimeMillis() + 30 * 60 * 1000
-                        val script = "javascript:localStorage.setItem('hassTokens', " +
+                        val script = "if (!localStorage.getItem('hassTokens')) { " +
+                            "localStorage.setItem('hassTokens', " +
                             "JSON.stringify({" +
                             "access_token: ${jsString(accessToken)}," +
                             "token_type: 'Bearer'," +
@@ -207,8 +211,8 @@ private fun LovelaceWebView(
                             "hassUrl: ${jsString(serverUrl.trimEnd('/'))}," +
                             "clientId: null," +
                             "expires: $expiresAt" +
-                            "}))"
-                        view.evaluateJavascript(script.removePrefix("javascript:")) { }
+                            "})); }"
+                        view.evaluateJavascript(script) { }
                     }
                 }
                 override fun onPageFinished(view: WebView, url: String) {
