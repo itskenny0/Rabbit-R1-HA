@@ -2135,6 +2135,12 @@ private fun QuickActionsSheet(
                 .background(R1.Surface)
                 .border(1.dp, R1.Hairline, R1.ShapeS)
                 .r1Pressable(onClick = {}, hapticOnClick = false)
+                // Vertical scroll so the BROWSE grid + ACTIONS stack
+                // doesn't get clipped on shorter screens (e.g. R1
+                // landscape, foldable inner display in book mode).
+                // No-op when content fits — Column doesn't scroll
+                // when its height is unconstrained.
+                .verticalScroll(androidx.compose.foundation.rememberScrollState())
                 .padding(16.dp),
         ) {
             Text(text = "QUICK ACTIONS", style = R1.sectionHeader, color = R1.AccentWarm)
