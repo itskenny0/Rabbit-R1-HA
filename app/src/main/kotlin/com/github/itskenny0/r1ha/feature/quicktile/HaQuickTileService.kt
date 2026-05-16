@@ -149,7 +149,6 @@ class HaQuickTileService : TileService() {
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun launchAppForSetup() {
         val ctx = applicationContext
         val launchIntent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
@@ -157,9 +156,23 @@ class HaQuickTileService : TileService() {
         launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         // startActivityAndCollapse is the Quick-Settings panel idiom
         // for launching a foreground activity — collapses the panel
-        // so the launched activity is visible. The non-PendingIntent
-        // overload is deprecated in API 34+ but still works on 33;
-        // we suppress the warning rather than fork on API level.
-        startActivityAndCollapse(launchIntent)
+        // so the launched activity is visible. Two overloads:
+        //   API ≥ 34: takes a PendingIntent (the non-PendingIntent
+        //     overload is deprecated in that release)
+        //   API 33: only the Intent overload exists
+        // Fork on Build.VERSION so each branch picks the form
+        // available on its API level.
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            val pi = android.app.PendingIntent.getActivity(
+                ctx,
+                0,
+                launchIntent,
+                android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+            startActivityAndCollapse(pi)
+        } else {
+            @Suppress("DEPRECATION")
+            startActivityAndCollapse(launchIntent)
+        }
     }
 }
