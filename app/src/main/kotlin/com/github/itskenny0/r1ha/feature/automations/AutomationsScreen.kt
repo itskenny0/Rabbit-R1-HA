@@ -1,0 +1,294 @@
+package com.github.itskenny0.r1ha.feature.automations
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.github.itskenny0.r1ha.core.ha.HaRepository
+import com.github.itskenny0.r1ha.core.input.WheelInput
+import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
+import com.github.itskenny0.r1ha.core.theme.R1
+import com.github.itskenny0.r1ha.ui.components.R1TextField
+import com.github.itskenny0.r1ha.ui.components.R1TopBar
+import com.github.itskenny0.r1ha.ui.components.RelativeTimeLabel
+import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
+import com.github.itskenny0.r1ha.ui.components.r1RowPressable
+
+/**
+ * Automations browser — mirrors HA's frontend Automations panel.
+ * Each row carries:
+ *  - state chip (ENABLED / DISABLED) coloured per state
+ *  - friendly name + a smaller `entity_id` underneath
+ *  - mode badge (SINGLE / PARALLEL / QUEUED / RESTART)
+ *  - relative `last_triggered` timestamp
+ *  - RUN button on the right (fires `automation.trigger` with
+ *    `skip_condition: true`, so the conditions block doesn't block a
+ *    manual test).
+ *
+ * Long-press a row to toggle its enabled state — `automation.turn_on`
+ * / `automation.turn_off`. Re-fetch is automatic after every dispatch
+ * so the row stays in sync.
+ *
+ * Header chip RELOAD fires `automation.reload` (re-reads
+ * `automations.yaml` + the UI editor's storage). Useful after editing
+ * the YAML on a tablet and wanting the R1 to pick up the change
+ * without restarting HA.
+ */
+@Composable
+fun AutomationsScreen(
+    haRepository: HaRepository,
+    settings: SettingsRepository,
+    wheelInput: WheelInput,
+    onBack: () -> Unit,
+) {
+    val vm: AutomationsViewModel = viewModel(
+        factory = AutomationsViewModel.factory(haRepository),
+    )
+    val ui by vm.ui.collectAsState()
+    val listState = rememberLazyListState()
+    WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
+    LaunchedEffect(Unit) { vm.refresh() }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(R1.Bg)
+            .systemBarsPadding(),
+    ) {
+        R1TopBar(
+            title = "AUTOMATIONS",
+            onBack = onBack,
+            action = {
+                // RELOAD chip — fires automation.reload. Disabled while
+                // a previous reload is in flight to stop a rapid
+                // double-tap from queueing two reloads back-to-back.
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.SurfaceMuted)
+                        .border(1.dp, R1.Hairline, R1.ShapeS)
+                        .r1Pressable(onClick = { if (!ui.reloading) vm.reload() })
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = if (ui.reloading) "…" else "RELOAD",
+                        style = R1.labelMicro,
+                        color = R1.InkSoft,
+                    )
+                }
+            },
+        )
+        SearchBar(query = ui.query, onQueryChange = { vm.setQuery(it) })
+        when {
+            ui.loading && ui.all.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                    color = R1.AccentWarm,
+                )
+            }
+            ui.error != null && ui.all.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "Automations load failed: ${ui.error}",
+                    style = R1.body,
+                    color = R1.StatusRed,
+                )
+            }
+            ui.all.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "No automations defined — Settings → Automations in HA's web UI.",
+                    style = R1.body,
+                    color = R1.InkMuted,
+                )
+            }
+            ui.entries.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "No matches for '${ui.query}'.",
+                    style = R1.body,
+                    color = R1.InkMuted,
+                )
+            }
+            else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = ui.loading,
+                onRefresh = { vm.refresh() },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp, vertical = 8.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(items = ui.entries, key = { it.id.value }) { entry ->
+                        AutomationRow(
+                            entry = entry,
+                            onRun = { vm.trigger(entry) },
+                            onToggleEnabled = { vm.setEnabled(entry, !entry.enabled) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "FIND",
+            style = R1.labelMicro,
+            color = R1.InkMuted,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        Box(modifier = Modifier.weight(1f)) {
+            R1TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = "kitchen, away, sunset, ...",
+                monospace = false,
+            )
+        }
+        if (query.isNotEmpty()) {
+            Spacer(Modifier.width(6.dp))
+            Box(
+                modifier = Modifier.size(28.dp).r1Pressable({ onQueryChange("") }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "✕", style = R1.labelMicro, color = R1.InkSoft)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AutomationRow(
+    entry: AutomationsViewModel.Entry,
+    onRun: () -> Unit,
+    onToggleEnabled: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(R1.ShapeS)
+            .background(R1.SurfaceMuted)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            // Tap toggles enabled/disabled (state-change verb on the
+            // row body), separate RUN affordance on the right edge
+            // dispatches a manual trigger. Long-press = same as tap
+            // (no distinct secondary action here).
+            .r1RowPressable(onTap = onToggleEnabled, onLongPress = onToggleEnabled)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // ENABLED / DISABLED chip — green when active, muted when off.
+        Text(
+            text = if (entry.enabled) "ON" else "OFF",
+            style = R1.labelMicro,
+            color = if (entry.enabled) R1.AccentGreen else R1.InkMuted,
+            modifier = Modifier.width(24.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = entry.name,
+                    style = R1.body,
+                    color = R1.Ink,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(6.dp))
+                RelativeTimeLabel(
+                    at = entry.lastTriggered,
+                    color = R1.InkMuted,
+                    style = R1.labelMicro,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = entry.id.value,
+                    style = R1.labelMicro,
+                    color = R1.InkSoft,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                if (entry.mode != AutomationsViewModel.Mode.UNKNOWN) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = entry.mode.label,
+                        style = R1.labelMicro,
+                        color = R1.AccentNeutral,
+                    )
+                }
+                if (entry.currentRunning > 0) {
+                    Spacer(Modifier.width(6.dp))
+                    // "RUNNING ×N" badge — only renders when at least
+                    // one instance is live (relevant for parallel /
+                    // queued modes that allow concurrent runs).
+                    Text(
+                        text = "×${entry.currentRunning}",
+                        style = R1.labelMicro,
+                        color = R1.AccentWarm,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        // RUN tap target — fires automation.trigger. Separate from the
+        // row's enabled-toggle press handler so a tap here is
+        // unambiguously "run now" rather than "toggle on/off".
+        Box(
+            modifier = Modifier
+                .clip(R1.ShapeS)
+                .background(R1.AccentGreen.copy(alpha = 0.18f))
+                .border(1.dp, R1.AccentGreen.copy(alpha = 0.4f), R1.ShapeS)
+                .r1Pressable(onClick = onRun)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Text(text = "RUN", style = R1.labelMicro, color = R1.AccentGreen)
+        }
+    }
+}

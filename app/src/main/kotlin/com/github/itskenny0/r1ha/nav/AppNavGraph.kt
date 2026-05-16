@@ -135,6 +135,15 @@ fun AppNavGraph(
                 onOpenSearch = {
                     navController.navigate(Routes.SEARCH) { launchSingleTop = true }
                 },
+                onOpenAutomations = {
+                    navController.navigate(Routes.AUTOMATIONS) { launchSingleTop = true }
+                },
+                onOpenHelpers = {
+                    navController.navigate(Routes.HELPERS) { launchSingleTop = true }
+                },
+                onOpenEnergy = {
+                    navController.navigate(Routes.ENERGY) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
@@ -286,6 +295,22 @@ fun AppNavGraph(
         }
         composable(Routes.SEARCH) {
             com.github.itskenny0.r1ha.feature.search.SearchScreen(
+                haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.AUTOMATIONS) {
+            com.github.itskenny0.r1ha.feature.automations.AutomationsScreen(
+                haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.HELPERS) {
+            com.github.itskenny0.r1ha.feature.helpers.HelpersScreen(
                 haRepository = haRepository,
                 settings = settings,
                 wheelInput = wheelInput,

@@ -63,6 +63,9 @@ fun SettingsScreen(
     onOpenAreas: () -> Unit,
     onOpenServices: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenAutomations: () -> Unit,
+    onOpenHelpers: () -> Unit,
+    onOpenEnergy: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -885,6 +888,20 @@ fun SettingsScreen(
             }
             item {
                 NavRow(label = "Scenes & Scripts", value = "Fire instantly", onClick = onOpenScenes)
+            }
+            item {
+                NavRow(
+                    label = "Automations",
+                    value = "List, trigger, enable / disable",
+                    onClick = onOpenAutomations,
+                )
+            }
+            item {
+                NavRow(
+                    label = "Helpers",
+                    value = "input_*, counter, timer",
+                    onClick = onOpenHelpers,
+                )
             }
 
             // ── Status views — read-only at-a-glance HA state ────────────

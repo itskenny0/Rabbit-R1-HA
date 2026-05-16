@@ -25,4 +25,9 @@ object Routes {
     const val AREAS = "areas"
     const val SERVICES = "services"
     const val SEARCH = "search"
+    const val AUTOMATIONS = "automations"
+    const val HELPERS = "helpers"
+    const val ENERGY = "energy"
+    const val DEVICES = "devices"
+    const val ZONES = "zones"
 }
