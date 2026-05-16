@@ -159,7 +159,6 @@ private fun LovelaceWebView(
         WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            settings.databaseEnabled = true
             // Allow HA's Material Web Components + service worker to
             // initialise — they need DOM storage + cookies + mixed
             // content (the WS upgrade) to function.

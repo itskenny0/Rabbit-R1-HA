@@ -86,7 +86,31 @@ fun HelpersScreen(
             .background(R1.Bg)
             .systemBarsPadding(),
     ) {
-        R1TopBar(title = "HELPERS", onBack = onBack)
+        R1TopBar(
+            title = "HELPERS",
+            onBack = onBack,
+            action = {
+                // REFRESH chip — same idiom the Energy / Zones /
+                // Automations surfaces use. The list also auto-pulls
+                // on every helper service dispatch with a 300-500 ms
+                // settle, but a manual refresh is still useful after
+                // an external HA change.
+                Box(
+                    modifier = Modifier
+                        .clip(R1.ShapeS)
+                        .background(R1.SurfaceMuted)
+                        .border(1.dp, R1.Hairline, R1.ShapeS)
+                        .r1Pressable(onClick = { vm.refresh() })
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = if (ui.loading) "…" else "REFRESH",
+                        style = R1.labelMicro,
+                        color = R1.InkSoft,
+                    )
+                }
+            },
+        )
         BucketChips(current = ui.bucket, counts = ui.counts, onSelect = { vm.setBucket(it) })
         SearchBar(query = ui.query, onQueryChange = { vm.setQuery(it) })
         when {
