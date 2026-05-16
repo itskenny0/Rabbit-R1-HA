@@ -70,6 +70,17 @@ fun SearchScreen(
     val focus = remember { FocusRequester() }
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // Active-page favourites set — used to swap the star glyph for
+    // entities that are already favourited so the user doesn't try to
+    // add them a second time (no-op anyway, but the visual feedback
+    // closes the loop). Recomputed live as pages/favourites change.
+    val appSettings by settings.settings.collectAsState(
+        initial = com.github.itskenny0.r1ha.core.prefs.AppSettings(),
+    )
+    val activeFavourites = remember(appSettings.activePageId, appSettings.pages) {
+        appSettings.pages.firstOrNull { it.id == appSettings.activePageId }
+            ?.favorites?.toSet() ?: emptySet()
+    }
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
     LaunchedEffect(Unit) {
         vm.refresh()
@@ -226,6 +237,7 @@ fun SearchScreen(
                 items(items = vm.results, key = { it.id.value }) { entity ->
                     SearchResultRow(
                         entity,
+                        isFavorite = entity.id.value in activeFavourites,
                         onTap = { vm.activate(entity) },
                         onLongPress = { openInHa(entity) },
                         onFavorite = { vm.addToFavorites(entity.id) },
@@ -275,6 +287,7 @@ private fun BucketChips(
 @Composable
 private fun SearchResultRow(
     entity: EntityState,
+    isFavorite: Boolean,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     onFavorite: () -> Unit,
@@ -309,14 +322,20 @@ private fun SearchResultRow(
         Spacer(Modifier.width(8.dp))
         // Star tap target — adds the entity to the active page's
         // favourites. Separate from the row's main r1RowPressable so a
-        // tap on the star doesn't fire the entity's action.
+        // tap on the star doesn't fire the entity's action. Filled glyph
+        // + accent tint when the entity is already on the active page,
+        // so the user doesn't fruitlessly re-tap.
         Box(
             modifier = Modifier
                 .size(32.dp)
                 .r1Pressable(onClick = onFavorite),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "☆", style = R1.body, color = R1.InkSoft)
+            Text(
+                text = if (isFavorite) "★" else "☆",
+                style = R1.body,
+                color = if (isFavorite) R1.AccentWarm else R1.InkSoft,
+            )
         }
         Spacer(Modifier.width(4.dp))
         // Action affordance hint — what tap will do.
