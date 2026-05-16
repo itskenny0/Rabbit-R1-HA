@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">R1 HA</string>
+
+    <!-- App-shortcut labels — surfaced when the user long-presses the
+         launcher icon. Each routes through MainActivity's extras-based
+         deep-link to a specific top-level surface; the short label
+         appears in the launcher pop-up under the icon, the long label
+         is read by accessibility services. -->
+    <string name="shortcut_search_short">Search</string>
+    <string name="shortcut_search_long">Quick Search across HA entities</string>
+    <string name="shortcut_assist_short">Assist</string>
+    <string name="shortcut_assist_long">Talk to Home Assistant</string>
+    <string name="shortcut_today_short">Today</string>
+    <string name="shortcut_today_long">Open the TODAY dashboard</string>
+    <string name="shortcut_automations_short">Automations</string>
+    <string name="shortcut_automations_long">Browse and trigger automations</string>
 </resources>

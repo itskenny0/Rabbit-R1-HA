@@ -68,6 +68,20 @@ class MainActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize())
                 return@setContent
             }
+            // Cold-start app-shortcut delivery — if the user launched
+            // us via a launcher long-press shortcut, the route to push
+            // is sitting in the original intent's extras. Forward it
+            // to the ShortcutBus so AppNavGraph picks it up on its
+            // first compose tick. (onNewIntent handles subsequent
+            // shortcut taps while the app is already running.)
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                intent.getStringExtra(EXTRA_INITIAL_ROUTE)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { route ->
+                        R1Log.i("MainActivity.setContent", "cold-start shortcut route: $route")
+                        com.github.itskenny0.r1ha.core.util.ShortcutBus.request(route)
+                    }
+            }
 
             // Lock the start destination to the FIRST loaded value so theme changes, server
             // changes, etc. don't re-graph the NavHost mid-session. Two paths:
@@ -173,7 +187,16 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         R1Log.i("MainActivity.onNewIntent", "data=${intent.data}")
+        setIntent(intent) // so subsequent intent.getStringExtra reads see the new intent
         handleOAuthCallback(intent)
+        // App-shortcut deep-link — fire the requested route through
+        // the in-memory ShortcutBus so the nav-graph can pop it onto
+        // its back stack. We don't navigate from here directly because
+        // the NavController lives inside the Compose tree.
+        intent.getStringExtra(EXTRA_INITIAL_ROUTE)?.takeIf { it.isNotBlank() }?.let { route ->
+            R1Log.i("MainActivity.onNewIntent", "shortcut routed: $route")
+            com.github.itskenny0.r1ha.core.util.ShortcutBus.request(route)
+        }
     }
 
     /**
@@ -293,5 +316,12 @@ class MainActivity : ComponentActivity() {
          *  practised thumb on the R1's physical wheel can manage, so
          *  the held-volume-button feel matches a manual spin. */
         private const val VOLUME_REPEAT_MIN_MS = 130L
+
+        /** Intent extra used by the app-shortcut definitions (see
+         *  res/xml/shortcuts.xml) to ask MainActivity to deep-link
+         *  to a specific top-level route on launch. The value is a
+         *  bare route name (e.g. "search", "assist") that AppNavGraph
+         *  resolves via Routes constants. */
+        const val EXTRA_INITIAL_ROUTE = "initial_route"
     }
 }

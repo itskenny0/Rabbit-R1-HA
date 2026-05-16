@@ -47,6 +47,14 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="r1ha" android:host="auth-callback"/>
             </intent-filter>
+            <!-- App-shortcut definitions for the launcher pop-up. The
+                 four shortcuts (Search / Assist / Today / Automations)
+                 launch MainActivity with an 'initial_route' extra that
+                 the activity reads on resume and routes through the
+                 existing nav graph. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
         <!-- FileProvider for the in-app update flow — exposes the downloaded APK
              from cache as a content:// URI that the package installer can read.

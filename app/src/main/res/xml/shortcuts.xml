@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  App-shortcut definitions — surfaced when the user long-presses the
+  app icon in the launcher. Each shortcut launches MainActivity with
+  an EXTRA_INITIAL_ROUTE that the activity reads on startup and pushes
+  through the existing nav graph. Order here is the order shown in the
+  pop-up (top to bottom on most launchers).
+
+  Note: icons reference the launcher icon for now (no per-shortcut
+  iconography). The shortLabel renders inside the launcher pop-up
+  under each row; longLabel is surfaced to TalkBack and to launchers
+  that show extended labels.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="search"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_search_short"
+        android:shortcutLongLabel="@string/shortcut_search_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.github.itskenny0.r1ha"
+            android:targetClass="com.github.itskenny0.r1ha.MainActivity">
+            <extra android:name="initial_route" android:value="search" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="assist"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_assist_short"
+        android:shortcutLongLabel="@string/shortcut_assist_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.github.itskenny0.r1ha"
+            android:targetClass="com.github.itskenny0.r1ha.MainActivity">
+            <extra android:name="initial_route" android:value="assist" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="today"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_today_short"
+        android:shortcutLongLabel="@string/shortcut_today_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.github.itskenny0.r1ha"
+            android:targetClass="com.github.itskenny0.r1ha.MainActivity">
+            <extra android:name="initial_route" android:value="dashboard" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="automations"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_automations_short"
+        android:shortcutLongLabel="@string/shortcut_automations_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.github.itskenny0.r1ha"
+            android:targetClass="com.github.itskenny0.r1ha.MainActivity">
+            <extra android:name="initial_route" android:value="automations" />
+        </intent>
+    </shortcut>
+
+</shortcuts>

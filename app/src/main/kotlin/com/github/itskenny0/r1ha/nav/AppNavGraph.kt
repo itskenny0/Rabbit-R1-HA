@@ -24,6 +24,33 @@ fun AppNavGraph(
     tokens: TokenStore,
     wheelInput: WheelInput,
 ) {
+    // App-shortcut deep-link consumer — MainActivity emits a route on
+    // ShortcutBus whenever a launcher long-press shortcut delivers an
+    // intent. We collect once per NavController lifetime and route via
+    // navController.navigate(), so the requested screen is pushed on
+    // top of whatever the user had open (back-press returns to where
+    // they were, exactly like any other in-app nav).
+    androidx.compose.runtime.LaunchedEffect(navController) {
+        com.github.itskenny0.r1ha.core.util.ShortcutBus.requests.collect { route ->
+            val target = when (route) {
+                "search" -> Routes.SEARCH
+                "assist" -> Routes.ASSIST
+                "dashboard" -> Routes.DASHBOARD
+                "automations" -> Routes.AUTOMATIONS
+                "helpers" -> Routes.HELPERS
+                "energy" -> Routes.ENERGY
+                "zones" -> Routes.ZONES
+                "scenes" -> Routes.SCENES
+                "notifications" -> Routes.NOTIFICATIONS
+                "cameras" -> Routes.CAMERAS
+                "logbook" -> Routes.LOGBOOK
+                else -> null
+            }
+            if (target != null) {
+                navController.navigate(target) { launchSingleTop = true }
+            }
+        }
+    }
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Routes.ONBOARDING) {
             OnboardingScreen(
