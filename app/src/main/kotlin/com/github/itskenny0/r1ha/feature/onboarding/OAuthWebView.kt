@@ -4,13 +4,24 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.core.util.R1Log
 import com.github.itskenny0.r1ha.core.util.Toaster
 
@@ -35,11 +46,24 @@ fun OAuthWebView(
     val currentOnCode = rememberUpdatedState(onCodeCaptured)
     val currentOnMissing = rememberUpdatedState(onMissingCode)
 
+    // Tracks whether the WebView is still loading its main frame. Drives
+    // a small spinner overlay so the user sees something during the
+    // initial /auth/authorize round-trip rather than a blank black
+    // screen — common on cold HA installs where the first request can
+    // take a couple of seconds.
+    var loading by remember { mutableStateOf(true) }
+
     val webView = remember(context) {
         WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                    loading = true
+                }
+                override fun onPageFinished(view: WebView, url: String) {
+                    loading = false
+                }
                 override fun shouldOverrideUrlLoading(
                     view: WebView,
                     request: WebResourceRequest,
@@ -94,8 +118,27 @@ fun OAuthWebView(
         }
     }
 
-    AndroidView(
-        factory = { webView },
-        modifier = modifier,
-    )
+    Box(modifier = modifier) {
+        AndroidView(
+            factory = { webView },
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (loading) {
+            // Spinner overlay during main-frame loads — sits on a
+            // semi-transparent backdrop so the user knows the WebView
+            // is working even before the first paint lands.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(R1.Bg.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                    color = R1.AccentWarm,
+                )
+            }
+        }
+    }
 }
