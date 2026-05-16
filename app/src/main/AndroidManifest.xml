@@ -56,6 +56,25 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+        <!-- Quick Settings tile — mirrors one HA entity's on/off state in
+             the Android notification-shade Quick Settings panel. The bound
+             entity is configured via Settings → BEHAVIOUR. Single tile
+             per app (the platform limit) which fits the R1 client's
+             'one toggle I want everywhere' niche. -->
+        <service
+            android:name=".feature.quicktile.HaQuickTileService"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/quick_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="false"/>
+        </service>
+
         <!-- FileProvider for the in-app update flow — exposes the downloaded APK
              from cache as a content:// URI that the package installer can read.
              Authority matches applicationId + ".updates" so it stays unique to

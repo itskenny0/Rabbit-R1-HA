@@ -68,6 +68,15 @@ class SettingsViewModel(
     fun setToastLogLevel(level: com.github.itskenny0.r1ha.core.prefs.ToastLogLevel) =
         update { it.copy(behavior = it.behavior.copy(toastLogLevel = level)) }
 
+    /** Bind one entity_id to the Android Quick Settings tile. Empty
+     *  / blank clears the binding so the tile renders its 'tap to
+     *  open app' placeholder. */
+    fun setQuickTileEntityId(entityId: String?) =
+        update {
+            val cleaned = entityId?.trim()?.takeIf { it.isNotBlank() }
+            it.copy(behavior = it.behavior.copy(quickTileEntityId = cleaned))
+        }
+
     /**
      * Generic mutator for the [AdvancedSettings] sub-struct. The dev-menu screen
      * uses this to update fields one at a time without each field needing its own

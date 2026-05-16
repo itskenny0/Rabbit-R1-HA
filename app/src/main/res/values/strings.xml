@@ -15,4 +15,9 @@
     <string name="shortcut_today_long">Open the TODAY dashboard</string>
     <string name="shortcut_automations_short">Automations</string>
     <string name="shortcut_automations_long">Browse and trigger automations</string>
+
+    <!-- Label shown under the Quick Settings tile chooser when the user
+         adds the tile from the system shade. The actual label shown
+         once added comes from the tile's live state. -->
+    <string name="quick_tile_label">HA Toggle</string>
 </resources>

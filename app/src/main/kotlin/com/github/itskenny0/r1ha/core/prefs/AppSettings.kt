@@ -134,6 +134,20 @@ data class Behavior(
      * tappable expanding toasts. DEBUG shows everything R1Log emits.
      */
     val toastLogLevel: ToastLogLevel = ToastLogLevel.OFF,
+    /**
+     * The entity_id bound to the Android Quick Settings tile. When non-empty,
+     * `HaQuickTileService` (the system-provided tile that lives in the
+     * notification shade's quick-settings panel) reads this entity_id, fetches
+     * its current state to populate the tile label + on/off mode, and dispatches
+     * a toggle service call when the user taps it. Empty/null = the tile shows
+     * a 'tap to set up' placeholder.
+     *
+     * Limited to one entity at a time because Android lets each app declare a
+     * single TileService instance; the HA Companion app's 40-tile fan-out
+     * needs 40 separately-named services which is excessive plumbing for the
+     * common 'one toggle I want everywhere' use case the R1 client serves.
+     */
+    val quickTileEntityId: String? = null,
 )
 
 /**

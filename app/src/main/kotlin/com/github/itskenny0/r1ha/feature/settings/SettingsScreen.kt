@@ -34,6 +34,7 @@ import com.github.itskenny0.r1ha.core.prefs.TokenStore
 import com.github.itskenny0.r1ha.core.prefs.WheelKeySource
 import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.ui.components.R1Switch
+import com.github.itskenny0.r1ha.ui.components.R1TextField
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
 import com.github.itskenny0.r1ha.ui.components.r1Pressable
@@ -505,6 +506,29 @@ fun SettingsScreen(
                 )
             }
             item { ToastLogLevelRow(current = s.behavior.toastLogLevel, onSelect = { vm.setToastLogLevel(it) }) }
+
+            // ── Quick Settings tile ─────────────────────────────────
+            // Bind one HA entity_id to the system Quick Settings panel
+            // (notification-shade tile). Empty = unbound; the tile
+            // shows a 'tap to set up' placeholder and opens the app on
+            // tap. Typing `light.kitchen` here makes that entity
+            // toggleable from anywhere on the phone without opening
+            // our app first.
+            item {
+                LabeledControl(label = "Quick Settings tile") {
+                    // Single entity_id text input — the user types
+                    // (e.g.) 'light.kitchen' and the HaQuickTileService
+                    // picks it up on its next listen window. Blank
+                    // clears the binding.
+                    R1TextField(
+                        value = s.behavior.quickTileEntityId ?: "",
+                        onValueChange = { vm.setQuickTileEntityId(it) },
+                        placeholder = "light.kitchen",
+                        monospace = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
 
             item { SectionDivider() }
 

@@ -135,6 +135,11 @@ class SettingsRepository private constructor(
         val behaviorStartOnDashboard = booleanPreferencesKey("behavior.start_on_dashboard")
         val behaviorWheelTogglesSwitches = booleanPreferencesKey("behavior.wheel_toggles_switches")
         val behaviorToastLogLevel = stringPreferencesKey("behavior.toast_log_level")
+        /** entity_id bound to the Android Quick Settings tile. Empty
+         *  string sentinel = unbound (a null-equivalent that the
+         *  preferences API can store; we map empty → null at read
+         *  time). */
+        val behaviorQuickTileEntityId = stringPreferencesKey("behavior.quick_tile_entity_id")
         val advancedJson = stringPreferencesKey("advanced.json")
         val dashboardJson = stringPreferencesKey("dashboard.json")
         val integrationsJson = stringPreferencesKey("integrations.json")
@@ -228,6 +233,7 @@ class SettingsRepository private constructor(
                     toastLogLevel = p[K.behaviorToastLogLevel]
                         ?.let { runCatching { ToastLogLevel.valueOf(it) }.getOrNull() }
                         ?: ToastLogLevel.OFF,
+                    quickTileEntityId = p[K.behaviorQuickTileEntityId]?.takeIf { it.isNotBlank() },
                 ),
                 theme = p[K.theme]?.let { runCatching { ThemeId.valueOf(it) }.getOrNull() } ?: ThemeId.PRAGMATIC_HYBRID,
                 nameOverrides = decodeNameOverrides(p[K.nameOverrides]),
@@ -331,6 +337,7 @@ class SettingsRepository private constructor(
                 p[K.behaviorStartOnDashboard] = next.behavior.startOnDashboard
                 p[K.behaviorWheelTogglesSwitches] = next.behavior.wheelTogglesSwitches
                 p[K.behaviorToastLogLevel] = next.behavior.toastLogLevel.name
+                p[K.behaviorQuickTileEntityId] = next.behavior.quickTileEntityId.orEmpty()
                 p[K.uiTextHistoryLen] = next.ui.textHistoryLength
                 p[K.uiHideCardTail] = next.ui.hideCardTailAbove
                 p[K.uiMaxDecimals] = next.ui.maxDecimalPlaces
