@@ -64,7 +64,18 @@ fun HelpersScreen(
     wheelInput: WheelInput,
     onBack: () -> Unit,
 ) {
-    val vm: HelpersViewModel = viewModel(factory = HelpersViewModel.factory(haRepository))
+    val vm: HelpersViewModel = viewModel(
+        factory = HelpersViewModel.factory(haRepository, settings),
+    )
+    val appSettings by settings.settings.collectAsState(
+        initial = com.github.itskenny0.r1ha.core.prefs.AppSettings(),
+    )
+    val activeFavourites = androidx.compose.runtime.remember(
+        appSettings.activePageId, appSettings.pages,
+    ) {
+        appSettings.pages.firstOrNull { it.id == appSettings.activePageId }
+            ?.favorites?.toSet() ?: emptySet()
+    }
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
@@ -135,7 +146,11 @@ fun HelpersScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(items = ui.entries, key = { it.id.value }) { entry ->
-                        HelperRow(entry = entry, vm = vm)
+                        HelperRow(
+                            entry = entry,
+                            vm = vm,
+                            isFavorite = entry.id.value in activeFavourites,
+                        )
                     }
                 }
             }
@@ -215,7 +230,11 @@ private fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
 }
 
 @Composable
-private fun HelperRow(entry: HelpersViewModel.Entry, vm: HelpersViewModel) {
+private fun HelperRow(
+    entry: HelpersViewModel.Entry,
+    vm: HelpersViewModel,
+    isFavorite: Boolean,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -233,6 +252,22 @@ private fun HelperRow(entry: HelpersViewModel.Entry, vm: HelpersViewModel) {
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(6.dp))
+            // ☆ pin-to-favourites — for helpers whose card archetype
+            // works on the stack (toggles, sliders, timers,
+            // selects). Glyph flips to ★ when pinned.
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .r1Pressable(onClick = { vm.addToFavorites(entry) }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (isFavorite) "★" else "☆",
+                    style = R1.labelMicro,
+                    color = if (isFavorite) R1.AccentWarm else R1.InkSoft,
+                )
+            }
+            Spacer(Modifier.width(4.dp))
             Text(
                 text = entry.kind.name,
                 style = R1.labelMicro,

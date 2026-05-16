@@ -33,6 +33,7 @@ import java.time.Instant
  */
 class AutomationsViewModel(
     private val haRepository: HaRepository,
+    private val settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
 ) : ViewModel() {
 
     /** Per-mode UI badge. The four modes HA exposes are mutually
@@ -242,9 +243,27 @@ class AutomationsViewModel(
         }
     }
 
+    /** Pin this automation to the active page's favourites. Same
+     *  shape as SearchViewModel.addToFavorites — adds the entity_id
+     *  to settings.activePage.favorites if it isn't there already.
+     *  Reads as 'star this automation onto my home stack'. */
+    fun addToFavorites(entry: Entry) {
+        viewModelScope.launch {
+            settings.updateActivePage { page ->
+                if (entry.id.value in page.favorites) page
+                else page.copy(favorites = page.favorites + entry.id.value)
+            }
+            R1Log.i("Automations", "favourited ${entry.id.value}")
+            Toaster.show("Added '${entry.name}' to favourites")
+        }
+    }
+
     companion object {
-        fun factory(haRepository: HaRepository) = viewModelFactory {
-            initializer { AutomationsViewModel(haRepository) }
+        fun factory(
+            haRepository: HaRepository,
+            settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+        ) = viewModelFactory {
+            initializer { AutomationsViewModel(haRepository, settings) }
         }
     }
 }

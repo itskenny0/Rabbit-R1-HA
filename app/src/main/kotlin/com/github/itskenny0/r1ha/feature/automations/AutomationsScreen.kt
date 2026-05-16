@@ -66,8 +66,20 @@ fun AutomationsScreen(
     onBack: () -> Unit,
 ) {
     val vm: AutomationsViewModel = viewModel(
-        factory = AutomationsViewModel.factory(haRepository),
+        factory = AutomationsViewModel.factory(haRepository, settings),
     )
+    // Active-page favourites set — used to swap the ☆ glyph for ★ on
+    // rows the user has already pinned (same idiom as the Search
+    // screen's filled-when-favourited star).
+    val appSettings by settings.settings.collectAsState(
+        initial = com.github.itskenny0.r1ha.core.prefs.AppSettings(),
+    )
+    val activeFavourites = androidx.compose.runtime.remember(
+        appSettings.activePageId, appSettings.pages,
+    ) {
+        appSettings.pages.firstOrNull { it.id == appSettings.activePageId }
+            ?.favorites?.toSet() ?: emptySet()
+    }
     val ui by vm.ui.collectAsState()
     val listState = rememberLazyListState()
     WheelScrollFor(wheelInput = wheelInput, listState = listState, settings = settings)
@@ -159,8 +171,10 @@ fun AutomationsScreen(
                     items(items = ui.entries, key = { it.id.value }) { entry ->
                         AutomationRow(
                             entry = entry,
+                            isFavorite = entry.id.value in activeFavourites,
                             onRun = { vm.trigger(entry) },
                             onToggleEnabled = { vm.setEnabled(entry, !entry.enabled) },
+                            onFavorite = { vm.addToFavorites(entry) },
                         )
                     }
                 }
@@ -206,8 +220,10 @@ private fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
 @Composable
 private fun AutomationRow(
     entry: AutomationsViewModel.Entry,
+    isFavorite: Boolean,
     onRun: () -> Unit,
     onToggleEnabled: () -> Unit,
+    onFavorite: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -276,7 +292,23 @@ private fun AutomationRow(
                 }
             }
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
+        // ☆ pin-to-favourites button — tap to add this automation to
+        // the active page's card stack. Glyph swaps to ★ once pinned
+        // so the user doesn't fruitlessly re-tap.
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .r1Pressable(onClick = onFavorite),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (isFavorite) "★" else "☆",
+                style = R1.body,
+                color = if (isFavorite) R1.AccentWarm else R1.InkSoft,
+            )
+        }
+        Spacer(Modifier.width(2.dp))
         // RUN tap target — fires automation.trigger. Separate from the
         // row's enabled-toggle press handler so a tap here is
         // unambiguously "run now" rather than "toggle on/off".

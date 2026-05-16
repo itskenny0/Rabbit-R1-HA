@@ -33,6 +33,7 @@ import java.time.Instant
  */
 class HelpersViewModel(
     private val haRepository: HaRepository,
+    private val settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
 ) : ViewModel() {
 
     /** One bucket per supported HA helper domain. Filter chips at the
@@ -288,8 +289,26 @@ class HelpersViewModel(
 
         private fun entryDomain(id: EntityId): String = id.value.substringBefore('.')
 
-        fun factory(haRepository: HaRepository) = viewModelFactory {
-            initializer { HelpersViewModel(haRepository) }
+        fun factory(
+            haRepository: HaRepository,
+            settings: com.github.itskenny0.r1ha.core.prefs.SettingsRepository,
+        ) = viewModelFactory {
+            initializer { HelpersViewModel(haRepository, settings) }
+        }
+    }
+
+    /** Pin a helper to the active page's favourites. Most helpers
+     *  map to a sensible card archetype (input_boolean → SwitchCard,
+     *  input_number → SliderCard, timer → TimerCard) so adding them
+     *  to the deck just works. */
+    fun addToFavorites(entry: Entry) {
+        viewModelScope.launch {
+            settings.updateActivePage { page ->
+                if (entry.id.value in page.favorites) page
+                else page.copy(favorites = page.favorites + entry.id.value)
+            }
+            R1Log.i("Helpers", "favourited ${entry.id.value}")
+            Toaster.show("Added '${entry.name}' to favourites")
         }
     }
 }
