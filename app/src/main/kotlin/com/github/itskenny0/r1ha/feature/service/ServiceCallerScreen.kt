@@ -122,12 +122,12 @@ fun ServiceCallerScreen(
                                 // Try pretty-printing JSON for readability.
                                 // Anything that doesn't parse drops through as
                                 // raw text — paste-as-is for non-JSON snippets.
+                                // Reuses ServiceCallerViewModel.prettyJson so
+                                // the formatter is not rebuilt per paste.
                                 val pretty = runCatching {
                                     val parsed = kotlinx.serialization.json.Json
                                         .parseToJsonElement(text)
-                                    kotlinx.serialization.json.Json {
-                                        prettyPrint = true
-                                    }.encodeToString(
+                                    ServiceCallerViewModel.prettyJson.encodeToString(
                                         kotlinx.serialization.json.JsonElement.serializer(),
                                         parsed,
                                     )

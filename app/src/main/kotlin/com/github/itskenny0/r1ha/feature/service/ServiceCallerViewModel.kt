@@ -149,8 +149,9 @@ class ServiceCallerViewModel(
         /** Shared Json instance for pretty-printing service-call results.
          *  prettyPrint = true is enough; default 4-space indent reads
          *  fine on the R1's tiny screen. Lives in the companion so the
-         *  formatter isn't rebuilt on every fire. */
-        private val prettyJson = kotlinx.serialization.json.Json { prettyPrint = true }
+         *  formatter isn't rebuilt on every fire — also shared with
+         *  the screen-side PASTE chip for the same reason. */
+        internal val prettyJson = kotlinx.serialization.json.Json { prettyPrint = true }
 
         fun factory(
             haRepository: HaRepository,
