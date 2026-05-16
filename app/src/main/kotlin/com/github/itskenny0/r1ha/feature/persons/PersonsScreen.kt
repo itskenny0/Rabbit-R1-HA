@@ -32,6 +32,7 @@ import com.github.itskenny0.r1ha.core.prefs.SettingsRepository
 import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.ui.components.R1TopBar
 import com.github.itskenny0.r1ha.ui.components.WheelScrollFor
+import com.github.itskenny0.r1ha.ui.components.r1Pressable
 
 /**
  * "Who's home" surface — combines `person.*` (high-level humans the
@@ -48,6 +49,10 @@ fun PersonsScreen(
     settings: SettingsRepository,
     wheelInput: WheelInput,
     onBack: () -> Unit,
+    /** Drill into the entity's location-state history. Wired from
+     *  AppNavGraph; defaults to a no-op so previews / tests don't
+     *  have to thread the callback through. */
+    onOpenHistory: (entityId: String) -> Unit = {},
 ) {
     val vm: PersonsViewModel = viewModel(factory = PersonsViewModel.factory(haRepository))
     val ui by vm.ui.collectAsState()
@@ -124,7 +129,9 @@ fun PersonsScreen(
                                 modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp),
                             )
                         }
-                        items(items = ui.people, key = { it.entityId }) { e -> PersonRow(e) }
+                        items(items = ui.people, key = { it.entityId }) { e ->
+                            PersonRow(e, onTap = { onOpenHistory(e.entityId) })
+                        }
                     }
                     if (ui.devices.isNotEmpty()) {
                         item {
@@ -136,7 +143,9 @@ fun PersonsScreen(
                                 modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp),
                             )
                         }
-                        items(items = ui.devices, key = { it.entityId }) { e -> PersonRow(e) }
+                        items(items = ui.devices, key = { it.entityId }) { e ->
+                            PersonRow(e, onTap = { onOpenHistory(e.entityId) })
+                        }
                     }
                 }
             }
@@ -145,13 +154,14 @@ fun PersonsScreen(
 }
 
 @Composable
-private fun PersonRow(entry: PersonsViewModel.Entry) {
+private fun PersonRow(entry: PersonsViewModel.Entry, onTap: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(R1.ShapeS)
             .background(R1.SurfaceMuted)
             .border(1.dp, R1.Hairline, R1.ShapeS)
+            .r1Pressable(onClick = onTap)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
