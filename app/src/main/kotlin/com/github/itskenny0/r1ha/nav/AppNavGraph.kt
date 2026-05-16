@@ -299,6 +299,9 @@ fun AppNavGraph(
                 settings = settings,
                 wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
+                onOpenHistory = { eid ->
+                    navController.navigate(Routes.historyRoute(eid)) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.AUTOMATIONS) {
@@ -322,6 +325,28 @@ fun AppNavGraph(
                 haRepository = haRepository,
                 settings = settings,
                 wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.HISTORY,
+            arguments = listOf(
+                androidx.navigation.navArgument("entityId") {
+                    type = androidx.navigation.NavType.StringType
+                },
+            ),
+        ) { backStackEntry ->
+            // Pull the entity_id out of the nav-arg bundle. Compose
+            // Navigation stores StringType args under the same key the
+            // route template declares; null only happens if the route
+            // is malformed which the navArgument schema makes
+            // impossible in practice.
+            val eid = backStackEntry.arguments?.getString("entityId").orEmpty()
+            com.github.itskenny0.r1ha.feature.history.HistoryScreen(
+                haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
+                entityId = eid,
                 onBack = { navController.popBackStack() },
             )
         }

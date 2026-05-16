@@ -30,4 +30,15 @@ object Routes {
     const val ENERGY = "energy"
     const val DEVICES = "devices"
     const val ZONES = "zones"
+
+    /** History drill-in route — carries the entity_id as a path
+     *  segment. Use [historyRoute] from call sites so the encoding
+     *  rule lives in one place. */
+    const val HISTORY = "history/{entityId}"
+
+    /** Build a concrete history-screen route for [entityId]. The
+     *  entity_id stays unescaped because Compose Navigation parses
+     *  StringType path segments as raw strings — `.` and `_` are
+     *  allowed in route paths. */
+    fun historyRoute(entityId: String): String = "history/$entityId"
 }

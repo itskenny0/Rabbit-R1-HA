@@ -63,6 +63,9 @@ fun SearchScreen(
     settings: SettingsRepository,
     wheelInput: WheelInput,
     onBack: () -> Unit,
+    /** Opens the full-screen History drill-in for [entityId]. Routed
+     *  from the small chart-glyph button on each result row. */
+    onOpenHistory: (entityId: String) -> Unit = {},
 ) {
     val vm: SearchViewModel = viewModel(factory = SearchViewModel.factory(haRepository, settings))
     val ui by vm.ui.collectAsState()
@@ -241,6 +244,7 @@ fun SearchScreen(
                         onTap = { vm.activate(entity) },
                         onLongPress = { openInHa(entity) },
                         onFavorite = { vm.addToFavorites(entity.id) },
+                        onHistory = { onOpenHistory(entity.id.value) },
                     )
                 }
             }
@@ -291,6 +295,7 @@ private fun SearchResultRow(
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     onFavorite: () -> Unit,
+    onHistory: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -320,6 +325,18 @@ private fun SearchResultRow(
             Text(text = stateLine, style = R1.labelMicro, color = R1.InkSoft, maxLines = 1)
         }
         Spacer(Modifier.width(8.dp))
+        // History drill-in glyph — opens the full-screen history view
+        // for this entity. Separate tap target from the action/toggle
+        // path so the user can investigate a sensor's recent state
+        // without tripping the toggle action on adjacent rows.
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .r1Pressable(onClick = onHistory),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "📈", style = R1.labelMicro, color = R1.InkSoft)
+        }
         // Star tap target — adds the entity to the active page's
         // favourites. Separate from the row's main r1RowPressable so a
         // tap on the star doesn't fire the entity's action. Filled glyph
