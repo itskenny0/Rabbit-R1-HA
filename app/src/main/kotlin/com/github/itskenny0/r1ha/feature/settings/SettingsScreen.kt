@@ -549,6 +549,21 @@ fun SettingsScreen(
                             Text(text = "PICK", style = R1.labelMicro, color = R1.AccentWarm)
                         }
                     }
+                    Spacer(Modifier.height(6.dp))
+                    // Discovery hint — without this, users bind an
+                    // entity and then wonder why nothing happens.
+                    // Android's tile-add flow lives a few menus deep,
+                    // so we tell them explicitly. The wording is
+                    // copy-pasted from the standard 'Edit tiles' UI
+                    // on stock Android so it matches what the user
+                    // will see.
+                    Text(
+                        text = "After binding, pull down the notification shade twice → " +
+                            "tap the pencil-edit icon → drag the 'HA Toggle' tile from " +
+                            "the bottom row up to your active set.",
+                        style = R1.labelMicro,
+                        color = R1.InkMuted,
+                    )
                 }
             }
 
