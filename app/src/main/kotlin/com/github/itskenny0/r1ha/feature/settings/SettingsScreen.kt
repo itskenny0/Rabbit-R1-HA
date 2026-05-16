@@ -252,14 +252,31 @@ fun SettingsScreen(
                 }
             }
             item {
+                // Two-stage armed/commit — first tap arms (label changes
+                // to CONFIRM …), second tap fires within 3 s; auto-reset
+                // afterwards. Stops a thumb-fumble from accidentally
+                // dropping tokens + landing the user back on the
+                // onboarding URL form. Same pattern as the card-stack
+                // Quick Actions TURN ALL OFF.
+                val armed = androidx.compose.runtime.remember {
+                    androidx.compose.runtime.mutableStateOf(false)
+                }
+                androidx.compose.runtime.LaunchedEffect(armed.value) {
+                    if (armed.value) {
+                        kotlinx.coroutines.delay(3_000)
+                        armed.value = false
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 22.dp, vertical = 10.dp),
                 ) {
                     DangerButton(
-                        text = "SIGN OUT & RECONNECT",
-                        onClick = { vm.signOut(onSignedOut) },
+                        text = if (armed.value) "CONFIRM · SIGN OUT" else "SIGN OUT & RECONNECT",
+                        onClick = {
+                            if (armed.value) vm.signOut(onSignedOut) else armed.value = true
+                        },
                     )
                 }
             }
