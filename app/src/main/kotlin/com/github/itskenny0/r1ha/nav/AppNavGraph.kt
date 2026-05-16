@@ -317,6 +317,14 @@ fun AppNavGraph(
                 onBack = { navController.popBackStack() },
             )
         }
+        composable(Routes.ENERGY) {
+            com.github.itskenny0.r1ha.feature.energy.EnergyScreen(
+                haRepository = haRepository,
+                settings = settings,
+                wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
         composable(Routes.DASHBOARD) { backStackEntry ->
             // canGoBack — true when Dashboard was reached via nav, false
             // when it's the start destination. previousBackStackEntry is

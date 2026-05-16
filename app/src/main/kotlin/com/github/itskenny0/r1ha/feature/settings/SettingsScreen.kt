@@ -928,6 +928,13 @@ fun SettingsScreen(
             item {
                 NavRow(label = "Areas", value = "HA area registry", onClick = onOpenAreas)
             }
+            item {
+                NavRow(
+                    label = "Energy",
+                    value = "Draw, production, today's kWh",
+                    onClick = onOpenEnergy,
+                )
+            }
 
             // ── Power tools — diagnostic / advanced surfaces ─────────────
             item { SectionDivider() }
