@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.lifecycle.repeatOnLifecycle
 import com.github.itskenny0.r1ha.core.theme.R1
 import com.github.itskenny0.r1ha.core.util.R1Log
 import kotlinx.coroutines.Dispatchers
@@ -60,23 +61,33 @@ fun CameraSnapshot(
 ) {
     var bitmap by remember(entityId) { mutableStateOf<ImageBitmap?>(null) }
     var failed by remember(entityId) { mutableStateOf(false) }
-    LaunchedEffect(entityId, serverUrl, bearerToken, intervalMillis) {
-        while (true) {
-            val cb = System.currentTimeMillis()
-            val url = "${serverUrl.trimEnd('/')}/api/camera_proxy/$entityId?cb=$cb"
-            val image = runCatching { fetchSnapshot(url, bearerToken) }
-                .onFailure { R1Log.d("Camera", "fetch $entityId failed: ${it.message}") }
-                .getOrNull()
-            if (image != null) {
-                bitmap = image
-                failed = false
-            } else if (bitmap == null) {
-                // Only flip into the failed-with-no-last-frame state if we never
-                // got anything. A transient failure mid-stream just keeps the
-                // previous frame visible until the next poll lands.
-                failed = true
+    // Suspend the polling loop when the host lifecycle drops below
+    // STARTED — saves cellular data + battery on a handheld R1 left in
+    // a pocket with the Cameras screen open. Polling resumes
+    // automatically on ON_RESUME via repeatOnLifecycle's wiring.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(entityId, serverUrl, bearerToken, intervalMillis, lifecycleOwner) {
+        // repeatOnLifecycle is a LifecycleOwner extension; the block
+        // runs (and reruns on ON_START) only while the lifecycle is at
+        // least STARTED. Same wiring as the AutoRefresh composable.
+        lifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                val cb = System.currentTimeMillis()
+                val url = "${serverUrl.trimEnd('/')}/api/camera_proxy/$entityId?cb=$cb"
+                val image = runCatching { fetchSnapshot(url, bearerToken) }
+                    .onFailure { R1Log.d("Camera", "fetch $entityId failed: ${it.message}") }
+                    .getOrNull()
+                if (image != null) {
+                    bitmap = image
+                    failed = false
+                } else if (bitmap == null) {
+                    // Only flip into the failed-with-no-last-frame state if we never
+                    // got anything. A transient failure mid-stream just keeps the
+                    // previous frame visible until the next poll lands.
+                    failed = true
+                }
+                delay(intervalMillis)
             }
-            delay(intervalMillis)
         }
     }
     Box(modifier = modifier.background(R1.SurfaceMuted), contentAlignment = Alignment.Center) {
