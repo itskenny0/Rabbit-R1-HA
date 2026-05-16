@@ -32,6 +32,7 @@ An Android app for the Rabbit R1 (running LineageOS) that turns the scroll wheel
 - **Master OFF actions** — one-tap mass off for *all lights*, *all media*, or *all switches* from the Scenes & Scripts screen. HA's `entity_id: "all"` trick under the hood.
 - **Quick Actions drawer** (long-press chrome hamburger) — also doubles as the navigation drawer with a 2×4 BROWSE grid (Today · Assist · Search · Scenes · Automations · Energy · Alerts) so every major surface is one long-press + one tile-tap away.
 - **App shortcuts** (long-press launcher icon) — Search · Assist · Today · Automations land directly on those surfaces.
+- **Quick Settings tile** — bind one HA entity_id to the Android notification-shade quick-settings panel; tap toggles the entity from anywhere on the phone without opening the app. Configured via *Settings → Behaviour → Quick Settings tile*.
 
 ### Power tools — *for the long tail*
 
