@@ -989,12 +989,24 @@ private fun NotificationPreview(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = n.title?.takeIf { it.isNotBlank() } ?: n.notificationId,
-                style = R1.body.copy(fontWeight = FontWeight.SemiBold),
-                color = R1.Ink,
-                maxLines = 1,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = n.title?.takeIf { it.isNotBlank() } ?: n.notificationId,
+                    style = R1.body.copy(fontWeight = FontWeight.SemiBold),
+                    color = R1.Ink,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(6.dp))
+                // 'Created at' relative timestamp — surfaces 'just now'
+                // / '2 m' so the user can tell a fresh alert from a
+                // long-standing one without leaving the dashboard.
+                RelativeTimeLabel(
+                    at = n.createdAt,
+                    color = R1.InkMuted,
+                    style = R1.labelMicro,
+                )
+            }
             Text(
                 text = n.message,
                 style = R1.labelMicro,
