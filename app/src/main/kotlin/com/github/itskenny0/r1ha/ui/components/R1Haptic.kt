@@ -1,6 +1,7 @@
 package com.github.itskenny0.r1ha.ui.components
 
 import android.content.Context
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -14,143 +15,137 @@ import androidx.compose.ui.platform.LocalView
 import com.github.itskenny0.r1ha.core.util.R1Log
 
 /**
- * Direct-to-vibrator haptic helper. Most of the app's tactile feedback
- * historically went through [View.performHapticFeedback] with
- * [HapticFeedbackConstants.CLOCK_TICK], which works reliably on the R1's
- * stock LineageOS / CipherOS ROM but is gated to near-silence on many
- * vendor ROMs — Xiaomi MIUI in particular has the touch-feedback
- * channel disabled by default and ignores `performHapticFeedback` calls
- * unless the user manually turns "Haptic feedback when typing" on under
- * Settings → Sound → Vibration.
+ * Haptic helper that routes through whatever path the host device
+ * actually honours. Different Android ROMs gate different APIs:
  *
- * This helper routes through [Vibrator] directly: predefined effects
- * (`EFFECT_TICK` / `EFFECT_CLICK`) when the device advertises support,
- * one-shot pulses otherwise, and finally `performHapticFeedback` as a
- * last-resort fallback on devices without a vibrator. The `VIBRATE`
- * permission is already declared in the manifest.
+ *  - **R1 stock LineageOS / CipherOS** — both `Vibrator` and
+ *    `performHapticFeedback` work; latter was the original path.
+ *  - **Xiaomi MIUI** — `performHapticFeedback` is silenced unless the
+ *    user manually flips "Haptic feedback when typing" on; Vibrator
+ *    is the only reliable route.
+ *  - **Other LineageOS / vendor ROMs** — sometimes the inverse:
+ *    Vibrator one-shots get filtered out unless they carry a
+ *    [VibrationAttributes] with `USAGE_TOUCH`, while
+ *    `performHapticFeedback` is unaffected.
  *
- * The vibrator service is queried once per host context via the
- * [rememberHaptic] composable and cached for the rest of the screen's
- * composition — `VibratorManager.defaultVibrator` is cheap to fetch but
- * we don't need to re-grab it on every tick.
+ * So we fire *both* paths and accept that a few well-tuned devices
+ * will perceive each tap as a very slightly punchier click — that's
+ * a much better failure mode than "nothing happens" on a $300 phone
+ * because the ROM blessed the wrong API. The Vibrator call carries
+ * an explicit `USAGE_TOUCH` attribute so it honours the system-level
+ * Touch-feedback toggle exactly the way the LineageOS launcher does.
+ *
+ * `VIBRATE` permission is already declared in the manifest; minSdk 33
+ * guarantees both [VibratorManager] and [VibrationAttributes].
  */
 class R1Haptic internal constructor(
     private val vibrator: Vibrator?,
-    private val supportsPredefinedTick: Boolean,
-    private val supportsPredefinedClick: Boolean,
 ) {
-    /** Short "click" / "detent passed" feedback — wheel ticks, button
-     *  taps, scroll-position pips. Calibrated to feel like a single
-     *  satisfying click rather than a buzz. */
-    fun tick(view: View) {
-        runCatching {
-            val v = vibrator
-            if (v != null && v.hasVibrator()) {
-                val effect = if (supportsPredefinedTick) {
-                    VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
-                } else {
-                    // Soft one-shot — 12 ms is short enough to read as a
-                    // tick rather than a buzz; AMPLITUDE/2 keeps it
-                    // subtle enough not to compete with whatever the
-                    // user is doing (a fast wheel spin would otherwise
-                    // be unpleasant at full amplitude).
-                    VibrationEffect.createOneShot(12L, VibrationEffect.DEFAULT_AMPLITUDE / 2)
-                }
-                v.vibrate(effect)
-                return
-            }
-            // No vibrator on the host — fall back to performHapticFeedback
-            // so devices that DO route CLOCK_TICK through the soft-keyboard
-            // haptic channel still feel something.
-            @Suppress("DEPRECATION")
-            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-        }.onFailure {
-            R1Log.d("R1Haptic", "tick failed: ${it.message}")
-        }
-    }
 
-    /** Heavier "you held that down" feedback — long-press
-     *  context-menu, destructive action confirmations, drag-handle
-     *  pickup. Distinctly meatier than [tick] so the user can
-     *  feel the difference between a tap and a hold registering. */
-    fun longPress(view: View) {
+    /** Short "click" feedback — wheel detents, button taps, scroll
+     *  pips. Calibrated to feel like a single satisfying click rather
+     *  than a buzz. */
+    fun tick(view: View) = fire(view, tick = true)
+
+    /** Heavier "you held that down" feedback — long-press menus,
+     *  destructive-action confirmations, drag handles. Distinctly
+     *  meatier than [tick] so the user can feel the difference between
+     *  a tap registering and a hold registering. */
+    fun longPress(view: View) = fire(view, tick = false)
+
+    /** Shared core. Fires both the Vibrator (with USAGE_TOUCH so the
+     *  system honours the touch-feedback setting consistently with the
+     *  launcher) AND the View's performHapticFeedback so whichever the
+     *  host ROM actually wires up produces tactile output. */
+    private fun fire(view: View, tick: Boolean) {
+        // 1) Vibrator path. We try the predefined effect first because
+        //    on capable devices it gives a much nicer feel than a raw
+        //    one-shot, then fall back to a one-shot at a duration
+        //    that's long enough to reliably activate ERM motors (some
+        //    older LineageOS phones drop sub-15 ms pulses entirely)
+        //    while still being short enough to read as a click on LRAs.
         runCatching {
-            val v = vibrator
-            if (v != null && v.hasVibrator()) {
-                val effect = if (supportsPredefinedClick) {
-                    VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
-                } else {
-                    // 28 ms one-shot at full amplitude — feels like a
-                    // firm thump, distinct from the 12 ms tick above.
-                    VibrationEffect.createOneShot(28L, VibrationEffect.DEFAULT_AMPLITUDE)
-                }
-                v.vibrate(effect)
-                return
+            val v = vibrator ?: return@runCatching
+            if (!v.hasVibrator()) return@runCatching
+            // Always try the predefined effect — its support-detection
+            // is unreliable on enough ROMs that the check itself was
+            // skipping output on capable hardware. When the effect
+            // isn't actually supported, the system falls back to its
+            // own default vibration; only when that fails do we hit
+            // the catch and use our explicit one-shot below.
+            val attrs = VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH)
+            val predefined = if (tick) VibrationEffect.EFFECT_TICK else VibrationEffect.EFFECT_CLICK
+            val supported = v.areEffectsSupported(predefined).firstOrNull() ==
+                Vibrator.VIBRATION_EFFECT_SUPPORT_YES
+            val effect = if (supported) {
+                VibrationEffect.createPredefined(predefined)
+            } else if (tick) {
+                // 20 ms full-amplitude — reliably perceived as a single
+                // click on every common motor type. The earlier 12 ms /
+                // half-amplitude pulse was below the activation
+                // threshold on some LineageOS-on-mid-range-phone setups
+                // and the user got nothing.
+                VibrationEffect.createOneShot(20L, VibrationEffect.DEFAULT_AMPLITUDE)
+            } else {
+                // 35 ms full-amplitude for the heavier long-press. Long
+                // enough to clearly read as "different from a tap".
+                VibrationEffect.createOneShot(35L, VibrationEffect.DEFAULT_AMPLITUDE)
             }
-            @Suppress("DEPRECATION")
-            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            v.vibrate(effect, attrs)
         }.onFailure {
-            R1Log.d("R1Haptic", "longPress failed: ${it.message}")
+            R1Log.w("R1Haptic", "vibrator path failed: ${it.message}")
+        }
+
+        // 2) View.performHapticFeedback path. Cheap; on a ROM that
+        //    routes it to the same motor the Vibrator just hit, the
+        //    system typically deduplicates within its scheduling
+        //    window. On a ROM that silently drops the Vibrator path
+        //    (some vendor builds), this is what actually fires. The
+        //    @Suppress is required because CLOCK_TICK was deprecated in
+        //    API 34 in favour of CONTEXT_CLICK; we accept both since
+        //    different ROMs honour different constants.
+        runCatching {
+            @Suppress("DEPRECATION")
+            val constant = if (tick) {
+                HapticFeedbackConstants.CLOCK_TICK
+            } else {
+                HapticFeedbackConstants.LONG_PRESS
+            }
+            view.performHapticFeedback(constant)
+        }.onFailure {
+            R1Log.d("R1Haptic", "performHapticFeedback failed: ${it.message}")
         }
     }
 
     companion object {
         /** Build an [R1Haptic] from a [Context]. Resolves the
-         *  [VibratorManager] (minSdk 33 guarantees it's available) and
-         *  probes the device's effect-support table once. */
+         *  [VibratorManager] once; minSdk 33 guarantees it's
+         *  available. */
         fun from(context: Context): R1Haptic {
             val mgr = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-            val vibrator = mgr?.defaultVibrator
-            // areEffectsSupported returns SUPPORTED / NOT_SUPPORTED /
-            // UNKNOWN per effect — only treat SUPPORTED as a hit. For
-            // UNKNOWN we fall through to the one-shot path which is
-            // universally implementable, so we get a tick either way.
-            val supportsTick: Boolean
-            val supportsClick: Boolean
-            if (vibrator == null) {
-                supportsTick = false
-                supportsClick = false
-            } else {
-                val results = runCatching {
-                    vibrator.areEffectsSupported(
-                        VibrationEffect.EFFECT_TICK,
-                        VibrationEffect.EFFECT_CLICK,
-                    )
-                }.getOrNull()
-                supportsTick = results?.getOrNull(0) == Vibrator.VIBRATION_EFFECT_SUPPORT_YES
-                supportsClick = results?.getOrNull(1) == Vibrator.VIBRATION_EFFECT_SUPPORT_YES
-            }
-            return R1Haptic(vibrator, supportsTick, supportsClick)
+            return R1Haptic(mgr?.defaultVibrator)
         }
     }
 }
 
 /** Composable accessor — caches an [R1Haptic] for the lifetime of the
- *  current composition. Each pressable widget calls this once and uses
- *  the result for every tap/long-press during its lifetime. */
+ *  current composition. ReadOnlyComposable form for sites that only
+ *  read the haptic once. */
 @Composable
 @ReadOnlyComposable
-fun rememberHaptic(): R1Haptic {
-    // ReadOnlyComposable is fine here because we're only reading the
-    // composition-local LocalContext — no state writes — and the
-    // `remember`-equivalent caching happens inside the actual composable
-    // call sites that need it (each calls rememberR1Haptic which uses
-    // remember; this overload is for ReadOnlyComposable sites only).
-    return R1Haptic.from(LocalContext.current)
-}
+fun rememberHaptic(): R1Haptic = R1Haptic.from(LocalContext.current)
 
-/** Stateful variant — use this from regular composables. Caches the
- *  haptic so we don't re-probe the vibrator's effect-support table on
- *  every recomposition. */
+/** Stateful variant — use from regular composables. Caches the haptic
+ *  so we don't re-fetch the VibratorManager on every recomposition. */
 @Composable
 fun rememberR1Haptic(): R1Haptic {
     val context = LocalContext.current
     return remember(context) { R1Haptic.from(context) }
 }
 
-/** Convenience — combines [rememberR1Haptic] with [LocalView] so a
- *  call site only needs a single helper invocation. Returns a lambda
- *  that fires a tick haptic when invoked. */
+/** Convenience — combines [rememberR1Haptic] with [LocalView] so a call
+ *  site only needs one helper invocation. Returns a lambda that fires a
+ *  tick when invoked. */
 @Composable
 fun rememberTickHaptic(): () -> Unit {
     val haptic = rememberR1Haptic()
@@ -158,8 +153,7 @@ fun rememberTickHaptic(): () -> Unit {
     return remember(haptic, view) { { haptic.tick(view) } }
 }
 
-/** Same shape as [rememberTickHaptic] but fires the heavier long-press
- *  effect. Use from long-press handlers and destructive-confirm sites. */
+/** Heavier long-press equivalent of [rememberTickHaptic]. */
 @Composable
 fun rememberLongPressHaptic(): () -> Unit {
     val haptic = rememberR1Haptic()
