@@ -164,6 +164,27 @@ fun CardStackScreen(
     val jumpPickerOpen = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf(false)
     }
+    // "Any pager mid-animation" gates wheel events. Two writers feed this:
+    //   - the screen-level HorizontalPager (tab swipes) — wired below
+    //     where the pager state itself is created
+    //   - the active PageDeck's VerticalPager (card swipes) — wired
+    //     from inside PageDeck when isActive == true
+    //
+    // The race we're closing: vm.state.activeState is computed from
+    // state.currentIndex / state.activePageId, both of which only
+    // update on the corresponding pager's SETTLE event. If the user
+    // released a swipe and started spinning the wheel mid-fling,
+    // activeState was the previous card while the user was already
+    // looking at the next one — modifications landed on the wrong
+    // entity and looked like "the app jumped". Dropping wheel events
+    // while a pager is in flight makes the active-card identity
+    // reliable: when the user spins, they always edit what they see.
+    val horizontalPagerAnimating = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    val verticalPagerAnimating = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
     val pagerScope = androidx.compose.runtime.rememberCoroutineScope()
     LaunchedEffect(Unit) {
         wheelInput.events.collect { event ->
@@ -176,6 +197,18 @@ fun CardStackScreen(
             // user knows something went wrong without losing wheel input
             // entirely.
             runCatching {
+            // Pager-animation gate. If either the horizontal tab pager
+            // or the active vertical card pager is mid-fling, vm.state
+            // .activeState still reflects the card the user left, not
+            // the card they can now see — letting a wheel event through
+            // here would modify a card the user isn't even looking at
+            // and read as "the app jumped to a different card or tab".
+            // Drop the event silently; the user will spin again once
+            // the pager settles, by which point activeState has
+            // updated via setCurrentIndex / setActivePage.
+            if (horizontalPagerAnimating.value || verticalPagerAnimating.value) {
+                return@collect
+            }
             val active = vm.state.value.activeState
             val dir = event.direction
             // Wheel never navigates the deck — that's swipe-and-tap-the-pip only. So
@@ -502,6 +535,16 @@ fun CardStackScreen(
                             firstSettle = false
                         }
                 }
+                // Mirror the horizontal pager's animation state into the
+                // screen-level gate read by the wheel handler. Without
+                // this, wheel events fired during a tab fling land on
+                // the previous tab's active card instead of the one the
+                // user just swiped to.
+                androidx.compose.runtime.LaunchedEffect(horizontalPagerState) {
+                    snapshotFlow { horizontalPagerState.isScrollInProgress }
+                        .distinctUntilChanged()
+                        .collect { horizontalPagerAnimating.value = it }
+                }
                 androidx.compose.foundation.pager.HorizontalPager(
                     state = horizontalPagerState,
                     modifier = Modifier.fillMaxSize(),
@@ -568,6 +611,15 @@ fun CardStackScreen(
                             navRequests = pagerNavRequests,
                             jumpRequests = jumpRequests,
                             lightWheelModes = state.lightWheelMode,
+                            // Only the active deck's pager state gates the
+                            // wheel — neighbour decks (peek-composed via
+                            // beyondViewportPageCount = 1) animate
+                            // independently and shouldn't affect input
+                            // routing on the page the user is actually
+                            // looking at.
+                            onActivePagerAnimatingChange = { animating ->
+                                verticalPagerAnimating.value = animating
+                            },
                         )
                     }
                 }
@@ -882,6 +934,14 @@ private fun PageDeck(
     navRequests: kotlinx.coroutines.flow.SharedFlow<Int>,
     jumpRequests: kotlinx.coroutines.flow.SharedFlow<Int>,
     lightWheelModes: Map<com.github.itskenny0.r1ha.core.ha.EntityId, com.github.itskenny0.r1ha.core.ha.LightWheelMode>,
+    /** Reports VerticalPager animation state up to the screen-level
+     *  wheel handler. Only the active deck pushes through (the
+     *  effect is gated on isActive below) so a neighbour deck's
+     *  initial-settle doesn't accidentally lock out input on the page
+     *  the user can see. The reported boolean is true while the user's
+     *  swipe is mid-fling and clears when the pager settles on its
+     *  target page. */
+    onActivePagerAnimatingChange: (Boolean) -> Unit,
 ) {
     // One pager state per page, keyed on pageId + infinite-scroll mode + the
     // presence of cards. Re-keying on the card-presence boolean (rather than
@@ -934,6 +994,23 @@ private fun PageDeck(
                 val idx = realIndexOf(page)
                 if (isActive) vm.setCurrentIndex(idx) else vm.setIndexForPage(pageId, idx)
             }
+    }
+    // Stream the pager's isScrollInProgress up to the screen-level
+    // wheel handler — only while this deck is the active one. The
+    // wheel handler drops events while this is true so a wheel spin
+    // mid-fling doesn't land on the previous card. Resetting to false
+    // when isActive flips off prevents a stale "true" leaking into the
+    // wheel gate after a tab switch (we'd otherwise rely on the next
+    // settle to clear it, which on a peek-composed neighbour may not
+    // happen for a while).
+    LaunchedEffect(pagerState, isActive) {
+        if (!isActive) {
+            onActivePagerAnimatingChange(false)
+            return@LaunchedEffect
+        }
+        snapshotFlow { pagerState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { onActivePagerAnimatingChange(it) }
     }
     // Wheel-as-navigation, fired from CardStackScreen when the active card is read-only.
     // animateScrollToPage so the transition is the same gentle spring the user gets when
