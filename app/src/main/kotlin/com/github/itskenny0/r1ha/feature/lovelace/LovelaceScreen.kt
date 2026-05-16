@@ -72,9 +72,19 @@ fun LovelaceScreen(
     val serverUrl by produceState<String?>(null, settings) {
         value = runCatching { settings.settings.first().server?.url }.getOrNull()
     }
-    val accessToken by produceState<String?>(null, tokens) {
-        value = runCatching { tokens.load()?.accessToken }.getOrNull()
+    // Pull both the access AND refresh tokens — the refresh token is
+    // what lets HA's frontend keep its own session alive past the
+    // access_token expiry (typically 30 min). Without it the user
+    // would have to OAuth a second time inside the WebView after
+    // half an hour.
+    val tokenPair by produceState<Pair<String?, String?>?>(null, tokens) {
+        value = runCatching {
+            val t = tokens.load() ?: return@runCatching null to null
+            t.accessToken to t.refreshToken.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
+    val accessToken = tokenPair?.first
+    val refreshToken = tokenPair?.second
     var loading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val onBackState = rememberUpdatedState(onBack)
@@ -106,6 +116,7 @@ fun LovelaceScreen(
             LovelaceWebView(
                 serverUrl = url,
                 accessToken = accessToken,
+                refreshToken = refreshToken,
                 onLoadingChange = { loading = it },
                 onError = { errorMessage = it },
                 onBackHandled = { onBackState.value() },
@@ -149,6 +160,7 @@ fun LovelaceScreen(
 private fun LovelaceWebView(
     serverUrl: String,
     accessToken: String?,
+    refreshToken: String?,
     onLoadingChange: (Boolean) -> Unit,
     onError: (String) -> Unit,
     onBackHandled: () -> Unit,
@@ -175,15 +187,26 @@ private fun LovelaceWebView(
                     // a far-future expiry so the frontend doesn't try
                     // to refresh.
                     if (!accessToken.isNullOrBlank()) {
+                        // Build the hassTokens envelope HA's frontend
+                        // reads from localStorage on bootstrap. Passing
+                        // refresh_token + a realistic expires_in lets
+                        // the frontend's own refresh path kick in when
+                        // the access token expires, so the user doesn't
+                        // get bounced to a login screen after ~30 min.
+                        // `expires` is the absolute wall-clock millis at
+                        // which the access_token expires; computed as
+                        // now + 30 min so the frontend triggers a
+                        // refresh before our copy expires.
+                        val expiresAt = System.currentTimeMillis() + 30 * 60 * 1000
                         val script = "javascript:localStorage.setItem('hassTokens', " +
                             "JSON.stringify({" +
-                            "access_token: '$accessToken'," +
+                            "access_token: ${jsString(accessToken)}," +
                             "token_type: 'Bearer'," +
                             "expires_in: 1800," +
-                            "refresh_token: ''," +
-                            "hassUrl: '${serverUrl.trimEnd('/')}'," +
+                            "refresh_token: ${jsString(refreshToken ?: "")}," +
+                            "hassUrl: ${jsString(serverUrl.trimEnd('/'))}," +
                             "clientId: null," +
-                            "expires: 99999999999999" +
+                            "expires: $expiresAt" +
                             "}))"
                         view.evaluateJavascript(script.removePrefix("javascript:")) { }
                     }
@@ -227,3 +250,14 @@ private fun LovelaceWebView(
 
     AndroidView(factory = { webView }, modifier = modifier)
 }
+
+/** Quote-and-escape a value for safe embedding in the JavaScript
+ *  injection script. JSON.stringify would round-trip the token's
+ *  hex characters fine, but we'd still need to wrap the result in
+ *  string-quote delimiters; doing the escape ourselves keeps the
+ *  injection compact. The token alphabet is base64-ish (alnum +
+ *  `-_./=`) so the only escapes that bite are quote + backslash;
+ *  we cover both defensively. */
+private fun jsString(raw: String): String =
+    "\"" + raw.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
