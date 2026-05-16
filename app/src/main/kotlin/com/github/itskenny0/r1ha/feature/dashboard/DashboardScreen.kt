@@ -154,6 +154,37 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (ds.showGreeting) Greeting()
+                // Error banner — surfaces a failed refresh in StatusRed so
+                // the user knows why the dashboard is sparse, rather than
+                // being left wondering whether HA actually has no data or
+                // the app just failed to fetch. Sits below the greeting so
+                // the screen still feels like itself; clearing the error
+                // happens automatically on the next successful refresh.
+                if (ui.error != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(R1.ShapeS)
+                            .background(R1.StatusRed.copy(alpha = 0.18f))
+                            .border(1.dp, R1.StatusRed.copy(alpha = 0.4f), R1.ShapeS)
+                            .r1Pressable(onClick = { vm.refresh() })
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Column {
+                            Text(
+                                text = "Dashboard refresh failed — tap to retry.",
+                                style = R1.body,
+                                color = R1.StatusRed,
+                            )
+                            Text(
+                                text = ui.error ?: "",
+                                style = R1.labelMicro,
+                                color = R1.InkSoft,
+                                maxLines = 2,
+                            )
+                        }
+                    }
+                }
                 if (ds.showWeather) ui.weather?.let { WeatherCard(it, onClick = onOpenWeather) }
                 if (ds.showSun) ui.sun?.let { SunCard(it) }
                 if (ds.showTimers && ui.timers.isNotEmpty()) {
