@@ -98,14 +98,28 @@ fun EntityPickerSheet(
                 color = R1.InkSoft,
             )
             Spacer(Modifier.height(10.dp))
-            R1TextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = "kitchen, fan, scene…",
-                monospace = false,
-                focusRequester = focus,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.weight(1f)) {
+                    R1TextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = "kitchen, fan, scene…",
+                        monospace = false,
+                        focusRequester = focus,
+                    )
+                }
+                if (query.isNotEmpty()) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .r1Pressable(onClick = { query = "" }),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(text = "✕", style = R1.labelMicro, color = R1.InkSoft)
+                    }
+                }
+            }
             Spacer(Modifier.height(8.dp))
             val all = entities
             when {
