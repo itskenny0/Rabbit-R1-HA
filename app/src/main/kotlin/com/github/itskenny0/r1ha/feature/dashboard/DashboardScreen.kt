@@ -56,6 +56,10 @@ fun DashboardScreen(
     onOpenCameras: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenScenes: () -> Unit,
+    /** Tap the DRAW tile in MetricsRow → Energy summary surface
+     *  (production, today's kWh, top consumers). Same data the
+     *  DRAW tile already shows, just expanded. */
+    onOpenEnergy: () -> Unit = {},
     /** Cards icon — opens the card stack from anywhere on the
      *  dashboard. Critical for the kiosk-mode 'Start on Dashboard'
      *  path where the back button has no card stack on the back
@@ -238,6 +242,7 @@ fun DashboardScreen(
                         onLightsLongPress = { vm.allLightsOff() },
                         onCameras = onOpenCameras,
                         onNotifications = onOpenNotifications,
+                        onPower = onOpenEnergy,
                     )
                 }
                 if (ds.showLowBattery && ui.lowBatteries.isNotEmpty()) {
@@ -875,9 +880,12 @@ private fun MetricsRow(
     onLightsLongPress: () -> Unit,
     onCameras: () -> Unit,
     onNotifications: () -> Unit,
+    onPower: () -> Unit = {},
 ) {
     // Power tile sits on its own row when present (wider value display).
-    // Hidden entirely when the install has no power-class sensors.
+    // Hidden entirely when the install has no power-class sensors. Tap
+    // routes to the Energy summary — same data but with production +
+    // top consumers + today's kWh.
     if (totalPowerW >= 0) {
         Box(
             modifier = Modifier
@@ -885,6 +893,7 @@ private fun MetricsRow(
                 .clip(R1.ShapeS)
                 .background(R1.SurfaceMuted)
                 .border(1.dp, R1.Hairline, R1.ShapeS)
+                .r1Pressable(onClick = onPower)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
