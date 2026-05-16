@@ -94,6 +94,7 @@ fun CardStackScreen(
     onOpenEnergy: () -> Unit = {},
     onOpenScenes: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
+    onOpenZones: () -> Unit = {},
 ) {
     val vm: CardStackViewModel = viewModel(
         factory = CardStackViewModel.factory(
@@ -936,6 +937,10 @@ fun CardStackScreen(
                 onOpenNotifications = {
                     quickActionsOpen.value = false
                     onOpenNotifications()
+                },
+                onOpenZones = {
+                    quickActionsOpen.value = false
+                    onOpenZones()
                 },
                 onAllOn = {
                     vm.turnOnActivePage()
@@ -2104,6 +2109,7 @@ private fun QuickActionsSheet(
     onOpenEnergy: () -> Unit,
     onOpenScenes: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenZones: () -> Unit,
     onAllOn: () -> Unit,
     onAllOff: () -> Unit,
     onPauseMedia: () -> Unit,
@@ -2176,11 +2182,7 @@ private fun QuickActionsSheet(
                 DrawerGlyph(modifier = Modifier.weight(1f), glyph = "⚙", label = "AUTO", onClick = onOpenAutomations)
                 DrawerGlyph(modifier = Modifier.weight(1f), glyph = "⚡", label = "ENERGY", onClick = onOpenEnergy)
                 DrawerGlyph(modifier = Modifier.weight(1f), glyph = "🔔", label = "ALERTS", onClick = onOpenNotifications)
-                // Filler — empty slot reserved for a future shortcut
-                // (Cameras / Logbook / Helpers). Keeps the 4-column
-                // grid balanced rather than letting the last row of 3
-                // expand unevenly.
-                Spacer(Modifier.weight(1f))
+                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "📍", label = "ZONES", onClick = onOpenZones)
             }
             Spacer(Modifier.height(14.dp))
             // 'Turn all on' — one-tap fire. Lights/switches/fans coming on

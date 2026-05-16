@@ -104,6 +104,9 @@ fun AppNavGraph(
                 onOpenNotifications = {
                     navController.navigate(Routes.NOTIFICATIONS) { launchSingleTop = true }
                 },
+                onOpenZones = {
+                    navController.navigate(Routes.ZONES) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.FAVORITES_PICKER) {
