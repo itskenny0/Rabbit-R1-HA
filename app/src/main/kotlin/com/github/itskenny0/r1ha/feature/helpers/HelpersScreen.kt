@@ -252,20 +252,27 @@ private fun HelperRow(
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(6.dp))
-            // ☆ pin-to-favourites — for helpers whose card archetype
-            // works on the stack (toggles, sliders, timers,
-            // selects). Glyph flips to ★ when pinned.
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .r1Pressable(onClick = { vm.addToFavorites(entry) }),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (isFavorite) "★" else "☆",
-                    style = R1.labelMicro,
-                    color = if (isFavorite) R1.AccentWarm else R1.InkSoft,
-                )
+            // ☆ pin-to-favourites — only for helpers whose entity_id
+            // domain is recognised by the card stack (input_boolean
+            // renders as SwitchCard, input_number as a scalar slider,
+            // input_select as SelectCard, input_button as ActionCard).
+            // counter / timer / input_text / input_datetime aren't on
+            // the card stack's supported-domain list yet, so the star
+            // would silently no-op for those — hide it instead of
+            // misleading the user.
+            if (entry.kind in CARD_STACK_FRIENDLY_KINDS) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .r1Pressable(onClick = { vm.addToFavorites(entry) }),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (isFavorite) "★" else "☆",
+                        style = R1.labelMicro,
+                        color = if (isFavorite) R1.AccentWarm else R1.InkSoft,
+                    )
+                }
             }
             Spacer(Modifier.width(4.dp))
             Text(
@@ -495,3 +502,16 @@ private fun accentForKind(kind: HelpersViewModel.Kind): androidx.compose.ui.grap
         HelpersViewModel.Kind.TIMER -> R1.AccentWarm
         HelpersViewModel.Kind.UNKNOWN -> R1.InkMuted
     }
+
+/** Helper kinds whose entity-id domain is on the card-stack's supported
+ *  list (see `core/ha/EntityDomain.kt`). Pinning a helper of one of
+ *  these kinds drops a usable card on the active page; pinning anything
+ *  else (counter / timer / input_text / input_datetime) would land on
+ *  the favourites list but never render because EntityId construction
+ *  would silently filter it out. */
+private val CARD_STACK_FRIENDLY_KINDS = setOf(
+    HelpersViewModel.Kind.BOOLEAN,
+    HelpersViewModel.Kind.NUMBER,
+    HelpersViewModel.Kind.SELECT,
+    HelpersViewModel.Kind.BUTTON,
+)
