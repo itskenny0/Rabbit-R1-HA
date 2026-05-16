@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import com.github.itskenny0.r1ha.ui.components.ToastHost
@@ -128,15 +129,35 @@ class MainActivity : ComponentActivity() {
                     // overlay every navigated screen. The toast bus is process-
                     // scoped (see R1Toast); the host just renders whatever event
                     // it last received as long as the toast feature is enabled.
-                    Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
-                        AppNavGraph(
-                            navController = navController,
-                            startDestination = startDestination,
-                            haRepository = graph.haRepository,
-                            settings = graph.settings,
-                            tokens = graph.tokens,
-                            wheelInput = graph.wheelInput,
-                        )
+                    //
+                    // On the R1 (≤ 360 dp wide) the ResponsiveColumn wrapper is
+                    // a passthrough — every screen renders bit-for-bit
+                    // identical to before. On larger displays (phones,
+                    // tablets) the wrapper paints the bezel area with the
+                    // theme background and centres each screen inside a
+                    // bounded column so the layout stays legible instead of
+                    // stretching widgets across a 1200 dp panel. Per-screen
+                    // exceptions can opt out by reading currentWidthTier()
+                    // directly (Cameras GRID does this to keep its grid
+                    // column count adaptive without losing the centering).
+                    Box(
+                        modifier = androidx.compose.ui.Modifier
+                            .fillMaxSize()
+                            .background(com.github.itskenny0.r1ha.core.theme.R1.Bg),
+                    ) {
+                        com.github.itskenny0.r1ha.ui.layout.ResponsiveColumn {
+                            AppNavGraph(
+                                navController = navController,
+                                startDestination = startDestination,
+                                haRepository = graph.haRepository,
+                                settings = graph.settings,
+                                tokens = graph.tokens,
+                                wheelInput = graph.wheelInput,
+                            )
+                        }
+                        // Toast host sits OUTSIDE the responsive column so
+                        // toasts always pop at the device's true screen
+                        // edges, not the centred column's edges.
                         ToastHost()
                     }
                 }
@@ -191,6 +212,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Wall-clock of the last VOLUME-driven wheel emit, per direction.
+     *  Lets us throttle the framework's ~30 Hz auto-repeat down to a
+     *  more sensible cadence while still letting a held button drive
+     *  continuous motion on phones / tablets (the R1's physical wheel
+     *  emits each detent as a discrete ACTION_DOWN so this only kicks
+     *  in for VOLUME keycodes). */
+    private var lastVolumeRepeatUp: Long = 0L
+    private var lastVolumeRepeatDown: Long = 0L
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         // Honour the user's "Key source" setting (AUTO = both, DPAD = only D-pad keys, VOLUME =
         // only volume keys). Filtered-out keycodes fall through to super so the system can act
@@ -201,18 +231,24 @@ class MainActivity : ComponentActivity() {
         val acceptsVolume = src == WheelKeySource.AUTO || src == WheelKeySource.VOLUME
         val isDown = event.action == KeyEvent.ACTION_DOWN
         // For physical VOLUME buttons, the framework synthesises auto-repeat events at ~30 Hz
-        // when the user holds the button — those have repeatCount > 0 and would run the
-        // brightness away if we fired on each one. The wheel emits each detent as a separate
-        // ACTION_DOWN with repeatCount=0, so we DO NOT apply this filter to DPAD keycodes
-        // (the wheel's typical mapping) — a buggy driver that emits repeatCount>0 per detent
-        // would otherwise silently lose every other wheel event.
+        // when the user holds the button. Firing on every repeat would run brightness/volume
+        // away in milliseconds; ignoring every repeat (the original behaviour) forced the user
+        // to tap the button N times to make a meaningful adjustment on a phone/tablet. We
+        // compromise: emit on every initial press (repeatCount == 0) AND throttle the
+        // auto-repeat stream to ~8 Hz so a held button gives smooth, controllable motion.
+        //
+        // The R1's physical wheel maps to DPAD keycodes and emits each detent as a separate
+        // ACTION_DOWN with repeatCount=0 — those bypass the throttle entirely so a fast spin
+        // never loses an event.
         return when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> if (acceptsDpad) {
                 if (isDown) graph.wheelInput.emit(WheelEvent.Direction.UP)
                 true
             } else super.dispatchKeyEvent(event)
             KeyEvent.KEYCODE_VOLUME_UP -> if (acceptsVolume) {
-                if (isDown && event.repeatCount == 0) graph.wheelInput.emit(WheelEvent.Direction.UP)
+                if (isDown && shouldEmitVolumeRepeat(event, isUp = true)) {
+                    graph.wheelInput.emit(WheelEvent.Direction.UP)
+                }
                 true
             } else super.dispatchKeyEvent(event)
             KeyEvent.KEYCODE_DPAD_DOWN -> if (acceptsDpad) {
@@ -220,10 +256,42 @@ class MainActivity : ComponentActivity() {
                 true
             } else super.dispatchKeyEvent(event)
             KeyEvent.KEYCODE_VOLUME_DOWN -> if (acceptsVolume) {
-                if (isDown && event.repeatCount == 0) graph.wheelInput.emit(WheelEvent.Direction.DOWN)
+                if (isDown && shouldEmitVolumeRepeat(event, isUp = false)) {
+                    graph.wheelInput.emit(WheelEvent.Direction.DOWN)
+                }
                 true
             } else super.dispatchKeyEvent(event)
             else -> super.dispatchKeyEvent(event)
         }
+    }
+
+    /** Decide whether this VOLUME ACTION_DOWN should produce a wheel
+     *  emit. The first press (repeatCount == 0) always fires. Subsequent
+     *  framework-synthesised repeats are accepted at most every
+     *  [VOLUME_REPEAT_MIN_MS] ms — calibrated to ~8 Hz which feels like
+     *  a controllable manual dial spin rather than a runaway. */
+    private fun shouldEmitVolumeRepeat(event: KeyEvent, isUp: Boolean): Boolean {
+        if (event.repeatCount == 0) {
+            // Reset the throttle so the first press is always honoured
+            // AND the next auto-repeat measures its delta from this
+            // moment instead of any stale previous-burst timestamp.
+            if (isUp) lastVolumeRepeatUp = event.eventTime
+            else lastVolumeRepeatDown = event.eventTime
+            return true
+        }
+        val last = if (isUp) lastVolumeRepeatUp else lastVolumeRepeatDown
+        val delta = event.eventTime - last
+        if (delta < VOLUME_REPEAT_MIN_MS) return false
+        if (isUp) lastVolumeRepeatUp = event.eventTime
+        else lastVolumeRepeatDown = event.eventTime
+        return true
+    }
+
+    companion object {
+        /** Minimum gap between successive wheel emits when a VOLUME
+         *  button is held. ~130 ms ≈ 7.7 Hz — the same cadence a
+         *  practised thumb on the R1's physical wheel can manage, so
+         *  the held-volume-button feel matches a manual spin. */
+        private const val VOLUME_REPEAT_MIN_MS = 130L
     }
 }

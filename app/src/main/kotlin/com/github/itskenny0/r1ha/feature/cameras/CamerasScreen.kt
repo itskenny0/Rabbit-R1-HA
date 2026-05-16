@@ -171,7 +171,13 @@ fun CamerasScreen(
             ) {
                 LazyVerticalGrid(
                     state = gridState,
-                    columns = GridCells.Fixed(2),
+                    // Column count adapts to the host width so tablets
+                    // actually use the extra horizontal space — R1 stays
+                    // at 2 columns (today's layout), phones stay at 2,
+                    // tablets jump to 3 inside the responsive column.
+                    columns = GridCells.Fixed(
+                        com.github.itskenny0.r1ha.ui.layout.gridColumnsFor(),
+                    ),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         horizontal = 8.dp, vertical = 6.dp,
