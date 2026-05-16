@@ -85,6 +85,15 @@ fun CardStackScreen(
     /** Tap the chrome's mic glyph to open the HA Assist surface
      *  directly. Default no-op for previews. */
     onOpenAssist: () -> Unit = {},
+    /** Browse-everything sheet shortcuts. The QuickActions sheet
+     *  (long-press hamburger) doubles as a navigation drawer in the
+     *  HA-Companion idiom; these callbacks are routed from there so
+     *  the user can jump to every major surface without first
+     *  walking through Settings. */
+    onOpenAutomations: () -> Unit = {},
+    onOpenEnergy: () -> Unit = {},
+    onOpenScenes: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
 ) {
     val vm: CardStackViewModel = viewModel(
         factory = CardStackViewModel.factory(
@@ -903,6 +912,30 @@ fun CardStackScreen(
                 onOpenDashboard = {
                     quickActionsOpen.value = false
                     onOpenDashboard()
+                },
+                onOpenAssist = {
+                    quickActionsOpen.value = false
+                    onOpenAssist()
+                },
+                onOpenSearch = {
+                    quickActionsOpen.value = false
+                    onOpenSearch()
+                },
+                onOpenAutomations = {
+                    quickActionsOpen.value = false
+                    onOpenAutomations()
+                },
+                onOpenEnergy = {
+                    quickActionsOpen.value = false
+                    onOpenEnergy()
+                },
+                onOpenScenes = {
+                    quickActionsOpen.value = false
+                    onOpenScenes()
+                },
+                onOpenNotifications = {
+                    quickActionsOpen.value = false
+                    onOpenNotifications()
                 },
                 onAllOn = {
                     vm.turnOnActivePage()
@@ -2023,10 +2056,41 @@ private fun CardContextMenu(
 }
 
 /**
+ * Two-line tile — emoji glyph stacked above an all-caps label, both
+ * inside the same tappable surface. Used by [QuickActionsSheet]'s
+ * BROWSE grid so the four shortcuts in each row read as a navigation
+ * cluster rather than four bare text buttons. Same scale-on-press
+ * idiom as the rest of the chrome (r1Pressable).
+ */
+@Composable
+private fun DrawerGlyph(
+    modifier: Modifier,
+    glyph: String,
+    label: String,
+    onClick: () -> Unit,
+) {
+    androidx.compose.foundation.layout.Column(
+        modifier = modifier
+            .clip(R1.ShapeS)
+            .background(R1.Bg)
+            .border(1.dp, R1.Hairline, R1.ShapeS)
+            .r1Pressable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(text = glyph, style = R1.body)
+        Text(text = label, style = R1.labelMicro, color = R1.InkSoft)
+    }
+}
+
+/**
  * Quick-actions sheet — opened by long-pressing the chrome hamburger.
- * Currently exposes a single 'turn off everything on this page' action with
- * a two-stage confirm. Designed to grow over time: future actions could
- * include 'all-on for night mode', 'lock all', 'pause all media'.
+ * Doubles as the app's navigation drawer in the HA-Companion idiom:
+ *   - BROWSE grid (2×4) of major-surface shortcuts (Today, Assist,
+ *     Search, Scenes, Automations, Energy, Alerts)
+ *   - ACTIONS list of one-tap operations against the active page
+ *     (Turn All On, Pause N media, Turn All Off with confirm)
  */
 @Composable
 private fun QuickActionsSheet(
@@ -2034,6 +2098,12 @@ private fun QuickActionsSheet(
     cardCount: Int,
     playingMediaCount: Int,
     onOpenDashboard: () -> Unit,
+    onOpenAssist: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenAutomations: () -> Unit,
+    onOpenEnergy: () -> Unit,
+    onOpenScenes: () -> Unit,
+    onOpenNotifications: () -> Unit,
     onAllOn: () -> Unit,
     onAllOff: () -> Unit,
     onPauseMedia: () -> Unit,
@@ -2074,18 +2144,39 @@ private fun QuickActionsSheet(
                 style = R1.body,
                 color = R1.InkSoft,
             )
-            Spacer(Modifier.height(14.dp))
-            // 'TODAY' — opens the at-a-glance dashboard (weather, people,
-            // next event, alerts). Lifted above turn-all-on so it reads
-            // as the awareness action, separate from the change-state
-            // actions below.
-            R1Button(
-                text = "TODAY · DASHBOARD",
-                onClick = onOpenDashboard,
+            Spacer(Modifier.height(12.dp))
+
+            // ── BROWSE row — 2×4 grid of icon-glyph nav shortcuts ──
+            // These doubles as the HA-Companion-style 'drawer'
+            // navigation: every major surface is reachable from one
+            // long-press on the chrome hamburger. Two rows of four so
+            // they fit on a single screen of the R1's portrait display.
+            Text(text = "BROWSE", style = R1.labelMicro, color = R1.InkSoft)
+            Spacer(Modifier.height(6.dp))
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                variant = com.github.itskenny0.r1ha.ui.components.R1ButtonVariant.Outlined,
-            )
-            Spacer(Modifier.height(8.dp))
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "🏠", label = "TODAY", onClick = onOpenDashboard)
+                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "🎤", label = "ASSIST", onClick = onOpenAssist)
+                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "🔍", label = "SEARCH", onClick = onOpenSearch)
+                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "🎬", label = "SCENES", onClick = onOpenScenes)
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "⚙", label = "AUTO", onClick = onOpenAutomations)
+                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "⚡", label = "ENERGY", onClick = onOpenEnergy)
+                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "🔔", label = "ALERTS", onClick = onOpenNotifications)
+                // Filler — empty slot reserved for a future shortcut
+                // (Cameras / Logbook / Helpers). Keeps the 4-column
+                // grid balanced rather than letting the last row of 3
+                // expand unevenly.
+                Spacer(Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(14.dp))
             // 'Turn all on' — one-tap fire. Lights/switches/fans coming on
             // accidentally is recoverable (re-tap the card or the all-off
             // route), so the safety bar can be lower than for turn-off.

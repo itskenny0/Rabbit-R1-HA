@@ -63,6 +63,12 @@ fun LogbookScreen(
     settings: SettingsRepository,
     wheelInput: WheelInput,
     onBack: () -> Unit,
+    /** Optional callback to drill into the entity's full History
+     *  surface — wired from AppNavGraph. The row's tap action becomes
+     *  "drill into history" instead of just showing a detail toast,
+     *  closing the loop between "what just changed" and "what was it
+     *  doing earlier today". */
+    onOpenHistory: (entityId: String) -> Unit = {},
 ) {
     val vm: LogbookViewModel = viewModel(factory = LogbookViewModel.factory(haRepository, settings))
     val ui by vm.ui.collectAsState()
@@ -174,7 +180,17 @@ fun LogbookScreen(
                     ) { entry ->
                         LogbookRow(
                             entry,
-                            onTap = { vm.showDetail(entry) },
+                            // Tap drills into the entity's history — feels
+                            // like a natural follow-on from 'I just saw
+                            // this state-change'. Falls back to the
+                            // detail toast for entries without an
+                            // entity_id (typical for system events,
+                            // automation triggers without a target).
+                            onTap = {
+                                val eid = entry.entityId?.value
+                                if (!eid.isNullOrBlank()) onOpenHistory(eid)
+                                else vm.showDetail(entry)
+                            },
                             onLongPress = { openInHa(entry) },
                         )
                     }

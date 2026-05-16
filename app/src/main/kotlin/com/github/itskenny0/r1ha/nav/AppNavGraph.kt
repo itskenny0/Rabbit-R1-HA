@@ -65,6 +65,18 @@ fun AppNavGraph(
                 onOpenAssist = {
                     navController.navigate(Routes.ASSIST) { launchSingleTop = true }
                 },
+                onOpenAutomations = {
+                    navController.navigate(Routes.AUTOMATIONS) { launchSingleTop = true }
+                },
+                onOpenEnergy = {
+                    navController.navigate(Routes.ENERGY) { launchSingleTop = true }
+                },
+                onOpenScenes = {
+                    navController.navigate(Routes.SCENES) { launchSingleTop = true }
+                },
+                onOpenNotifications = {
+                    navController.navigate(Routes.NOTIFICATIONS) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.FAVORITES_PICKER) {
@@ -201,6 +213,9 @@ fun AppNavGraph(
                 settings = settings,
                 wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
+                onOpenHistory = { eid ->
+                    navController.navigate(Routes.historyRoute(eid)) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.TEMPLATE) {
