@@ -159,6 +159,9 @@ fun AppNavGraph(
                 onOpenZones = {
                     navController.navigate(Routes.ZONES) { launchSingleTop = true }
                 },
+                onOpenLovelace = {
+                    navController.navigate(Routes.LOVELACE) { launchSingleTop = true }
+                },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
                     // popped back to; then land fresh on Onboarding.
@@ -351,6 +354,13 @@ fun AppNavGraph(
                 haRepository = haRepository,
                 settings = settings,
                 wheelInput = wheelInput,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.LOVELACE) {
+            com.github.itskenny0.r1ha.feature.lovelace.LovelaceScreen(
+                settings = settings,
+                tokens = tokens,
                 onBack = { navController.popBackStack() },
             )
         }

@@ -67,6 +67,7 @@ fun SettingsScreen(
     onOpenHelpers: () -> Unit,
     onOpenEnergy: () -> Unit,
     onOpenZones: () -> Unit,
+    onOpenLovelace: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -958,6 +959,13 @@ fun SettingsScreen(
             }
             item {
                 NavRow(label = "System Health", value = "HA version + error log", onClick = onOpenSystemHealth)
+            }
+            item {
+                NavRow(
+                    label = "Lovelace (WebView)",
+                    value = "Open HA's frontend in-app",
+                    onClick = onOpenLovelace,
+                )
             }
 
             item { SectionDivider() }
