@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package com.github.itskenny0.r1ha.core.ha
 
 import kotlinx.serialization.EncodeDefault

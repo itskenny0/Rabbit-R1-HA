@@ -17,6 +17,9 @@ An Android app for the Rabbit R1 (running LineageOS) that turns the scroll wheel
 - **Recent Activity** — HA's logbook reverse-chronologically, 12 h / 24 h / 3 d windows, full-text search. Tap a row for detail toast; long-press to open that entity's `/history` in HA's web UI.
 - **Notifications** — every `persistent_notification.*` entity with title, message, timestamp, and DISMISS chip. Auto-refreshes every 30 s while open.
 - **Areas** — HA's area registry with entity count per area, expandable rows showing the full entity list. Powered by a server-side Jinja template against `/api/template`.
+- **Zones** — `zone.*` registry with an abstract Canvas map at the top (each zone a circle sized by its radius, positioned by its lat/lon, occupied zones filled in accent), plus a per-zone occupancy list (which persons / device_trackers are in each zone right now). An OUTSIDE bucket collects `not_home` people.
+- **Energy** — DRAW (sum of every `device_class=power` sensor), PRODUCTION (heuristic sum of solar / pv / grid_export / production sensors), TODAY's kWh (sum of `device_class=energy` `total_increasing` sensors), and the top 5 current consumers ranked by W draw. Native — no WebView, no Lovelace bundle.
+- **History drill-in** — full-screen view of any entity's recent state-change history, with a 1 h / 6 h / 24 h / 7 d window picker, a 180-dp Compose Canvas chart with explicit min/max axis labels, and a 5-row numeric summary (current / min / max / avg / sample count). Reachable via the 📈 glyph on Search rows OR by tapping any row in Recent Activity.
 
 ### Control — *the things you act on*
 
@@ -24,7 +27,11 @@ An Android app for the Rabbit R1 (running LineageOS) that turns the scroll wheel
 - **Card stack UI with tabs** — one full-screen card per favourite entity; swipe up/down to flip between them, swipe left/right (or wheel-flick) to switch between rearrangeable tab groups.
 - **HA Assist** — type or 🎤 dictate a prompt and HA's conversation engine handles it; multi-turn context threaded across calls. The mic button uses the system speech recognizer so no `RECORD_AUDIO` permission is needed.
 - **Scenes & Scripts launcher** — tap-fire access to every `scene.*` / `script.*`, with substring search, kind filter chips, pull-to-refresh, and long-press for the `entity_id` + service name.
+- **Automations** — list of every `automation.*` entity with enabled-state chip, mode badge (single / parallel / queued / restart), running-instance count, and a relative `last_triggered` timestamp. Tap to toggle enable/disable; tap the right-edge **RUN** to fire `automation.trigger` with `skip_condition: true`; ★ to pin to the card stack. **RELOAD** chip in the top bar fires `automation.reload`.
+- **Helpers** — every HA helper domain (`input_boolean` toggles, `input_number` steppers, `counter`, `input_select` cycle-through-options, `input_text` / `input_datetime` read-only, `input_button` press, `timer` start/pause/cancel). Bucket-chip filters at the top group by helper kind; ★ pins frequently-used helpers to the card stack.
 - **Master OFF actions** — one-tap mass off for *all lights*, *all media*, or *all switches* from the Scenes & Scripts screen. HA's `entity_id: "all"` trick under the hood.
+- **Quick Actions drawer** (long-press chrome hamburger) — also doubles as the navigation drawer with a 2×4 BROWSE grid (Today · Assist · Search · Scenes · Automations · Energy · Alerts) so every major surface is one long-press + one tile-tap away.
+- **App shortcuts** (long-press launcher icon) — Search · Assist · Today · Automations land directly on those surfaces.
 
 ### Power tools — *for the long tail*
 
@@ -32,6 +39,7 @@ An Android app for the Rabbit R1 (running LineageOS) that turns the scroll wheel
 - **Service Caller** — fire any HA service (`automation.reload`, `homeassistant.check_config`, `persistent_notification.create`, …) without leaving the device. JSON data payload editor with PASTE chip, RECENT history, result panel with copy-to-clipboard.
 - **Services Browser** — discoverable directory of every service HA exposes via `/api/services`, grouped by domain, with substring search and tap-to-copy to populate the Service Caller.
 - **System Health** — HA's `/api/config` (version, location, timezone, components, internal/external URLs) plus the last ~32 KB of `/api/error_log`. COPY chip writes the full log to the clipboard for bug reports.
+- **Lovelace WebView** — in-app fallback to HA's own frontend for features we don't render natively (HACS custom cards, automation visual editor, full configuration panel). Token handoff via injected `localStorage.hassTokens` so no second OAuth round-trip. System back navigates the WebView's history first; only falls through to popBackStack when there's no history left.
 - **Long-lived access token entry** — alternative to OAuth for kiosk-style R1s. Paste an HA long-lived access token; stored encrypted at rest with the same AndroidKeystore-wrapped AES-256/GCM key as OAuth tokens.
 - **Gesture-first navigation** — swipe left for Settings, right for the Favourites picker, tap the value area to toggle on/off; small chevron-back buttons on every sub-screen plus full system-back support.
 - **OAuth sign-in** — enter your HA URL once and authenticate in an in-app WebView; tokens encrypted at rest with an AndroidKeystore-wrapped AES-256/GCM key.
