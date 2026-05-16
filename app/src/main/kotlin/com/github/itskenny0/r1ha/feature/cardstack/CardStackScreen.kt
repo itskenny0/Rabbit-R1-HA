@@ -248,9 +248,10 @@ fun CardStackScreen(
     // Honour the user's "Haptic feedback" toggle and throttle to ~20 Hz so a fast wheel spin
     // doesn't fire a continuous unpleasant buzz from the haptic motor. Keying on both id and
     // percent so swiping to a new card with the same percent still fires a tactile click.
-    // We bypass Compose's HapticFeedback (which is gated to a small set of feedback types on
-    // some devices) and go straight to View.performHapticFeedback with CLOCK_TICK — the same
-    // constant the system uses for picker wheels and reliably produces a tick on the R1.
+    // R1Haptic routes through the system Vibrator (EFFECT_TICK on capable devices, a soft
+    // 12 ms one-shot otherwise) so phones whose vendor ROM mutes performHapticFeedback —
+    // Xiaomi MIUI in particular — still get tactile feedback per detent.
+    val cardStackHaptic = com.github.itskenny0.r1ha.ui.components.rememberR1Haptic()
     val lastHapticMs = remember { longArrayOf(0L) }
     // Coalesce the haptic key into a single "perceived value" so a switch entity doesn't
     // tick twice per toggle (once on optimistic, then again when the cache catches up and
@@ -271,8 +272,7 @@ fun CardStackScreen(
             val now = System.currentTimeMillis()
             if (now - lastHapticMs[0] < 50L) return@runCatching
             lastHapticMs[0] = now
-            @Suppress("DEPRECATION")  // CLOCK_TICK is available on all our target SDKs (33+)
-            view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            cardStackHaptic.tick(view)
         }
     }
 
@@ -494,10 +494,9 @@ fun CardStackScreen(
                             if (pageId != null && pageId != state.activePageId) {
                                 vm.setActivePage(pageId)
                                 if (!firstSettle && appSettings.behavior.haptics) {
-                                    @Suppress("DEPRECATION")
-                                    view.performHapticFeedback(
-                                        android.view.HapticFeedbackConstants.CLOCK_TICK,
-                                    )
+                                    // Route through R1Haptic so the pager-settle tick fires
+                                    // reliably on vendor ROMs that mute performHapticFeedback.
+                                    cardStackHaptic.tick(view)
                                 }
                             }
                             firstSettle = false

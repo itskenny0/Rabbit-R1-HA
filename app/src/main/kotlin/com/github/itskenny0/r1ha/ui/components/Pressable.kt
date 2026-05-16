@@ -1,6 +1,5 @@
 package com.github.itskenny0.r1ha.ui.components
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -54,6 +53,12 @@ fun Modifier.r1Pressable(
         label = "r1-press-alpha",
     )
     val view = LocalView.current
+    // Direct-to-vibrator helper — bypasses View.performHapticFeedback
+    // which Xiaomi/MIUI and a few other vendor ROMs route through the
+    // touch-feedback gate (off by default; users have to enable it
+    // manually under system Sound settings). R1Haptic uses the
+    // VibratorManager API which behaves uniformly across ROMs.
+    val haptic = rememberR1Haptic()
     this
         // Single graphicsLayer for both transforms — cheaper than chaining .graphicsLayer { scale }
         // and .alpha(), both of which would force separate compositing layers.
@@ -66,10 +71,7 @@ fun Modifier.r1Pressable(
             interactionSource = interactionSource,
             indication = null,
             onClick = {
-                if (hapticOnClick) {
-                    @Suppress("DEPRECATION")  // CLOCK_TICK is stable on our minSdk 33
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                }
+                if (hapticOnClick) haptic.tick(view)
                 onClick()
             },
         )
@@ -77,8 +79,8 @@ fun Modifier.r1Pressable(
 
 /**
  * Variant of [r1Pressable] that also handles long-press. Same press-state visual + tap
- * haptic, plus a one-shot [HapticFeedbackConstants.LONG_PRESS] when [onLongPress] fires.
- * The press-state is driven through the same MutableInteractionSource so the scale dip
+ * haptic, plus a heavier [R1Haptic.longPress] effect when [onLongPress] fires. The
+ * press-state is driven through the same MutableInteractionSource so the scale dip
  * matches; press-down → hold → long-press triggers and the scale stays dipped until
  * release, which reads as "the system noticed the hold".
  *
@@ -111,6 +113,7 @@ fun Modifier.r1RowPressable(
         label = "r1-row-press-alpha",
     )
     val view = LocalView.current
+    val haptic = rememberR1Haptic()
     this
         .graphicsLayer {
             scaleX = scale
@@ -133,15 +136,13 @@ fun Modifier.r1RowPressable(
                     )
                 },
                 onTap = {
-                    @Suppress("DEPRECATION")
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    haptic.tick(view)
                     onTap()
                 },
                 onLongPress = {
-                    // LONG_PRESS gives a noticeably heavier haptic than CLOCK_TICK so the
+                    // longPress() fires a noticeably heavier effect than tick() so the
                     // user can feel the gesture register as something distinct from a tap.
-                    @Suppress("DEPRECATION")
-                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    haptic.longPress(view)
                     onLongPress()
                 },
             )
