@@ -70,6 +70,7 @@ fun SettingsScreen(
     onOpenEnergy: () -> Unit,
     onOpenZones: () -> Unit,
     onOpenLovelace: () -> Unit,
+    onOpenDevice: () -> Unit,
     onSignedOut: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -1003,6 +1004,13 @@ fun SettingsScreen(
                     label = "Energy",
                     value = "Draw, production, today's kWh",
                     onClick = onOpenEnergy,
+                )
+            }
+            item {
+                NavRow(
+                    label = "Device",
+                    value = "Local — brightness, volume, flashlight",
+                    onClick = onOpenDevice,
                 )
             }
 

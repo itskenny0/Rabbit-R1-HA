@@ -107,6 +107,9 @@ fun AppNavGraph(
                 onOpenZones = {
                     navController.navigate(Routes.ZONES) { launchSingleTop = true }
                 },
+                onOpenDevice = {
+                    navController.navigate(Routes.DEVICE) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.FAVORITES_PICKER) {
@@ -191,6 +194,9 @@ fun AppNavGraph(
                 },
                 onOpenLovelace = {
                     navController.navigate(Routes.LOVELACE) { launchSingleTop = true }
+                },
+                onOpenDevice = {
+                    navController.navigate(Routes.DEVICE) { launchSingleTop = true }
                 },
                 onSignedOut = {
                     // Clear the whole back stack so a stale CardStack/Onboarding can't be
@@ -397,6 +403,13 @@ fun AppNavGraph(
             com.github.itskenny0.r1ha.feature.lovelace.LovelaceScreen(
                 settings = settings,
                 tokens = tokens,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.DEVICE) {
+            com.github.itskenny0.r1ha.feature.device.DeviceScreen(
+                settings = settings,
+                wheelInput = wheelInput,
                 onBack = { navController.popBackStack() },
             )
         }

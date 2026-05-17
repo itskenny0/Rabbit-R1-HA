@@ -31,6 +31,7 @@ object Routes {
     const val DEVICES = "devices"
     const val ZONES = "zones"
     const val LOVELACE = "lovelace"
+    const val DEVICE = "device"
 
     /** History drill-in route — carries the entity_id as a path
      *  segment. Use [historyRoute] from call sites so the encoding

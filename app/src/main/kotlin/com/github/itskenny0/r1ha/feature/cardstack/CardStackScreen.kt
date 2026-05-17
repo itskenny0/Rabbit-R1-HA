@@ -95,6 +95,7 @@ fun CardStackScreen(
     onOpenScenes: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
     onOpenZones: () -> Unit = {},
+    onOpenDevice: () -> Unit = {},
 ) {
     val vm: CardStackViewModel = viewModel(
         factory = CardStackViewModel.factory(
@@ -941,6 +942,10 @@ fun CardStackScreen(
                 onOpenZones = {
                     quickActionsOpen.value = false
                     onOpenZones()
+                },
+                onOpenDevice = {
+                    quickActionsOpen.value = false
+                    onOpenDevice()
                 },
                 onAllOn = {
                     vm.turnOnActivePage()
@@ -2110,6 +2115,7 @@ private fun QuickActionsSheet(
     onOpenScenes: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenZones: () -> Unit,
+    onOpenDevice: () -> Unit,
     onAllOn: () -> Unit,
     onAllOff: () -> Unit,
     onPauseMedia: () -> Unit,
@@ -2181,8 +2187,19 @@ private fun QuickActionsSheet(
             ) {
                 DrawerGlyph(modifier = Modifier.weight(1f), glyph = "⚙", label = "AUTO", onClick = onOpenAutomations)
                 DrawerGlyph(modifier = Modifier.weight(1f), glyph = "⚡", label = "ENERGY", onClick = onOpenEnergy)
-                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "🔔", label = "ALERTS", onClick = onOpenNotifications)
                 DrawerGlyph(modifier = Modifier.weight(1f), glyph = "📍", label = "ZONES", onClick = onOpenZones)
+                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "📱", label = "DEVICE", onClick = onOpenDevice)
+            }
+            Spacer(Modifier.height(6.dp))
+            // Third row — just the ALERTS tile for now (single-wide
+            // since BROWSE grew past the two-row 2×4 layout). Future
+            // tiles can fill the remaining three slots.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                DrawerGlyph(modifier = Modifier.weight(1f), glyph = "🔔", label = "ALERTS", onClick = onOpenNotifications)
+                Spacer(Modifier.weight(3f))
             }
             Spacer(Modifier.height(14.dp))
             // 'Turn all on' — one-tap fire. Lights/switches/fans coming on
